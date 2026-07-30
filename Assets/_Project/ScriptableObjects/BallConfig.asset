@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b10076df19477d44974f3447380622f, type: 3}
+  m_Name: BallConfig
+  m_EditorClassIdentifier: Assembly-CSharp::Pickleball.BallConfig
+  gravityScale: 0.55
+  descendForceBoost: 6
+  peakVelocityThreshold: 1.2
+  peakGravityScale: 0.35
+  bounciness: 0.7
+  linearDamping: 0.05
+  angularDamping: 0.05
+  mass: 0.1
+  radius: 0.12
+  bouncesBeforeDead: 2
+  shotPowerRange: {x: 4.5, y: 7}
+  shotArcLift: 4.5
+  maxHorizontalAim: 2.5
+  killFloorY: -2
