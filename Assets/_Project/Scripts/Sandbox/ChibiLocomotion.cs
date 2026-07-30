@@ -198,11 +198,6 @@ namespace Pickleball.Sandbox
         float _standHeight, _standRadius;
         Vector3 _standCenter;
 
-        /// <summary>Set by MeleeCombat while a swing is playing: input steering is
-        /// suppressed but gravity, momentum and the attack's lunge still apply,
-        /// so an attack plants the character without freezing him mid-air.</summary>
-        public bool MovementLocked { get; set; }
-
         /// <summary>True while another system owns movement — tether, skateboard
         /// or dash. Attacks refuse to start during these rather than fighting
         /// them for the CharacterController.</summary>
@@ -210,8 +205,14 @@ namespace Pickleball.Sandbox
 
         public bool IsGrounded { get; private set; }
 
-        /// <summary>Push used by attack lunges and anything else that needs to
-        /// shove the character without owning his movement outright.</summary>
+        /// <summary>Push for anything that needs to shove the character without
+        /// owning his movement outright — a launcher, a knockback, an explosion.
+        ///
+        /// This is an IMPULSE: call it once per event with the velocity you want
+        /// added, never every frame. Momentum only sheds momentumGroundDrag
+        /// (11 m/s) per second, so a per-frame call is a net acceleration and
+        /// runs away — that is exactly how the old attack lunge slid the
+        /// character tens of metres per combo.</summary>
         public void AddMomentum(Vector3 delta) => _momentum += delta;
 
         void Awake()
@@ -229,11 +230,6 @@ namespace Pickleball.Sandbox
                 // which matters more than usual on chibi proportions where
                 // retargeting error is large.
                 animator.stabilizeFeet = true;
-                // Masked upper-body layer for the hook throw. Held at zero
-                // weight so an empty state cannot overwrite the arms; it is
-                // faded in only for the gesture itself.
-                _gestureLayer = animator.GetLayerIndex("Gesture");
-                if (_gestureLayer >= 0) animator.SetLayerWeight(_gestureLayer, 0f);
             }
             if (cameraTransform == null && Camera.main != null)
                 cameraTransform = Camera.main.transform;
@@ -355,10 +351,9 @@ namespace Pickleball.Sandbox
             // ---- planar movement -------------------------------------------
             Vector2 input = _move.ReadValue<Vector2>();
             if (input.sqrMagnitude > 1f) input.Normalize();
-            // An attack plants him: steering and turning stop, but gravity and
-            // the lunge carry on below.
-            if (MovementLocked) input = Vector2.zero;
-
+            // Attacking deliberately does NOT gate this. The combo plays on a
+            // masked upper-body layer, so a swing never touches steering or the
+            // legs — see MeleeCombat.
             Vector3 forward = Vector3.forward, right = Vector3.right;
             if (cameraTransform != null)
             {
@@ -491,14 +486,36 @@ namespace Pickleball.Sandbox
             animator.SetFloat(VerticalHash, _verticalVelocity);
         }
 
-        /// <summary>Fades the masked gesture layer in and back out.</summary>
+        /// <summary>
+        /// Index of the masked gesture layer, resolved on first use.
+        ///
+        /// This CANNOT be read in Awake. The Animator sits on the model child
+        /// while this component sits on the root, so the root wakes first and
+        /// the Animator has not built its playable graph yet — GetLayerIndex
+        /// then logs "Animator is not playing an AnimatorController" and returns
+        /// -1, which silently disabled the gesture layer for good. Checking the
+        /// controller first means no error is logged while we wait for it.
+        /// </summary>
+        int GestureLayer()
+        {
+            if (_gestureLayer >= 0) return _gestureLayer;
+            if (animator == null || animator.runtimeAnimatorController == null) return -1;
+            _gestureLayer = animator.GetLayerIndex("Gesture");
+            return _gestureLayer;
+        }
+
+        /// <summary>Fades the masked gesture layer in and back out. Held at zero
+        /// weight the rest of the time, so its empty state cannot overwrite the
+        /// arms with the bind pose.</summary>
         void UpdateGesture(float dt)
         {
-            if (animator == null || _gestureLayer < 0) return;
+            int layer = GestureLayer();
+            if (layer < 0) return;
             if (_gestureTimeLeft > 0f) _gestureTimeLeft -= dt;
             float wanted = _gestureTimeLeft > 0f ? 1f : 0f;
+            if (Mathf.Approximately(_gestureWeight, wanted)) return;
             _gestureWeight = Mathf.MoveTowards(_gestureWeight, wanted, dt * 6f);
-            animator.SetLayerWeight(_gestureLayer, _gestureWeight);
+            animator.SetLayerWeight(layer, _gestureWeight);
         }
 
         // ------------------------------------------------------------ tether

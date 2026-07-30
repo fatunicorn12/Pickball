@@ -12,9 +12,21 @@ namespace Pickleball.Sandbox
     /// The whole thing is driven from one timer rather than read back off the
     /// Animator. Animator state info is awkward to query reliably the frame a
     /// transition happens, and every window here (when the blade is live, when
-    /// the chain can be extended, when the lunge pushes) needs frame-accurate
-    /// timing. Clip durations are written in by the setup script from the real
-    /// clips, so the timer and the animation stay in step.
+    /// the chain can be extended) needs frame-accurate timing. Clip durations
+    /// are written in by the setup script from the real clips — divided by each
+    /// state's playback speed — so the timer and the animation stay in step.
+    ///
+    /// Attacking neither moves nor stops the character. Two separate things had
+    /// to go for that:
+    ///  - the scripted forward lunge, applied every frame of the active window,
+    ///    accumulated far faster than momentum drag could shed it and slid the
+    ///    player metres per swing (compounding across a chain, since nothing
+    ///    reset it between hits);
+    ///  - the attacks were full-body states on the base layer, so a swing
+    ///    replaced the run outright and froze the legs mid-stride.
+    /// The combo now lives on an upper-body-masked layer that this component
+    /// fades in for the duration of a swing, so the legs carry on running and
+    /// steering is never taken away.
     /// </summary>
     public class MeleeCombat : MonoBehaviour
     {
@@ -23,8 +35,10 @@ namespace Pickleball.Sandbox
         {
             [Tooltip("Animator trigger that starts this attack.")]
             public string trigger = "Attack1";
-            [Tooltip("Clip length. Filled in by the setup from the real clip.")]
-            public float duration = 0.7f;
+            [Tooltip("How long the swing lasts on screen. Filled in by the setup " +
+                     "as the real clip's length divided by the state's playback " +
+                     "speed, so it tracks the sped-up animation.")]
+            public float duration = 0.6f;
 
             [Header("Windows (fraction of duration)")]
             [Tooltip("When the blade goes live.")]
@@ -40,9 +54,6 @@ namespace Pickleball.Sandbox
 
             [Header("Feel")]
             public float damage = 12f;
-            [Tooltip("Forward step during the swing. Root motion is off, so the " +
-                     "lunge is scripted — it is most of what gives melee weight.")]
-            public float lungeSpeed = 3.5f;
             public float knockback = 4f;
             [Tooltip("Pops the target upward so following hits can juggle it.")]
             public bool launcher;
@@ -53,15 +64,15 @@ namespace Pickleball.Sandbox
         [Header("Chain")]
         [SerializeField] private Attack[] chain =
         {
-            new() { trigger = "Attack1", damage = 10f, lungeSpeed = 3.5f },
-            new() { trigger = "Attack2", damage = 12f, lungeSpeed = 3.5f },
-            new() { trigger = "Attack3", damage = 14f, lungeSpeed = 2.5f,
+            new() { trigger = "Attack1", damage = 10f },
+            new() { trigger = "Attack2", damage = 12f },
+            new() { trigger = "Attack3", damage = 14f,
                     launcher = true, knockback = 3f, hitstop = 0.07f },
-            new() { trigger = "Attack4", damage = 20f, lungeSpeed = 4.5f,
+            new() { trigger = "Attack4", damage = 20f,
                     knockback = 8f, hitstop = 0.1f },
         };
         [SerializeField] private Attack airAttack =
-            new() { trigger = "AirAttack", damage = 12f, lungeSpeed = 1.5f, knockback = 3f };
+            new() { trigger = "AirAttack", damage = 12f, knockback = 3f };
 
         [Header("Blade")]
         [Tooltip("Base of the blade — the pivot end.")]
@@ -79,10 +90,22 @@ namespace Pickleball.Sandbox
         [SerializeField] private SandboxOrbitCamera cameraRig;
         [SerializeField] private ParticleSystem impactEffect;
 
+        [Header("Layer")]
+        [Tooltip("Masked upper-body layer the combo states live on. Must match " +
+                 "WeaponSetup.AttackLayer.")]
+        [SerializeField] private string attackLayer = "Attack";
+        [Tooltip("Layer weight fade, in weight per second. Fast enough that the " +
+                 "swing does not visibly ramp in, slow enough not to pop.")]
+        [SerializeField] private float layerFadeSpeed = 12f;
+
         static readonly int ComboHash = Animator.StringToHash("Combo");
 
         InputAction _attack;
         readonly HashSet<Object> _alreadyHit = new();
+
+        int _attackLayerIndex = -1;
+        bool _layerResolved;
+        float _layerWeight;
 
         int _index = -1;              // -1 = not attacking
         bool _airborneAttack;
@@ -105,6 +128,31 @@ namespace Pickleball.Sandbox
                 cameraRig = Camera.main.GetComponent<SandboxOrbitCamera>();
         }
 
+        /// <summary>
+        /// Index of the masked attack layer, resolved on first use.
+        ///
+        /// Deliberately NOT read in Awake: the Animator is on the model child
+        /// and this component is on the root, so the root wakes first and the
+        /// Animator has not built its playable graph yet. GetLayerIndex would
+        /// log "Animator is not playing an AnimatorController", return -1, and
+        /// leave the layer stuck at zero weight — the swing would play in the
+        /// state machine but never blend in, so nothing visible would happen.
+        /// Waiting on runtimeAnimatorController keeps that off the console.
+        /// </summary>
+        int AttackLayerIndex()
+        {
+            if (_layerResolved) return _attackLayerIndex;
+            if (animator == null || animator.runtimeAnimatorController == null) return -1;
+
+            _layerResolved = true;
+            _attackLayerIndex = animator.GetLayerIndex(attackLayer);
+            if (_attackLayerIndex < 0)
+                Debug.LogWarning($"[MeleeCombat] No '{attackLayer}' layer on the " +
+                                 "Animator — swings will not play. Re-run " +
+                                 "Tools ▸ Pickleball ▸ Setup Chibi Sandbox.");
+            return _attackLayerIndex;
+        }
+
         void OnEnable()
         {
             _attack = new InputAction("Attack", InputActionType.Button);
@@ -122,6 +170,10 @@ namespace Pickleball.Sandbox
         void Update()
         {
             float dt = Time.deltaTime;
+
+            // Before any early-out below: the fade-out has to keep running for a
+            // few frames after the swing ends, when IsAttacking is already false.
+            UpdateLayerWeight(dt);
 
             // Hitstop: freeze the animation and hold movement for a few frames
             // so a connecting hit reads as impact rather than a pass-through.
@@ -157,15 +209,26 @@ namespace Pickleball.Sandbox
             if (live) SweepForHits(def);
             else ClearSweep();
 
-            if (def.lungeSpeed > 0f && t < def.activeEnd && locomotion != null)
-                locomotion.AddMomentum(transform.forward * (def.lungeSpeed * dt * 6f));
-
             if (_queued && t >= def.comboOpen && !_airborneAttack && _index + 1 < chain.Length)
             {
                 Begin(_index + 1, false);
                 return;
             }
             if (t >= def.comboClose || t >= 1f) End();
+        }
+
+        /// <summary>Fades the masked attack layer in for a swing and back out
+        /// afterwards. At zero weight the layer contributes nothing, which is
+        /// what keeps its empty default state from forcing the arms into the
+        /// bind pose the rest of the time.</summary>
+        void UpdateLayerWeight(float dt)
+        {
+            int layer = AttackLayerIndex();
+            if (layer < 0) return;
+            float wanted = IsAttacking ? 1f : 0f;
+            if (Mathf.Approximately(_layerWeight, wanted)) return;
+            _layerWeight = Mathf.MoveTowards(_layerWeight, wanted, layerFadeSpeed * dt);
+            animator.SetLayerWeight(layer, _layerWeight);
         }
 
         bool CanStart()
@@ -197,7 +260,9 @@ namespace Pickleball.Sandbox
                 animator.SetInteger(ComboHash, airborne ? 0 : index + 1);
                 animator.SetTrigger(def.trigger);
             }
-            if (locomotion != null) locomotion.MovementLocked = true;
+            // Nothing is done to locomotion here, and that is the point: the
+            // swing adds no displacement of its own and takes none away, so you
+            // keep running, steering and jumping straight through a combo.
         }
 
         void End()
@@ -209,7 +274,6 @@ namespace Pickleball.Sandbox
             _hasPrev = false;
             if (trail != null) trail.SetEmitting(false);
             if (animator != null) animator.SetInteger(ComboHash, 0);
-            if (locomotion != null) locomotion.MovementLocked = false;
         }
 
         void ClearSweep() => _hasPrev = false;

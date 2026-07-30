@@ -222,7 +222,7 @@ public static class ChibiSandboxSetup
     const string OldScenePath = "Assets/_Project/Scenes/AnimationPreview.unity";
 
     const string AutoRunKey = "Pickleball.ChibiSandbox.AutoRunToken";
-    const string AutoRunToken = "armed-locomotion1";
+    const string AutoRunToken = "lazy-layer-lookup+trail-sweep1";
 
     /// <summary>
     /// Runs the setup once, automatically, the first time this version of the
@@ -278,7 +278,19 @@ public static class ChibiSandboxSetup
         }
 
         var controller = BuildController(clips);
-        BuildScene(avatar, controller);
+
+        // BuildController CREATES the controller from scratch, which drops the
+        // combo layer WeaponSetup adds. Rebuilding the weapon here is therefore
+        // not a convenience — it is the only ordering that leaves a working
+        // attack chain, and it means one entry point rebuilds the whole sandbox
+        // instead of two that have to be run in the right order by hand.
+        //
+        // Assets first, scene second: every FBX reimport is finished before a
+        // single scene object exists, and BuildScene then attaches the weapon
+        // before saving the prefab, so the combo is part of Chibi.prefab rather
+        // than a scene-only override that the next rebuild throws away.
+        var weaponClips = WeaponSetup.PrepareAssets();
+        BuildScene(avatar, controller, weaponClips);
 
         AssetDatabase.SaveAssets();
         Debug.Log($"Chibi sandbox ready â€” {ScenePath}. Press Play. " +
@@ -966,6 +978,35 @@ public static class ChibiSandboxSetup
     }
 
     /// <summary>
+    /// The arms/spine/head mask shared by every additive-over-locomotion layer:
+    /// the hook throw here, and the sword combo in WeaponSetup.
+    ///
+    /// Root is deliberately NOT included, so the hips stay wherever locomotion
+    /// put them and only the upper body is overridden.
+    /// </summary>
+    public static AvatarMask EnsureUpperBodyMask()
+    {
+        string maskPath = $"{AnimDir}/UpperBody.mask";
+        var mask = AssetDatabase.LoadAssetAtPath<AvatarMask>(maskPath);
+        if (mask != null) return mask;
+
+        mask = new AvatarMask();
+        foreach (AvatarMaskBodyPart part in System.Enum.GetValues(typeof(AvatarMaskBodyPart)))
+        {
+            if (part == AvatarMaskBodyPart.LastBodyPart) continue;
+            bool upper = part is AvatarMaskBodyPart.RightArm
+                      or AvatarMaskBodyPart.LeftArm
+                      or AvatarMaskBodyPart.RightFingers
+                      or AvatarMaskBodyPart.LeftFingers
+                      or AvatarMaskBodyPart.Head
+                      or AvatarMaskBodyPart.Body;
+            mask.SetHumanoidBodyPartActive(part, upper);
+        }
+        AssetDatabase.CreateAsset(mask, maskPath);
+        return mask;
+    }
+
+    /// <summary>
     /// Adds a masked upper-body layer for the hook throw.
     ///
     /// A gesture layer is the right shape for this: firing the hook can happen
@@ -987,24 +1028,7 @@ public static class ChibiSandboxSetup
             return;
         }
 
-        string maskPath = $"{AnimDir}/UpperBody.mask";
-        var mask = AssetDatabase.LoadAssetAtPath<AvatarMask>(maskPath);
-        if (mask == null)
-        {
-            mask = new AvatarMask();
-            foreach (AvatarMaskBodyPart part in System.Enum.GetValues(typeof(AvatarMaskBodyPart)))
-            {
-                if (part == AvatarMaskBodyPart.LastBodyPart) continue;
-                bool upper = part is AvatarMaskBodyPart.RightArm
-                          or AvatarMaskBodyPart.LeftArm
-                          or AvatarMaskBodyPart.RightFingers
-                          or AvatarMaskBodyPart.LeftFingers
-                          or AvatarMaskBodyPart.Head
-                          or AvatarMaskBodyPart.Body;
-                mask.SetHumanoidBodyPartActive(part, upper);
-            }
-            AssetDatabase.CreateAsset(mask, maskPath);
-        }
+        var mask = EnsureUpperBodyMask();
 
         var gestureSm = new AnimatorStateMachine
         {
@@ -1039,7 +1063,8 @@ public static class ChibiSandboxSetup
 
     // ------------------------------------------------------------------- scene
 
-    static void BuildScene(Avatar avatar, AnimatorController controller)
+    static void BuildScene(Avatar avatar, AnimatorController controller,
+                           Dictionary<string, AnimationClip> weaponClips)
     {
         // Never silently discard unsaved work in whatever scene is open.
         EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo();
@@ -1201,6 +1226,17 @@ public static class ChibiSandboxSetup
 
         so.FindProperty("tether").objectReferenceValue = tetherSys;
         so.ApplyModifiedPropertiesWithoutUndo();
+
+        // Weapon and combo go on BEFORE the prefab is written, so they are part
+        // of the prefab rather than a scene-only override.
+        WeaponSetup.AttachToPlayer(go, weaponClips);
+
+        // One line that says whether the character will actually animate. A null
+        // controller here is the difference between a working sandbox and a
+        // T-posing one, and it is not otherwise obvious until Play.
+        Debug.Log($"Animator wired: controller='{controller.name}' " +
+                  $"({controller.layers.Length} layers), avatar='{avatar.name}', " +
+                  $"assigned={(animator.runtimeAnimatorController != null)}");
 
         // Save the assembled player as a prefab and reconnect the scene copy,
         // so future tweaks propagate instead of living only in this scene.

@@ -42,55 +42,115 @@ public static class WeaponSetup
     ///
     /// Windows are fractions of each clip. These clips carry long wind-ups, so
     /// the blade goes live around 35% and the chain opens at 50%.
+    ///
+    /// `speed` is the Animator state's playback rate. Mixamo authors these
+    /// swings at 1.37-1.73s, which is far too ponderous for an arcade combo, so
+    /// each is played back at roughly 2.2-2.5x. Measured peak hand speed lands
+    /// at 40-53% of every clip, comfortably inside the active windows below, and
+    /// the windows are fractions — so speeding the states up rescales the whole
+    /// chain without moving the strike out of its hit window.
     /// </summary>
-    static readonly (string role, string file, string trigger,
+    static readonly (string role, string file, string trigger, float speed,
                      float activeStart, float activeEnd,
                      float comboOpen, float comboClose)[] AttackClips =
     {
-        // 1.37s, L>R, flat, wide — fastest of the set, so it opens.
-        ("attack1", "sword and shield slash (5).fbx", "Attack1", 0.32f, 0.60f, 0.46f, 0.90f),
-        // 1.73s, R>L, widest lateral sweep (0.603) and longest reach.
-        ("attack2", "sword and shield attack (3).fbx", "Attack2", 0.35f, 0.62f, 0.50f, 0.92f),
-        // 1.50s, L>R, downward, big vertical — the heavy third hit.
-        ("attack3", "sword and shield slash.fbx", "Attack3", 0.34f, 0.62f, 0.50f, 0.92f),
-        // 1.57s, R>L, UPWARD — the launcher that ends the ground chain.
-        ("attack4", "sword and shield slash (3).fbx", "Attack4", 0.34f, 0.64f, 0.55f, 0.95f),
-        // 1.00s, in place, compact — suits being airborne.
-        ("airAttack", "sword and shield attack (4).fbx", "AirAttack", 0.25f, 0.60f, 0.5f, 0.9f),
+        // 1.37s -> 0.55s. L>R, flat, wide — fastest of the set, so it opens.
+        ("attack1", "sword and shield slash (5).fbx", "Attack1", 2.5f, 0.32f, 0.60f, 0.46f, 0.90f),
+        // 1.73s -> 0.69s. R>L, widest lateral sweep (0.603) and longest reach.
+        ("attack2", "sword and shield attack (3).fbx", "Attack2", 2.5f, 0.35f, 0.62f, 0.50f, 0.92f),
+        // 1.50s -> 0.63s. L>R, downward, big vertical — the heavy third hit.
+        ("attack3", "sword and shield slash.fbx", "Attack3", 2.4f, 0.34f, 0.62f, 0.50f, 0.92f),
+        // 1.57s -> 0.71s. R>L, UPWARD — the launcher that ends the ground chain.
+        // Kept the slowest of the four so the finisher still lands with weight.
+        ("attack4", "sword and shield slash (3).fbx", "Attack4", 2.2f, 0.34f, 0.64f, 0.55f, 0.95f),
+        // 1.00s -> 0.45s. In place, compact — suits being airborne.
+        ("airAttack", "sword and shield attack (4).fbx", "AirAttack", 2.2f, 0.25f, 0.60f, 0.5f, 0.9f),
     };
+
+    /// <summary>
+    /// Which end of the weapon sits in the fist. The compass model runs 1.0
+    /// units along its own +Y with the origin at the low end, so the old code —
+    /// which just parented it at the socket origin — always gripped that low
+    /// end. True flips it, so the far end is held and the model points the other
+    /// way out of the hand.
+    /// </summary>
+    const bool GripFarEnd = true;
+
+    /// <summary>Weapon length after normalising, whatever the authored scale.</summary>
+    const float WeaponLength = 0.85f;
+
+    /// <summary>
+    /// Name of the masked layer the combo lives on. MeleeCombat looks the layer
+    /// up by this name at runtime, so the two must agree.
+    ///
+    /// The attacks used to be full-body states on the base layer, which meant a
+    /// swing replaced the run — the legs froze mid-stride while the character
+    /// kept travelling. Masked to the arms, spine and head instead, the swing
+    /// composes over whatever the legs are already doing.
+    /// </summary>
+    public const string AttackLayer = "Attack";
 
     [MenuItem("Tools/Pickleball/Setup Weapon")]
     public static void Run()
     {
+        var clips = PrepareAssets();
+
         var player = GameObject.Find("Chibi");
         if (player == null)
         {
             Debug.LogError("No 'Chibi' in the scene — run Setup Chibi Sandbox first.");
             return;
         }
+        if (!AttachToPlayer(player, clips)) return;
+
+        AssetDatabase.SaveAssets();
+        Debug.Log("Weapon setup complete. Left click to attack; click again mid-swing to chain.");
+    }
+
+    /// <summary>
+    /// Phase 1, assets only: file the pack, import the attack clips, and add the
+    /// masked Attack layer to the controller. Touches no scene objects.
+    ///
+    /// Split from the scene work so ChibiSandboxSetup can run it BEFORE building
+    /// the scene. ImportAttackClips calls SaveAndReimport on five FBXs, and
+    /// kicking off asset imports halfway through scene construction is asking
+    /// for a half-built scene. Getting the Attack layer onto the controller
+    /// first also means the Animator is wired to a finished controller rather
+    /// than one that grows a layer afterwards.
+    /// </summary>
+    public static Dictionary<string, AnimationClip> PrepareAssets()
+    {
+        OrganizeWeaponAssets();
+        var clips = ImportAttackClips();
+        WireController(clips);
+        return clips;
+    }
+
+    /// <summary>
+    /// Phase 2, scene only: hang the weapon off the right hand and wire up
+    /// MeleeCombat. Returns false if the player is not in a fit state for it.
+    /// </summary>
+    public static bool AttachToPlayer(GameObject player,
+                                      Dictionary<string, AnimationClip> clips)
+    {
         var animator = player.GetComponentInChildren<Animator>();
         if (animator == null || animator.avatar == null || !animator.avatar.isHuman)
         {
             Debug.LogError("Player has no Humanoid avatar; cannot find the hand bone.");
-            return;
+            return false;
         }
 
         var hand = animator.GetBoneTransform(HumanBodyBones.RightHand);
         if (hand == null)
         {
             Debug.LogError("Avatar has no RightHand bone mapped.");
-            return;
+            return false;
         }
 
-        OrganizeWeaponAssets();
-        var clips = ImportAttackClips();
         var weapon = AttachWeapon(hand, out Transform bladeBase, out Transform bladeTip);
-        WireController(clips);
         WireCombat(player, animator, weapon, bladeBase, bladeTip, clips);
-
         EditorUtility.SetDirty(player);
-        AssetDatabase.SaveAssets();
-        Debug.Log("Weapon setup complete. Left click to attack; click again mid-swing to chain.");
+        return true;
     }
 
     // --------------------------------------------------------------- organize
@@ -132,7 +192,7 @@ public static class WeaponSetup
     static Dictionary<string, AnimationClip> ImportAttackClips()
     {
         var result = new Dictionary<string, AnimationClip>();
-        foreach (var (role, file, _, _, _, _, _) in AttackClips)
+        foreach (var (role, file, _, _, _, _, _, _) in AttackClips)
         {
             string path = $"{PackDir}/{file}";
             var imp = AssetImporter.GetAtPath(path) as ModelImporter;
@@ -184,30 +244,22 @@ public static class WeaponSetup
 
         string modelPath = FindModel("compass") ?? FindModel("protractor");
         GameObject visual;
-        float length;
+        float length = WeaponLength;
 
         if (modelPath != null)
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
             visual = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             visual.transform.SetParent(socketGo.transform, false);
-            var b = MeasureBounds(visual);
-            length = Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z));
-            // Normalise to a believable weapon length regardless of authored scale.
-            const float wanted = 0.85f;
-            if (length > 0.01f)
-            {
-                visual.transform.localScale = Vector3.one * (wanted / length);
-                length = wanted;
-            }
-            Debug.Log($"Weapon model: {modelPath} (scaled to {wanted:0.00}m)");
+            AlignWeaponToSocket(visual, WeaponLength, GripFarEnd);
+            Debug.Log($"Weapon model: {modelPath} (scaled to {WeaponLength:0.00}m, " +
+                      $"gripped by its {(GripFarEnd ? "far" : "near")} end)");
         }
         else
         {
             visual = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             visual.transform.SetParent(socketGo.transform, false);
             visual.transform.localScale = new Vector3(0.04f, 0.42f, 0.04f);
-            length = 0.85f;
             Debug.Log("No compass model found — using a primitive stand-in. " +
                       $"Drop one under {PropsDir} and re-run.");
         }
@@ -233,6 +285,59 @@ public static class WeaponSetup
         return socketGo;
     }
 
+    /// <summary>
+    /// Scale a weapon model to <paramref name="wanted"/> metres, lay its long
+    /// axis along the socket's +Y, and seat the chosen end at the socket origin
+    /// — the point the fist closes on.
+    ///
+    /// The old code assumed the model's own origin WAS the handle and just
+    /// parented it at zero. That happens to be half-right for the compass
+    /// (measured: it runs 0.998 along its +Y with the origin exactly at the low
+    /// end), but it gave no way to hold the other end, and it would be wrong for
+    /// any model whose origin sits at its centre. Measuring instead means
+    /// flipping the grip is one bool, and a different weapon just works.
+    /// </summary>
+    static void AlignWeaponToSocket(GameObject visual, float wanted, bool gripFarEnd)
+    {
+        var tr = visual.transform;
+        var parent = tr.parent;
+
+        // Measure in isolation. Renderer.bounds is a WORLD AABB, so at the world
+        // origin with no rotation it is exactly the model's own local AABB —
+        // measuring it parented to the hand would fold the bone's rotation in.
+        tr.SetParent(null, false);
+        tr.localPosition = Vector3.zero;
+        tr.localRotation = Quaternion.identity;
+        tr.localScale = Vector3.one;
+        var local = MeasureBounds(visual);
+
+        // Longest dimension is the weapon's length; the other two are its girth.
+        int axis = 0;
+        if (local.size.y > local.size[axis]) axis = 1;
+        if (local.size.z > local.size[axis]) axis = 2;
+        float span = local.size[axis];
+
+        float scale = span > 0.0001f ? wanted / span : 1f;
+
+        // The end that goes in the hand, and the direction from it to the tip.
+        var gripPoint = local.center;
+        gripPoint[axis] = gripFarEnd ? local.max[axis] : local.min[axis];
+        var alongModel = Vector3.zero;
+        alongModel[axis] = gripFarEnd ? -1f : 1f;
+
+        tr.SetParent(parent, false);
+        tr.localScale = Vector3.one * scale;
+
+        // Point grip->tip up the socket's +Y, then slide the grip onto the
+        // origin. Flipping the grip makes alongModel exactly antiparallel to up,
+        // where FromToRotation is free to pick any perpendicular spin axis; pin
+        // it to X so the roll is reproducible and stays where it is tuned.
+        tr.localRotation = Vector3.Dot(alongModel, Vector3.up) < -0.999f
+            ? Quaternion.AngleAxis(180f, Vector3.right)
+            : Quaternion.FromToRotation(alongModel, Vector3.up);
+        tr.localPosition = -(tr.localRotation * (gripPoint * scale));
+    }
+
     // ------------------------------------------------------------- controller
 
     static void WireController(Dictionary<string, AnimationClip> clips)
@@ -245,24 +350,43 @@ public static class WeaponSetup
         }
 
         var existing = new HashSet<string>(controller.parameters.Select(p => p.name));
-        foreach (var (_, _, trigger, _, _, _, _) in AttackClips)
+        foreach (var (_, _, trigger, _, _, _, _, _) in AttackClips)
             if (!existing.Contains(trigger))
                 controller.AddParameter(trigger, AnimatorControllerParameterType.Trigger);
         if (!existing.Contains("Combo"))
             controller.AddParameter("Combo", AnimatorControllerParameterType.Int);
 
-        var sm = controller.layers[0].stateMachine;
-        var loco = sm.states.FirstOrDefault(s => s.state.name == "Locomotion").state;
-        var fall = sm.states.FirstOrDefault(s => s.state.name == "Fall").state;
-        if (loco == null)
+        var baseSm = controller.layers[0].stateMachine;
+        if (baseSm.states.All(s => s.state.name != "Locomotion"))
         {
             Debug.LogError("No 'Locomotion' state — run Setup Chibi Sandbox first.");
             return;
         }
 
-        // Remove any previous attack states so re-running is idempotent.
-        foreach (var s in sm.states.Where(s => s.state.name.StartsWith("Attack")).ToList())
-            sm.RemoveState(s.state);
+        // Older versions put the attacks on the base layer as full-body states.
+        // Clear those out, or a rebuilt controller would keep stopping the legs.
+        foreach (var s in baseSm.states.Where(s => s.state.name.StartsWith("Attack")).ToList())
+            baseSm.RemoveState(s.state);
+
+        // Re-running rebuilds the layer from scratch rather than appending.
+        // RemoveLayer rather than reassigning controller.layers: it also destroys
+        // the layer's state machine, which is a sub-asset of the .controller and
+        // would otherwise be orphaned inside the file on every re-run.
+        for (int i = controller.layers.Length - 1; i >= 0; i--)
+            if (controller.layers[i].name == AttackLayer)
+                controller.RemoveLayer(i);
+
+        var sm = new AnimatorStateMachine
+        {
+            name = AttackLayer,
+            hideFlags = HideFlags.HideInHierarchy,
+        };
+        AssetDatabase.AddObjectToAsset(sm, controller);
+
+        // Empty default state: the layer contributes nothing until a swing
+        // starts, and MeleeCombat fades its weight in for the duration.
+        var idle = sm.AddState("None");
+        sm.defaultState = idle;
 
         var chainStates = new List<AnimatorState>();
         for (int i = 0; i < 4; i++)
@@ -271,41 +395,58 @@ public static class WeaponSetup
             if (!clips.TryGetValue(role, out var clip)) break;
             var st = sm.AddState($"Attack{i + 1}");
             st.motion = clip;
-            st.iKOnFeet = false;         // planted, and the arms are the point
+            // Exit times below are normalised to state time, so they scale with
+            // this automatically and need no adjustment.
+            st.speed = AttackClips[i].speed;
             chainStates.Add(st);
         }
 
-        // Chain: locomotion opens it, each attack can only reach the next one.
-        // That is what makes the combo a chain rather than four separate moves.
+        // Chain: the empty state opens it, each attack can only reach the next
+        // one. That is what makes the combo a chain rather than four separate
+        // moves. Transitions live entirely inside this layer now, so the base
+        // layer never leaves Locomotion and the legs keep running underneath.
         for (int i = 0; i < chainStates.Count; i++)
         {
-            var from = i == 0 ? loco : chainStates[i - 1];
+            var from = i == 0 ? idle : chainStates[i - 1];
             var t = from.AddTransition(chainStates[i]);
             t.hasExitTime = false;
             t.duration = i == 0 ? 0.06f : 0.1f;   // snap into the first, blend later ones
             t.AddCondition(AnimatorConditionMode.If, 0, $"Attack{i + 1}");
 
-            var back = chainStates[i].AddTransition(loco);
+            var back = chainStates[i].AddTransition(idle);
             back.hasExitTime = true; back.exitTime = 0.85f; back.duration = 0.18f;
         }
 
-        if (clips.TryGetValue("airAttack", out var airClip) && fall != null)
+        if (clips.TryGetValue("airAttack", out var airClip))
         {
             var air = sm.AddState("AttackAir");
             air.motion = airClip;
-            air.iKOnFeet = false;
+            air.speed = AttackClips[^1].speed;
 
-            var t = fall.AddTransition(air);
+            // No longer gated on the base layer being in Fall specifically, so
+            // the air attack now works on the way up as well as the way down.
+            var t = idle.AddTransition(air);
             t.hasExitTime = false; t.duration = 0.06f;
             t.AddCondition(AnimatorConditionMode.If, 0, "AirAttack");
 
-            var back = air.AddTransition(fall);
+            var back = air.AddTransition(idle);
             back.hasExitTime = true; back.exitTime = 0.9f; back.duration = 0.15f;
         }
 
+        controller.AddLayer(new AnimatorControllerLayer
+        {
+            name = AttackLayer,
+            stateMachine = sm,
+            avatarMask = ChibiSandboxSetup.EnsureUpperBodyMask(),
+            blendingMode = AnimatorLayerBlendingMode.Override,
+            defaultWeight = 0f,       // faded in by MeleeCombat
+        });
+
         EditorUtility.SetDirty(controller);
-        Debug.Log($"Combo chain wired: {chainStates.Count} ground attack(s)" +
-                  (clips.ContainsKey("airAttack") ? " + air attack" : ""));
+        Debug.Log($"Combo chain wired on masked '{AttackLayer}' layer: " +
+                  $"{chainStates.Count} ground attack(s)" +
+                  (clips.ContainsKey("airAttack") ? " + air attack" : "") +
+                  " — legs stay under locomotion, so you can swing while moving.");
     }
 
     // ------------------------------------------------------------------ combat
@@ -316,7 +457,15 @@ public static class WeaponSetup
     {
         var combat = player.GetComponent<MeleeCombat>() ?? player.AddComponent<MeleeCombat>();
 
+        // Every previous run created one of these at the SCENE ROOT, unparented
+        // and never cleaned up, so re-running the setup piled up a new BladeTrail
+        // each time. Sweep them all, then build one parented to the player.
+        foreach (var stale in Object.FindObjectsByType<BladeTrail>(
+                     FindObjectsInactive.Include, FindObjectsSortMode.None))
+            Object.DestroyImmediate(stale.gameObject);
+
         var trailGo = new GameObject("BladeTrail");
+        trailGo.transform.SetParent(player.transform, false);
         trailGo.AddComponent<MeshFilter>();
         var mr = trailGo.AddComponent<MeshRenderer>();
         mr.sharedMaterial = SandboxVfxBuilder.BuildGlowMaterial(
@@ -340,6 +489,10 @@ public static class WeaponSetup
 
         // Write the measured clip length AND the per-attack windows, so timing
         // is derived from the real clips rather than left at generic defaults.
+        // Length is divided by the state's playback speed: MeleeCombat's timer
+        // runs in real seconds, so it has to track the sped-up swing, not the
+        // authored one, or the blade would go live after the animation had
+        // already finished the strike.
         var chainProp = so.FindProperty("chain");
         for (int i = 0; i < chainProp.arraySize && i < 4; i++)
         {
@@ -347,7 +500,7 @@ public static class WeaponSetup
             if (!clips.TryGetValue(def.role, out var clip)) continue;
             var el = chainProp.GetArrayElementAtIndex(i);
             el.FindPropertyRelative("trigger").stringValue = def.trigger;
-            el.FindPropertyRelative("duration").floatValue = clip.length;
+            el.FindPropertyRelative("duration").floatValue = clip.length / def.speed;
             el.FindPropertyRelative("activeStart").floatValue = def.activeStart;
             el.FindPropertyRelative("activeEnd").floatValue = def.activeEnd;
             el.FindPropertyRelative("comboOpen").floatValue = def.comboOpen;
@@ -362,7 +515,7 @@ public static class WeaponSetup
         {
             var ap = so.FindProperty("airAttack");
             ap.FindPropertyRelative("trigger").stringValue = airDef.trigger;
-            ap.FindPropertyRelative("duration").floatValue = air.length;
+            ap.FindPropertyRelative("duration").floatValue = air.length / airDef.speed;
             ap.FindPropertyRelative("activeStart").floatValue = airDef.activeStart;
             ap.FindPropertyRelative("activeEnd").floatValue = airDef.activeEnd;
         }
