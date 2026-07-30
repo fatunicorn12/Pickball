@@ -8,8 +8,11 @@ namespace Pickleball.Sandbox
     /// jump (Space) and crouch (Ctrl).
     ///
     /// Speeds are taken from what the Mixamo clips are actually authored at,
-    /// measured off the source FBXs rather than guessed:
-    ///   Walking 0.73 m/s, Standing Sprint Forward 2.09 m/s, Running 4.75 m/s.
+    /// measured off the source FBXs rather than guessed. The base set is the
+    /// ARMED sword-and-shield locomotion:
+    ///   armed walk 0.61 m/s; armed run 4.84 m/s (raw 1.686 on the pack's
+    ///   small rig, scale-normalised to the old Running.fbx rig — see
+    ///   ChibiSandboxSetup.WalkSpeed/RunSpeed for the measurements).
     /// The blend-tree thresholds use the same numbers, so the stride matches
     /// real travel and the feet stop sliding. Holding no modifier jogs; the
     /// walk clip is what he passes through while accelerating from rest.
@@ -25,11 +28,11 @@ namespace Pickleball.Sandbox
     public class ChibiLocomotion : MonoBehaviour
     {
         [Header("Speeds (m/s) — match the clips' authored speeds")]
-        [Tooltip("Default move speed. Sits between the walk (0.73) and run (4.75) " +
-                 "clips so the blend tree crossfades walk->run, which reads better " +
-                 "than the Standing Sprint Forward clip did.")]
+        [Tooltip("Default move speed. Sits between the armed walk (0.61) and " +
+                 "run (4.84) clips so the blend tree crossfades walk->run, which " +
+                 "reads better than the Standing Sprint Forward clip did.")]
         [SerializeField] private float moveSpeed = 2.8f;
-        [SerializeField] private float sprintSpeed = 4.75f;
+        [SerializeField] private float sprintSpeed = 4.84f;
         [Tooltip("Authored speed of the Crouched Walking clip.")]
         [SerializeField] private float crouchSpeed = 0.39f;
         [SerializeField] private float acceleration = 14f;

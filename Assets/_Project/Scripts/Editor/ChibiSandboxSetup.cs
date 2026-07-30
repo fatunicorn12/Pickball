@@ -27,6 +27,13 @@ public static class ChibiSandboxSetup
     const string ClipDir = "Assets/_Project/Animation/Chibi";
     const string AnimDir = "Assets/_Project/Animation/Controllers";
 
+    /// <summary>The Mixamo sword-and-shield pack. Base locomotion draws its
+    /// idle/walk/run from here now that the character carries a weapon, so
+    /// Organize() files the pack itself (WeaponSetup used to be the only mover;
+    /// whichever runs first now wins and the other no-ops).</summary>
+    const string PackDir = ClipDir + "/SwordShield";
+    const string PackSourceDir = "Assets/Sword and Shield Pack";
+
     const string ModelPath = CharacterDir + "/chibi_unity.fbx";
     const string ArtDir = CharacterDir;
     const string ControllerPath = AnimDir + "/ChibiLocomotion.controller";
@@ -45,8 +52,20 @@ public static class ChibiSandboxSetup
 
     // Blend thresholds are the clips' MEASURED authored speeds (m/s), taken off
     // the source FBXs. Matching them is what stops the feet sliding.
-    const float WalkSpeed = 0.73f;
-    const float RunSpeed = 4.75f;
+    //
+    // The armed clips were measured off the hip bone in Blender, same as the
+    // unarmed originals (method re-validated: Walking.fbx re-measured 0.726,
+    // Running.fbx 4.749 against the old 0.73/4.75 constants). One subtlety:
+    // the pack's rig rests its hips at 0.3634 while Running.fbx's rig rests at
+    // 1.0427, and Unity's humanoid retargeting normalises hip travel by rig
+    // scale — so raw m/s only compares between same-sized rigs.
+    //   walk: raw 0.607 on the SAME rig as Walking.fbx (0.726) -> use as-is.
+    //   run:  raw 1.686, scale-normalised to Running.fbx's rig:
+    //         1.686 x (1.0427/0.3634) = 4.84 — within 2% of the old 4.75, so
+    //         the armed run strides at effectively the same rate as the old
+    //         run and sprint speed barely changes.
+    const float WalkSpeed = 0.61f;
+    const float RunSpeed = 4.84f;
     /// <summary>Authored speed of Crouched Walking â€” much slower than the
     /// standing walk, so the crouch tree needs its own threshold.</summary>
     const float CrouchWalkSpeed = 0.39f;
@@ -104,9 +123,23 @@ public static class ChibiSandboxSetup
     /// </summary>
     static readonly (string role, string file, bool loop, int first, int last)[] ClipDefs =
     {
-        ("idle",   ClipDir + "/Idle.fbx",                    true,  -1, -1),
-        ("walk",   ClipDir + "/Walking.fbx",                 true,  -1, -1),
-        ("run",    ClipDir + "/Running.fbx",                 true,  -1, -1),
+        // Base locomotion is the ARMED set from the sword-and-shield pack, so
+        // the character does not sprint around holding a weapon while animated
+        // empty-handed. Chosen by measurement, not filename:
+        //   idle (3): best loop of the lively idles (pose delta 0.0002 mean /
+        //             0.001 max) and 8.67s — nearly the same length as the old
+        //             8.33s Idle, so the blend tree keeps its timing structure.
+        //             idle.fbx pops at the seam (0.0155); idle (4) loops but is
+        //             a 2.5s statue.
+        //   walk:     the only FORWARD armed walk — walk (2) travels backwards
+        //             (travel.forward dot -0.98). Its seam is a 0.057 pop on
+        //             LeftToe_End only (body mean 0.0085); no sub-window loops
+        //             cleaner, so the full take stays.
+        //   run:      the only FORWARD armed run — run (2) is also backwards
+        //             (dot -0.88). Loops perfectly (pose delta 0.0).
+        ("idle",   PackDir + "/sword and shield idle (3).fbx", true,  -1, -1),
+        ("walk",   PackDir + "/sword and shield walk.fbx",     true,  -1, -1),
+        ("run",    PackDir + "/sword and shield run.fbx",      true,  -1, -1),
         ("jump",   ClipDir + "/Jumping.fbx",                 false, 15, 31),
         // Running Jump needs no front trim -- the feet leave the ground at
         // frame 2. Frames past 17 are its own landing, which the Land state
@@ -189,7 +222,7 @@ public static class ChibiSandboxSetup
     const string OldScenePath = "Assets/_Project/Scenes/AnimationPreview.unity";
 
     const string AutoRunKey = "Pickleball.ChibiSandbox.AutoRunToken";
-    const string AutoRunToken = "throwgesture+range9";
+    const string AutoRunToken = "armed-locomotion1";
 
     /// <summary>
     /// Runs the setup once, automatically, the first time this version of the
@@ -230,7 +263,8 @@ public static class ChibiSandboxSetup
         }
         if (!clips.ContainsKey("walk") || !clips.ContainsKey("idle"))
         {
-            Debug.LogError("Idle.fbx / Walking.fbx produced no clips â€” cannot build locomotion.");
+            Debug.LogError("Armed idle/walk produced no clips â€” cannot build locomotion. " +
+                           $"Is the sword-and-shield pack at {PackDir}?");
             return;
         }
         Debug.Log($"Clips wired: {string.Join(", ", clips.Keys.OrderBy(k => k))}");
@@ -271,6 +305,18 @@ public static class ChibiSandboxSetup
             EnsureFolder(dir);
 
         int moved = 0;
+
+        // The sword-and-shield pack, moved as one folder with Mixamo's names
+        // kept (same reasoning as WeaponSetup: renaming the 40+ unwired clips
+        // would make them harder to find later). Locomotion clips resolve
+        // against PackDir, so this must happen before SetupClips runs.
+        if (AssetDatabase.IsValidFolder(PackSourceDir) &&
+            !AssetDatabase.IsValidFolder(PackDir))
+        {
+            string packErr = AssetDatabase.MoveAsset(PackSourceDir, PackDir);
+            if (string.IsNullOrEmpty(packErr)) { moved++; Debug.Log($"moved {PackSourceDir} -> {PackDir}"); }
+            else Debug.LogWarning($"could not move pack: {packErr}");
+        }
         foreach (var (file, dir) in AssetHomes)
         {
             string target = $"{dir}/{file}";
