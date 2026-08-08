@@ -418,6 +418,8 @@ MonoBehaviour:
   dashEffects: {fileID: 4315188943103005508}
   momentumAirDrag: 1.6
   momentumGroundDrag: 11
+  fieldDrag: 2.5
+  maxFieldSpeed: 18
   tetherMaxLength: 14
   tetherMinLength: 4
   swingGravity: -11

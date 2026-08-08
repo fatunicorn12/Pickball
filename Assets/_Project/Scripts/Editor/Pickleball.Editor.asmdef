@@ -1,0 +1,22 @@
+{
+    "name": "Pickleball.Editor",
+    "rootNamespace": "Pickleball.EditorTools",
+    "references": [
+        "Pickleball.Runtime",
+        "UniTask",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

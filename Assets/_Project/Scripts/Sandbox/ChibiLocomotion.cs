@@ -91,6 +91,23 @@ namespace Pickleball.Sandbox
         [SerializeField] private float momentumAirDrag = 1.6f;
         [SerializeField] private float momentumGroundDrag = 11f;
 
+        [Tooltip("How quickly force-field velocity relaxes toward the speed the " +
+                 "field is asking for, in 1/s. This is a DAMPING RATE, not a " +
+                 "deceleration: a steady pull settles at (acceleration / this), so " +
+                 "half the pull is half the drift and there is no cut-off below " +
+                 "which a field does nothing. At 2.5, a strength-55 well settles " +
+                 "you at 0.11 m/s at 14 m, 0.34 at 8 m, 0.88 at 5 m, 2.44 at 3 m " +
+                 "and 6.79 at the core rim, against a 4.84 m/s sprint. " +
+                 "PROVISIONAL — the fight's tuning pass owns the final value.")]
+        [SerializeField] private float fieldDamping = 2.5f;
+
+        [Tooltip("Backstop on force-field velocity. The damping above already gives " +
+                 "the field a terminal speed of its own (6.79 m/s at one well's core " +
+                 "rim), so this only bites when several wells stack or strength is " +
+                 "pushed well past its shipped value — it is a guard rail, not the " +
+                 "thing that shapes the pull. PROVISIONAL, with the numbers above.")]
+        [SerializeField] private float maxFieldSpeed = 18f;
+
         [Header("Tether (orbital)")]
         [SerializeField] private float tetherMaxLength = 14f;
         [Tooltip("Floor on rope length. Short ropes orbit viciously fast — at " +
@@ -193,6 +210,8 @@ namespace Pickleball.Sandbox
         float _rideLift;
 
         float _currentSpeed, _turnVelocity, _verticalVelocity;
+        Vector3 _fieldVelocity, _externalAccel, _appliedFieldVelocity;
+        float _moveLockLeft;
         float _lastGroundedTime, _jumpPressedTime, _jumpLatchUntil;
         bool _crouching, _stopping;
         float _standHeight, _standRadius;
@@ -214,6 +233,80 @@ namespace Pickleball.Sandbox
         /// runs away — that is exactly how the old attack lunge slid the
         /// character tens of metres per combo.</summary>
         public void AddMomentum(Vector3 delta) => _momentum += delta;
+
+        /// <summary>
+        /// Continuous force, for anything that pulls or pushes for as long as it
+        /// exists — a gravity well, wind, a conveyor.
+        ///
+        /// This is the opposite contract to <see cref="AddMomentum"/>: call it
+        /// EVERY frame the field is acting, and pass an ACCELERATION (m/s²), not
+        /// a velocity. The accumulator is consumed and integrated exactly once
+        /// per tick, so repeated calls in one frame sum (two wells pull as one
+        /// resultant) but never compound across frames.
+        ///
+        /// Deliberately not routed through AddMomentum. Momentum is drained by
+        /// momentumGroundDrag at 11 m/s and is meant to be topped up once per
+        /// event; a per-frame caller there is a net acceleration that runs away,
+        /// which is the bug that used to slide the character tens of metres per
+        /// combo. Field velocity gets its own proportional damping, which gives a
+        /// steady pull a terminal speed instead of letting it run away.
+        ///
+        /// The tether and the dash do not receive any of this — see
+        /// <see cref="ClearField"/> for why, and for what happens to a pull that
+        /// was already acting when one of them takes over.
+        /// </summary>
+        public void AddAcceleration(Vector3 metresPerSecondSquared)
+            => _externalAccel += metresPerSecondSquared;
+
+        /// <summary>Measured world velocity. The Fluxion Beam differentiates this
+        /// to price its damage, so it has to be what the character actually did,
+        /// not what he was asked to do.</summary>
+        public Vector3 Velocity => _cc != null ? _cc.velocity : Vector3.zero;
+
+        /// <summary>
+        /// The share of <see cref="Velocity"/> that force fields actually
+        /// delivered on the last tick — never the share they asked for.
+        ///
+        /// That distinction is the entire reason this property exists.
+        /// <see cref="Velocity"/> is motion ACHIEVED, after the controller has
+        /// resolved collisions. A field's banked velocity is what went INTO Move,
+        /// before the solver had its say. Subtracting the request from the
+        /// achievement only cancels in open space: pinned against a wall, held in
+        /// a well core, or stood on a floor absorbing a vertical pull, the
+        /// leftover is a phantom velocity the character never had — and one that
+        /// moves every frame, so anything differentiating it sees phantom
+        /// acceleration. The Fluxion Beam does exactly that to price permanent,
+        /// unrecoverable damage, so a phantom there bills a motionless player for
+        /// standing still.
+        ///
+        /// The contract, which holds on every path:
+        ///
+        ///     Velocity - AppliedFieldVelocity == the character's OWN velocity
+        ///
+        /// It is EXACTLY zero whenever he is requesting no movement of his own,
+        /// however hard the field is pulling and however much of that pull the
+        /// geometry is eating. It is also exactly zero — not a stale banked
+        /// value — on the paths that ignore fields outright (tether, dash).
+        ///
+        /// Both sides of that subtraction are read from the same
+        /// CharacterController.velocity sample, so the identity is exact by
+        /// construction rather than by approximation. See
+        /// <see cref="RecordAppliedField"/>.
+        /// </summary>
+        public Vector3 AppliedFieldVelocity => _appliedFieldVelocity;
+
+        /// <summary>Take away his drive for a moment — a well core has hold of him.
+        /// Steering is NOT suppressed (he still turns to face the stick; being spun
+        /// around while helpless reads as a broken camera), and neither is gravity
+        /// or the field drift, so he keeps falling and keeps being pulled. He
+        /// simply cannot walk out under his own power.
+        ///
+        /// Refreshed rather than accumulated, so standing in the core keeps the
+        /// lock alive without stacking into a permanent freeze once he leaves.</summary>
+        public void LockMovement(float seconds)
+            => _moveLockLeft = Mathf.Max(_moveLockLeft, seconds);
+
+        public bool IsMovementLocked => _moveLockLeft > 0f;
 
         void Awake()
         {
@@ -321,6 +414,26 @@ namespace Pickleball.Sandbox
             IsGrounded = grounded;
             if (grounded) _lastGroundedTime = Time.time;
 
+            // ---- force fields ------------------------------------------------
+            // Take the frame's accumulated acceleration and clear the accumulator,
+            // exactly once, whichever system ends up owning movement below.
+            // Callers re-add every frame they are still acting, so a well that
+            // stops existing stops contributing immediately.
+            //
+            // Draining here rather than down in the planar block is deliberate:
+            // the tether and dash paths return early, and letting the accumulator
+            // pile up while they run so it all lands in one frame on exit is the
+            // same runaway this whole channel exists to avoid. What happens to
+            // the reading depends on who owns movement — the planar path
+            // integrates it (IntegrateField), the tether and dash discard it
+            // along with anything already banked (ClearField).
+            Vector3 fieldAccel = _externalAccel;
+            _externalAccel = Vector3.zero;
+
+            // Ticked here for the same reason: a lock applied just before a dash
+            // would otherwise never expire.
+            if (_moveLockLeft > 0f) _moveLockLeft -= dt;
+
             HandleMount(grounded);
             UpdateRideLift(dt);
             UpdateGesture(dt);
@@ -331,12 +444,13 @@ namespace Pickleball.Sandbox
             // as long as advertised, which is what makes it designable.
             // The tether owns movement entirely while latched.
             HandleTetherInput(grounded);
-            if (_tethered) { UpdateSwing(dt); return; }
+            if (_tethered) { ClearField(); UpdateSwing(dt); return; }
 
             if (grounded) _airDashUsed = false;
-            if (TryStartDash(grounded)) return;
+            if (TryStartDash(grounded)) { ClearField(); return; }
             if (_dashTimeLeft > 0f)
             {
+                ClearField();
                 _dashTimeLeft -= dt;
                 _cc.Move(_dashVelocity * dt);
                 if (_dashTimeLeft <= 0f) EndDash();
@@ -372,9 +486,28 @@ namespace Pickleball.Sandbox
                       : moveSpeed;
             float target = magnitude * top;
 
+            // A well core has him: he keeps falling and keeps drifting with the
+            // field, but cannot walk out under his own power. Steering is left
+            // alone on purpose — being spun around while helpless is nauseating
+            // and reads as a broken camera rather than a mechanic.
+            bool locked = _moveLockLeft > 0f;
+            if (locked) target = 0f;
+
             // Releasing the stick at speed hands the deceleration to the
             // Run To Stop clip, at a rate slow enough for the plant to read.
-            if (target < 0.01f && !_crouching && !_skating &&
+            //
+            // The lock SUPPRESSES this test rather than clearing _stopping.
+            // Clearing it was a trigger cannon: GravityWell re-applies the lock
+            // every frame you are in its core, so _stopping was reset immediately
+            // before a test that requires !_stopping, and entering a core at
+            // sprint speed fired SetTrigger(Stop) on the order of twenty times
+            // over a third of a second. Unity latches an unconsumed trigger
+            // indefinitely, so the spares sat armed and one would later yank him
+            // into Run To Stop mid-run with no input at all.
+            //
+            // Gating instead means a locked character simply is not a candidate
+            // for the stop: he is not choosing to stop, he is being held.
+            if (!locked && target < 0.01f && !_crouching && !_skating &&
                 _currentSpeed > stopTriggerSpeed && !_stopping)
             {
                 _stopping = true;
@@ -468,10 +601,45 @@ namespace Pickleball.Sandbox
                 _verticalVelocity += gravity * dt;
             }
 
+            IntegrateField(fieldAccel, dt);
+
             // Input movement plus whatever momentum is still being carried.
-            Vector3 motion = transform.forward * _currentSpeed + _momentum;
-            motion.y = _verticalVelocity;
+            // Momentum's own y is dropped on purpose — the vertical channel is
+            // _verticalVelocity's alone, so a launch has to go through that.
+            Vector3 own = transform.forward * _currentSpeed + _momentum;
+            own.y = _verticalVelocity;
+
+            // Field velocity rides on top, EXCEPT vertically while he is stood on
+            // something, where the floor gets the whole vertical component and it
+            // is left out of the request entirely.
+            //
+            // This line used to add it unconditionally, under a comment claiming a
+            // well strong enough to beat gravity would lift him off the floor. It
+            // could not, and the comment was worth less than nothing: it told the
+            // next reader a case was handled. _verticalVelocity is an unbounded
+            // gravity integrator while field velocity is damped to a terminal
+            // speed, so gravity outgrows any field within a few frames and always
+            // wins. What a mid-strength upward field actually produced was a
+            // bounce cycle — grounded snaps to groundedStick, the field beats it,
+            // he leaves the floor, gravity re-grabs, repeat — flickering the
+            // grounded animator state several times a second. A downward field
+            // fared no better: the floor ate it silently, and the difference
+            // between the eaten request and the achieved motion then surfaced as
+            // phantom acceleration in the Fluxion Beam's reading.
+            //
+            // Making a well genuinely able to pluck him off the ground is a
+            // movement-design change, not a patch: gravity would need a terminal
+            // velocity of its own, or the two would have to share one integrator
+            // (which would cost the beam its clean field/self split). Not smuggled
+            // in here. Nothing places a well overhead today — the boss drops them
+            // at his own y on flat ground — so what this excludes is a case that
+            // does not yet occur, stated rather than half-implemented.
+            Vector3 field = _fieldVelocity;
+            if (grounded) field.y = 0f;
+
+            Vector3 motion = own + field;
             _cc.Move(motion * dt);
+            RecordAppliedField(motion, field, grounded);
 
             float drag = grounded ? momentumGroundDrag : momentumAirDrag;
             _momentum = Vector3.MoveTowards(_momentum, Vector3.zero, drag * dt);
@@ -484,6 +652,123 @@ namespace Pickleball.Sandbox
             animator.SetBool(CrouchHash, _crouching);
             animator.SetBool(SkatingHash, _skating);
             animator.SetFloat(VerticalHash, _verticalVelocity);
+        }
+
+        // ------------------------------------------------------- force fields
+
+        /// <summary>
+        /// One tick of the force-field channel: relax the banked field velocity
+        /// toward the terminal speed this frame's acceleration implies.
+        ///
+        /// <b>The damping has to be proportional.</b> It used to be
+        /// <c>MoveTowards(v, 0, fieldDrag · dt)</c>, which subtracts a flat
+        /// 2.5 m/s per second and clamps at zero — so the net was (a − 2.5) and
+        /// ANY acceleration below 2.5 m/s² produced exactly nothing. A well's pull
+        /// is strength/r², so with strength 55 that threshold sat at
+        /// r = √(55/2.5) = 4.69 m, while the boss is forbidden from dropping a
+        /// well closer than 5 m to the player. Every well in the fight spawned
+        /// outside its own effective radius, and the design's "readable gradient
+        /// with navigable corridors" was in practice an invisible hard edge with
+        /// nothing whatsoever outside it. A proportional law has no threshold at
+        /// any distance: half the pull is half the drift, out to the rim.
+        ///
+        /// Solved rather than stepped. dv/dt = a − k·v has the closed form
+        /// v(t) = a/k + (v₀ − a/k)·e^(−k·t), and using it directly makes the
+        /// settled speed exactly a/k at ANY frame rate. Stepping it the obvious
+        /// way instead drifts about 4% between 30 and 144 fps, which is small but
+        /// is exactly the class of frame-rate dependence this pass is removing.
+        /// </summary>
+        void IntegrateField(Vector3 acceleration, float dt)
+        {
+            if (fieldDamping > 0f)
+            {
+                // a/k — where a steady pull of this strength eventually settles.
+                Vector3 terminal = acceleration / fieldDamping;
+                _fieldVelocity = terminal
+                               + (_fieldVelocity - terminal) * Mathf.Exp(-fieldDamping * dt);
+            }
+            else
+            {
+                // Undamped. An escape hatch for someone tuning by hand, not a
+                // supported setting: with no damping there is no terminal speed
+                // and maxFieldSpeed becomes the only thing bounding the pull.
+                _fieldVelocity += acceleration * dt;
+            }
+
+            _fieldVelocity = Vector3.ClampMagnitude(_fieldVelocity, maxFieldSpeed);
+        }
+
+        /// <summary>
+        /// Cut the character loose from every force field, banked velocity and all.
+        ///
+        /// <b>The tether and the dash are immune to wells.</b> That is the decision,
+        /// and this is what implements it. Neither one reads field velocity — the
+        /// swing runs its own gravity against a rope constraint, and the dash's
+        /// whole value is a fixed 45° reach you can design gaps against — so
+        /// leaving a field to act on them would quietly undo both.
+        ///
+        /// Zeroing is the point rather than an implementation detail. Field
+        /// velocity used to keep accumulating while those systems owned movement,
+        /// unread by any of them, and then switch on at full magnitude the instant
+        /// movement was handed back: up to the entire maxFieldSpeed cap arriving in
+        /// one frame from a well the player had already swung clear of, then
+        /// coasting for seconds. Draining it to zero makes the rule one sentence —
+        /// while the rope or the dash has you the field has nothing, and it builds
+        /// again from zero when you land — with no exit impulse possible.
+        /// </summary>
+        void ClearField()
+        {
+            _fieldVelocity = Vector3.zero;
+            _appliedFieldVelocity = Vector3.zero;
+        }
+
+        /// <summary>
+        /// Split what the controller ACTUALLY moved into the field's share and the
+        /// character's own, and bank the field's for
+        /// <see cref="AppliedFieldVelocity"/>.
+        ///
+        /// Move can deliver less than it was asked for — a wall, a step, a floor
+        /// under a downward pull — and CharacterController will not say which part
+        /// of the request it refused. So the shortfall is attributed in proportion
+        /// to how much each side asked for. In the general case that is a
+        /// heuristic; in the case the Fluxion Beam depends on it, it is exact. When
+        /// the character requests no movement of his own, the field's share of the
+        /// shortfall is all of it, the field is credited with precisely the motion
+        /// that occurred, and <c>Velocity − AppliedFieldVelocity</c> is exactly
+        /// zero. Being dragged into a wall, or held motionless in a well core,
+        /// therefore costs nothing — which is what the beam promises in writing.
+        ///
+        /// <c>achieved</c> is read from the same <c>_cc.velocity</c> that
+        /// <see cref="Velocity"/> exposes, so that identity holds by construction
+        /// and does not depend on the two agreeing about what a frame's motion was.
+        /// </summary>
+        void RecordAppliedField(Vector3 requested, Vector3 field, bool grounded)
+        {
+            Vector3 achieved = _cc.velocity;
+
+            // groundedStick is a hold-down, not a movement request: it exists to
+            // weld the capsule to the floor, and the floor absorbs every bit of it
+            // every frame. It has to come out of BOTH sides of the attribution —
+            // the share AND the shortfall — because taking it out of only one
+            // leaves the field carrying a constant phantom of groundedStick in y
+            // for as long as the player stands in a field.
+            Vector3 own = requested - field;
+            if (grounded && own.y < 0f) own.y = 0f;
+
+            float fieldAsked = field.magnitude;
+            float ownAsked = own.magnitude;
+            float asked = fieldAsked + ownAsked;
+
+            // Nothing was genuinely asked for, so nothing can be owed to the
+            // field. Also keeps the share out of a divide by zero.
+            if (asked < 1e-4f)
+            {
+                _appliedFieldVelocity = Vector3.zero;
+                return;
+            }
+
+            Vector3 shortfall = own + field - achieved;
+            _appliedFieldVelocity = field - shortfall * (fieldAsked / asked);
         }
 
         /// <summary>
@@ -560,6 +845,11 @@ namespace Pickleball.Sandbox
             _currentSpeed = 0f;
             _momentum = Vector3.zero;
             _stopping = false;
+            // Field velocity is not cleared here, and does not need to be: the
+            // tether branch in Update calls ClearField every frame it owns
+            // movement, starting with this one. Said out loud because the two
+            // lines above zero their channels here and the asymmetry otherwise
+            // reads as an oversight — which is precisely what it used to be.
             if (tether != null) tether.Attach(anchor);
             if (animator != null)
             {

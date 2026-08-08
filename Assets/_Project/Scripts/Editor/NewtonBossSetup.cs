@@ -182,7 +182,20 @@ public static class NewtonBossSetup
     {
         // Reuse whatever is already open — this does not stomp the scene.
         var existing = GameObject.Find("NewtonBoss");
-        if (existing != null) Object.DestroyImmediate(existing);
+        if (existing != null)
+        {
+            // ...but it does stomp the boss. This rebuilds the root from scratch,
+            // so anything NewtonFightSetup attached (Health, NewtonBoss, the beam,
+            // the barrage, the BeamMuzzle child) goes with it, and the HUD is left
+            // holding dangling references. Loud, because the failure is otherwise
+            // silent: the fight simply stops working with no error anywhere.
+            if (existing.GetComponent("NewtonBoss") != null)
+                Debug.LogWarning("Rebuilding NewtonBoss — this DESTROYS the fight " +
+                                 "wiring attached by Tools ▸ Pickleball ▸ Setup " +
+                                 "Newton Fight. Re-run that afterwards, and note " +
+                                 "Fight must always be run last.");
+            Object.DestroyImmediate(existing);
+        }
 
         var root = new GameObject("NewtonBoss");
         var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
