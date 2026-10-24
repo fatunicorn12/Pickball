@@ -29,7 +29,6 @@ namespace Pickleball.Sandbox
         void Awake()
         {
             _start = Time.time;
-            _block = new MaterialPropertyBlock();
         }
 
         /// <summary>Called by the barrage with the fall time it solved for.</summary>
@@ -57,6 +56,9 @@ namespace Pickleball.Sandbox
                 float pulse = 0.65f + 0.35f * Mathf.Sin((Time.time - _start) * hz * Mathf.PI * 2f);
                 var c = ringColour;
                 c.a *= t >= 1f ? 1f : pulse;
+                // Lazy: a property block is not serialized, so one made in Awake
+                // is gone after a script reload in Play mode.
+                _block ??= new MaterialPropertyBlock();
                 ring.GetPropertyBlock(_block);
                 _block.SetColor(BaseColorId, c);
                 ring.SetPropertyBlock(_block);

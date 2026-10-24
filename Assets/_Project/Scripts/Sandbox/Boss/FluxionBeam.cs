@@ -78,6 +78,11 @@ namespace Pickleball.Sandbox
         [Header("Presentation")]
         [SerializeField] private LineRenderer line;
         [SerializeField] private ParticleSystem impact;
+
+        [Tooltip("Spark size at zero heat, before the heat scaling below. Kept " +
+                 "here rather than read off the particle system, whose multiplier " +
+                 "this script overwrites every frame it fires.")]
+        [SerializeField] private float impactSize = 0.11f;
         [SerializeField] private Color coolColour = new(0.25f, 0.6f, 1f, 1f);
         [SerializeField] private Color hotColour = new(1f, 1f, 1f, 1f);
         [SerializeField] private float chargeWidth = 0.06f;
@@ -101,15 +106,12 @@ namespace Pickleball.Sandbox
         Health _playerHealth;
         float _speed;
         float _scroll;
-        float _impactBaseSize = 1f;
         MaterialPropertyBlock _block;
         static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
 
         void Awake()
         {
             if (muzzle == null) muzzle = transform;
-            _block = new MaterialPropertyBlock();
-            if (impact != null) _impactBaseSize = impact.main.startSizeMultiplier;
             if (line != null)
             {
                 line.positionCount = 2;
@@ -256,6 +258,9 @@ namespace Pickleball.Sandbox
             _scroll += Time.deltaTime * scrollSpeed * (_state == State.Firing ? 1f : 0.2f)
                        * line.textureScale.x;
             _scroll %= 1f;
+            // Lazily, not only in Awake: a property block is not serialized, so a
+            // script reload during Play mode left this null and threw every frame.
+            _block ??= new MaterialPropertyBlock();
             line.GetPropertyBlock(_block);
             _block.SetVector(BaseMapStId, new Vector4(1f, 1f, -_scroll, 0f));
             line.SetPropertyBlock(_block);
@@ -265,9 +270,10 @@ namespace Pickleball.Sandbox
             {
                 impact.transform.position = point;
                 var main = impact.main;
-                // Relative to the effect's authored size. Written as an absolute,
-                // it turned a spark effect into a 1.4 m white blob.
-                main.startSizeMultiplier = _impactBaseSize * Mathf.Lerp(0.5f, 1.8f, heat);
+                // Scaled from a serialized base size. An absolute 0.3-1.4 m here
+                // turned the sparks into a white blob, and a base read off the
+                // system in Awake did not survive a script reload in Play mode.
+                main.startSizeMultiplier = impactSize * Mathf.Lerp(0.5f, 1.8f, heat);
                 main.startColor = colour;
                 if (!impact.isPlaying) impact.Play();
             }

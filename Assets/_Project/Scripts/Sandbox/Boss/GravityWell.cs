@@ -101,7 +101,6 @@ namespace Pickleball.Sandbox
         public float Intensity { get; private set; }
 
         float _age;
-        Color _fieldColour = Color.white;
         MaterialPropertyBlock _block;
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         ChibiLocomotion _player;
@@ -128,10 +127,6 @@ namespace Pickleball.Sandbox
                 PlaceFieldOnGround();
                 // The decal is a unit quad: diameter, not radius.
                 field.transform.localScale = new Vector3(influenceRadius * 2f, influenceRadius * 2f, 1f);
-                _fieldColour = field.sharedMaterial != null && field.sharedMaterial.HasColor(BaseColorId)
-                    ? field.sharedMaterial.GetColor(BaseColorId)
-                    : Color.white;
-                _block = new MaterialPropertyBlock();
             }
         }
 
@@ -158,13 +153,19 @@ namespace Pickleball.Sandbox
                 core.localScale = Vector3.one * (coreRadius * 2f * Intensity * pulse);
             }
 
-            if (field != null && _block != null)
+            if (field != null)
             {
                 // Fades in with the pull itself, so the floor never promises a
                 // field that is not yet acting.
                 field.transform.Rotate(Vector3.forward, fieldSpinDegreesPerSecond * dt, Space.Self);
-                var c = _fieldColour;
+                // Tint read from the material each frame and the block made lazily,
+                // rather than both cached in Start: neither is serialized, so a
+                // script reload in Play mode would leave a null block and an
+                // opaque white decal.
+                var mat = field.sharedMaterial;
+                var c = mat != null && mat.HasColor(BaseColorId) ? mat.GetColor(BaseColorId) : Color.white;
                 c.a *= Intensity;
+                _block ??= new MaterialPropertyBlock();
                 field.GetPropertyBlock(_block);
                 _block.SetColor(BaseColorId, c);
                 field.SetPropertyBlock(_block);

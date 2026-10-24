@@ -102,11 +102,17 @@ namespace Pickleball.UI
         void Awake()
         {
             if (canvas == null) canvas = transform as RectTransform;
-            if (template != null)
-            {
-                template.gameObject.SetActive(false);
-                for (int i = 0; i < poolSize; i++) _pool.Add(MakePopup());
-            }
+            FillPool();
+        }
+
+        /// <summary>Also called on demand: the pool is not serialized, so after a
+        /// script reload in Play mode it comes back empty and Awake does not run
+        /// again to refill it.</summary>
+        void FillPool()
+        {
+            if (template == null || _pool.Count > 0) return;
+            template.gameObject.SetActive(false);
+            for (int i = 0; i < poolSize; i++) _pool.Add(MakePopup());
         }
 
         void OnEnable()
@@ -205,6 +211,7 @@ namespace Pickleball.UI
         /// in a frantic exchange the newest number matters more than the oldest.</summary>
         Popup Acquire()
         {
+            FillPool();
             Popup oldest = null;
             foreach (var p in _pool)
             {

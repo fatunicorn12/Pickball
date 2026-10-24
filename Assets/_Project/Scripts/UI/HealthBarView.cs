@@ -71,17 +71,24 @@ namespace Pickleball.UI
         float _trailHoldUntil;
         float _flash;
         Color _baseColour = Color.white;
+        bool _hasBaseColour;
         int _shownValue = int.MinValue;
         Health _subscribed;
 
         void Awake()
         {
             if (source == null) source = GetComponentInParent<Health>();
-            if (currentFill != null) _baseColour = currentFill.color;
         }
 
         void OnEnable()
         {
+            // Captured here, not in Awake: Awake does not run again after a script
+            // reload in Play mode, and the bar would then reset itself to white.
+            if (!_hasBaseColour && currentFill != null)
+            {
+                _baseColour = currentFill.color;
+                _hasBaseColour = true;
+            }
             Subscribe(source);
             Snap();
         }
