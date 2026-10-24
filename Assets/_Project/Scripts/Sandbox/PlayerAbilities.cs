@@ -12,6 +12,7 @@ namespace Pickleball.Sandbox
         Skateboard,
         Dash,
         Tether,
+        GravityAnchor,
     }
 
     /// <summary>

@@ -5,48 +5,33 @@ namespace Pickleball.Sandbox
     /// <summary>
     /// Newton's calculus, pointed at you.
     ///
-    /// The beam does not price contact — it prices the derivative of your
-    /// velocity. Damage per second is proportional to |dv/dt|: sprint, dash or
-    /// jump while it is on you and it bites; stand perfectly still and it does
-    /// literally nothing. It is the one moment in the fight where aggression is
-    /// the wrong answer.
+    /// The beam does not price contact — it prices the fluxion of your position:
+    /// the rate at which it is changing, i.e. your speed. Damage per second is
+    /// proportional to |dx/dt|. Sprint while it is on you and it bites hard; walk
+    /// and it nibbles; stand perfectly still and it does literally nothing. It is
+    /// the one moment in the fight where moving is the wrong answer.
     ///
-    /// Two things make that stick rather than being a suggestion:
+    /// <b>It used to price acceleration (|dv/dt|), which got the design backwards.</b>
+    /// A player running at a steady sprint has zero acceleration, so the beam was
+    /// free for anyone who simply kept running — the opposite of "standing still
+    /// is safer than running". Only starting and stopping cost anything, which
+    /// punished exactly the player who tried to obey the tell.
+    ///
+    /// Two things make it stick rather than being a suggestion:
     ///
     /// 1. <b>Its damage is unrecoverable.</b> Everything else in the fight goes
     ///    into the regain pool and can be won back by pressing. Beam damage is
-    ///    taken off the bar permanently, on contact. There is no aggressive
-    ///    recovery line out of it.
+    ///    taken off the bar permanently, on contact.
     /// 2. <b>It telegraphs, then tracks.</b> A charge window with a widening
     ///    line gives you time to stop, after which it follows you, so running is
     ///    not an escape — it is just a larger bill.
     ///
-    /// <b>Field motion is excluded by default.</b> A gravity well accelerates the
-    /// player continuously, so measuring raw dv/dt would make standing still
-    /// impossible whenever a well is up and turn the beam into unavoidable
-    /// permanent chip. Subtracting the field's contribution means the beam
-    /// charges you for what you chose to do. Flip <see cref="chargeForFieldMotion"/>
-    /// if you want the crueller reading, where being dragged is also your problem.
-    ///
-    /// That subtraction reads <see cref="ChibiLocomotion.AppliedFieldVelocity"/> —
-    /// the field velocity the character controller ACHIEVED — and not the velocity
-    /// the field requested. Mixing the two is a category error that used to bill a
-    /// motionless player about 6.6 permanent HP per second: achieved motion is
-    /// measured after collision resolution, requested motion before it, and the
-    /// difference is a phantom velocity whenever anything blocks the pull. Pinned
-    /// against a wall, held in a well core (where the well locks your movement, so
-    /// you are motionless BY DESIGN), or simply stood on a floor absorbing a
-    /// vertical pull — all three billed you for standing perfectly still, which is
-    /// the one thing this attack promises is free.
-    ///
-    /// <b>The bill is frame-rate independent.</b> Damage integrates |dv/dt| over
-    /// time, which is frame-rate independent in the open — a fixed velocity step
-    /// costs the same however it is sliced — but stops being so the moment
-    /// <see cref="maxDamagePerSecond"/> saturates, because the clamped bill is
-    /// then rate × dt for a fixed number of frames. Raw, a single jump cost 0.29 HP
-    /// at 144 fps and 1.40 HP at 30 fps: 4.8× more permanent damage for owning a
-    /// slower phone. <see cref="accelerationSmoothing"/> is the fix; see
-    /// <see cref="MeasureAcceleration"/>.
+    /// <b>Field motion is excluded by default.</b> Being dragged by a gravity well
+    /// is not a choice, so it is subtracted using
+    /// <see cref="ChibiLocomotion.AppliedFieldVelocity"/> — the field velocity the
+    /// controller ACHIEVED, which leaves exactly the character's own motion and is
+    /// exactly zero when he requests none. Flip <see cref="chargeForFieldMotion"/>
+    /// for the crueller reading.
     /// </summary>
     public class FluxionBeam : MonoBehaviour
     {
@@ -59,31 +44,24 @@ namespace Pickleball.Sandbox
         [SerializeField] private float fireTime = 2.4f;
 
         [Header("Damage")]
-        [Tooltip("Damage per second at one unit of acceleration. Actual damage is " +
-                 "this times measured |dv/dt|, so it is a rate, not a total.")]
-        [SerializeField] private float damagePerAcceleration = 0.55f;
+        [Tooltip("Damage per second per m/s of your own speed. A 4.84 m/s sprint " +
+                 "at 3.0 costs about 13.5 HP/s, permanently.")]
+        [SerializeField] private float damagePerSpeed = 3f;
 
-        [Tooltip("Acceleration below this is free. Covers controller jitter, step " +
-                 "offsets and landing settle so standing still really is zero.")]
-        [SerializeField] private float deadzone = 2.5f;
+        [Tooltip("Speed below this is free. Covers controller jitter and the tail " +
+                 "of a deceleration so standing still really is zero.")]
+        [SerializeField] private float speedDeadzone = 0.35f;
 
-        [Tooltip("Ceiling on damage per second, however violently you move. A " +
-                 "backstop now rather than the main shaping force — the smoothing " +
-                 "below already bounds how high a single velocity step can drive " +
-                 "the reading. PROVISIONAL, with the rest of the fight's numbers.")]
-        [SerializeField] private float maxDamagePerSecond = 42f;
+        [Tooltip("Ceiling on damage per second, however fast you move — stops a " +
+                 "dash (14 m/s) through the beam deleting the bar.")]
+        [SerializeField] private float maxDamagePerSecond = 30f;
 
-        [Tooltip("Time constant, in seconds, that the measured |dv/dt| is smoothed " +
-                 "over. This is what makes the bill frame-rate independent: a " +
-                 "one-frame velocity step is spread over a fixed span of real time " +
-                 "instead of a single frame, so its peak no longer depends on how " +
-                 "long that frame was. It also absorbs controller jitter far better " +
-                 "than the deadzone alone. Must stay well above a worst-case frame " +
-                 "time (0.033s at 30fps) for the smoothing to mean anything. " +
-                 "PROVISIONAL — see MeasureAcceleration for the arithmetic.")]
-        [SerializeField] private float accelerationSmoothing = 0.12f;
+        [Tooltip("Time constant, seconds, the measured speed is smoothed over. Only " +
+                 "absorbs single-frame controller spikes; speed is not spiky the " +
+                 "way a derivative of it is.")]
+        [SerializeField] private float speedSmoothing = 0.06f;
 
-        [Tooltip("Include acceleration imposed by gravity wells. Off by default — " +
+        [Tooltip("Include motion imposed by gravity wells. Off by default — " +
                  "see the class comment.")]
         [SerializeField] private bool chargeForFieldMotion;
 
@@ -116,8 +94,7 @@ namespace Pickleball.Sandbox
 
         ChibiLocomotion _player;
         Health _playerHealth;
-        Vector3 _previousVelocity;
-        float _acceleration;
+        float _speed;
 
         void Awake()
         {
@@ -136,7 +113,6 @@ namespace Pickleball.Sandbox
             if (_player != null)
             {
                 _playerHealth = _player.GetComponent<Health>();
-                _previousVelocity = MeasuredVelocity();
                 _aim = (_player.transform.position - muzzle.position).normalized;
             }
         }
@@ -146,7 +122,7 @@ namespace Pickleball.Sandbox
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            MeasureAcceleration(dt);
+            MeasureSpeed(dt);
 
             if (_state == State.Idle) return;
             _stateTime += dt;
@@ -175,68 +151,22 @@ namespace Pickleball.Sandbox
             if (_stateTime >= fireTime) Stop();
         }
 
-        /// <summary>
-        /// The derivative. Velocity is sampled from the CharacterController's own
-        /// measured movement, so it reflects what actually happened — walking into
-        /// a wall is not motion, however hard the stick is pushed.
-        ///
-        /// <b>The raw derivative is smoothed, and that is a correctness fix rather
-        /// than a feel one.</b> Damage is rate × dt, and the rate is capped, so the
-        /// instant <see cref="maxDamagePerSecond"/> saturates the bill collapses to
-        /// (ceiling × dt) for a fixed number of frames — proportional to frame
-        /// time. A jump is one instantaneous velocity step of 5.55 m/s, which at
-        /// 144 fps reads as 800 m/s² for a single 6.9 ms frame and at 30 fps as
-        /// 167 m/s² for a single 33 ms frame. Both saturate; the second is billed
-        /// for five times as long. Measured: 0.29 HP at 144 fps against 1.40 HP at
-        /// 30 fps, permanent and unrecoverable, purely as a function of hardware.
-        ///
-        /// A first-order low-pass fixes it at the source instead of patching the
-        /// bill. The discrete filter aₙ₊₁ = aₙ + (raw − aₙ)·α with
-        /// α = 1 − e^(−dt/τ) preserves ∑a·dt EXACTLY — for a step of Δv the sum is
-        /// a₀·dt/α = Δv at any dt — while turning the one-frame spike into a decay
-        /// over τ whose peak is Δv/τ, a number with no dt in it. So the reading a
-        /// discrete event produces, and therefore whether it saturates the ceiling
-        /// at all, stops depending on the frame rate. With τ = 0.12 a jump peaks at
-        /// 46 m/s², comfortably under the 79 m/s² where the ceiling starts to bite,
-        /// and costs 2.406 HP at 30 fps and 2.406 HP at 144 fps. A dash still
-        /// saturates — it should — and costs 6.479 against 6.445, a 0.5% spread
-        /// against the 380% it used to be.
-        ///
-        /// Note the same structural move as the gravity field's damping fix: a hard
-        /// clamp that produced a frame-rate artefact replaced by a time constant
-        /// that bounds the same quantity smoothly. The ceiling stays as a backstop.
-        /// </summary>
-        void MeasureAcceleration(float dt)
+        /// <summary>The fluxion: how fast the player is going under their own
+        /// power, lightly low-passed. Sampled from the CharacterController's
+        /// measured movement, so walking into a wall is not motion however hard
+        /// the stick is pushed.</summary>
+        void MeasureSpeed(float dt)
         {
             if (_player == null) return;
 
-            Vector3 v = MeasuredVelocity();
-            float raw = (v - _previousVelocity).magnitude / dt;
-            _previousVelocity = v;
-
-            if (accelerationSmoothing <= 0f)
-            {
-                // Unsmoothed. Restores the frame-rate-dependent bill described
-                // above; only useful for isolating the filter while tuning.
-                _acceleration = raw;
-                return;
-            }
-
-            _acceleration += (raw - _acceleration)
-                             * (1f - Mathf.Exp(-dt / accelerationSmoothing));
+            float raw = MeasuredVelocity().magnitude;
+            _speed = speedSmoothing > 0f
+                ? _speed + (raw - _speed) * (1f - Mathf.Exp(-dt / speedSmoothing))
+                : raw;
         }
 
-        /// <summary>
-        /// Velocity as the beam prices it: what the character actually did, minus
-        /// what the force fields actually did to him.
-        ///
-        /// <see cref="ChibiLocomotion.AppliedFieldVelocity"/> is the ACHIEVED field
-        /// contribution and is contracted so that this subtraction leaves exactly
-        /// the character's own motion on every path — exactly zero when he is
-        /// asking for none, whatever the field is doing and whatever the geometry
-        /// is absorbing. Subtracting the field's REQUESTED velocity instead is what
-        /// used to bill a motionless player; see the class comment.
-        /// </summary>
+        /// <summary>Velocity as the beam prices it: what the character actually
+        /// did, minus what the force fields actually did to him.</summary>
         Vector3 MeasuredVelocity()
         {
             if (_player == null) return Vector3.zero;
@@ -245,22 +175,18 @@ namespace Pickleball.Sandbox
             return v;
         }
 
+        float DamagePerSecond()
+            => DamageRate(_speed, speedDeadzone, damagePerSpeed, maxDamagePerSecond);
+
         /// <summary>
         /// The curve: a free deadzone, then linear in the excess, then a ceiling.
-        ///
-        /// The ceiling is deliberately left in even though
-        /// <see cref="accelerationSmoothing"/> now bounds how high a single event
-        /// can drive the reading. Frame-rate independence is established upstream,
-        /// on the measurement, so clamping here no longer distorts the integral in
-        /// the ordinary case — it is a guard against a tuning combination or a
-        /// physics glitch producing a rate that deletes the bar, which permanent
-        /// damage makes unrecoverable by design.
+        /// Pure so it can be tested without a live character.
         /// </summary>
-        float DamagePerSecond()
+        public static float DamageRate(float speed, float deadzone, float perSpeed, float ceiling)
         {
-            float over = _acceleration - deadzone;
+            float over = speed - deadzone;
             if (over <= 0f) return 0f;
-            return Mathf.Min(over * damagePerAcceleration, maxDamagePerSecond);
+            return Mathf.Min(over * perSpeed, ceiling);
         }
 
         void TrackPlayer(float dt)
@@ -345,7 +271,7 @@ namespace Pickleball.Sandbox
 
         /// <summary>Live reading, for a HUD that wants to tell the player exactly
         /// why they are being hurt.</summary>
-        public float CurrentAcceleration => _acceleration;
+        public float CurrentSpeed => _speed;
         public float CurrentDamagePerSecond => _state == State.Firing ? DamagePerSecond() : 0f;
     }
 }

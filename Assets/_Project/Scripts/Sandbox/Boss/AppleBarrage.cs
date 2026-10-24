@@ -3,7 +3,11 @@ using UnityEngine;
 namespace Pickleball.Sandbox
 {
     /// <summary>
-    /// Phase two's pressure: apples, from above, continuously.
+    /// Phase two's pressure: apples, from above, continuously — and absurdly.
+    /// The design calls for a screen full of fast-falling fruit, so the rate is
+    /// in the teens per second and they fall at roughly twice normal gravity.
+    /// Each apple is individually cheap (low damage, recoverable) so the volume
+    /// is the threat, not any single hit.
     ///
     /// Spawn points are biased toward the player but scattered, so the barrage
     /// is an area to read rather than a homing attack to dodge. What makes it
@@ -22,15 +26,21 @@ namespace Pickleball.Sandbox
     public class AppleBarrage : MonoBehaviour
     {
         [Header("Rate")]
-        [SerializeField] private float applesPerSecond = 2.2f;
-        [SerializeField] private float spawnHeight = 16f;
+        [SerializeField] private float applesPerSecond = 14f;
+        [SerializeField] private float spawnHeight = 18f;
 
         [Tooltip("Radius around the player that spawns are scattered over.")]
-        [SerializeField] private float spread = 9f;
+        [SerializeField] private float spread = 10f;
+
+        [Tooltip("Fraction of apples aimed tightly at the player rather than " +
+                 "scattered, so standing still under the barrage is never safe.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float focusedShare = 0.25f;
+        [SerializeField] private float focusedSpread = 2.5f;
 
         [Tooltip("Sideways speed given at spawn, so apples arrive on an arc and " +
                  "the wells have a lateral component to work against.")]
-        [SerializeField] private float lateralSpeed = 2.5f;
+        [SerializeField] private float lateralSpeed = 1.5f;
 
         [Header("World")]
         [Tooltip("Y the apples splat at. Sampled from the arena floor at start if " +
@@ -41,7 +51,8 @@ namespace Pickleball.Sandbox
         [Header("Prefabs")]
         [SerializeField] private Apple applePrefab;
         [SerializeField] private GameObject impactMarkerPrefab;
-        [SerializeField] private float markerLifetime = 1.4f;
+        [Tooltip("Extra seconds the telegraph lingers past the predicted impact.")]
+        [SerializeField] private float markerLinger = 0.1f;
 
         /// <summary>Clearance above the boss's own bounds that the floor probe
         /// starts from. Only has to lift the origin clear of his geometry; the
@@ -128,7 +139,8 @@ namespace Pickleball.Sandbox
 
         void SpawnOne()
         {
-            Vector2 offset = Random.insideUnitCircle * spread;
+            float radius = Random.value < focusedShare ? focusedSpread : spread;
+            Vector2 offset = Random.insideUnitCircle * radius;
             Vector3 origin = _player.transform.position
                            + new Vector3(offset.x, 0f, offset.y)
                            + Vector3.up * spawnHeight;
@@ -167,8 +179,10 @@ namespace Pickleball.Sandbox
             // this used to apply is what a Quad needs — a Quad's face lies in XY —
             // and on a box it tipped the slab onto its edge as a 1.3 m wall, which
             // told the player nothing about where the apple was going to land.
+            // Lives exactly as long as the fall, so a marker on the floor always
+            // means an apple is still coming.
             var marker = Instantiate(impactMarkerPrefab, landing, Quaternion.identity);
-            Destroy(marker, markerLifetime);
+            Destroy(marker, time + markerLinger);
         }
 
         public void Begin() => IsRunning = true;

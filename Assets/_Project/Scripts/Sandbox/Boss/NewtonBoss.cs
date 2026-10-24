@@ -15,8 +15,15 @@ namespace Pickleball.Sandbox
     /// approach expensive and the beam makes leaving expensive, so the fight is
     /// about choosing when to be committed rather than about being safe.
     ///
-    /// Phase one is wells plus the beam. Phase two adds the apple barrage, which
-    /// inverts the value of standing near a well — see <see cref="AppleBarrage"/>.
+    /// Phase one is wells, the beam and the inverse-square volley. Phase two adds
+    /// the apple barrage, which inverts the value of standing near a well — see
+    /// <see cref="AppleBarrage"/> — and doubles the volley up.
+    ///
+    /// The four attacks are built to pull against each other: the beam says stop
+    /// moving, the volley says jump, the wells drag you off your line and the
+    /// apples say get out from under them. No single habit is safe.
+    ///
+    /// When he dies he drops the Gravity Anchor pickup.
     ///
     /// <b>No animation clips exist for Newton</b> (Animation/Newton/ is empty and
     /// NewtonBoss.controller has a single motionless Idle state), so every tell
@@ -57,6 +64,15 @@ namespace Pickleball.Sandbox
         [SerializeField] private float beamIntervalPhaseOne = 9f;
         [SerializeField] private float beamIntervalPhaseTwo = 7f;
 
+        [Header("Inverse square volley")]
+        [SerializeField] private InverseSquareVolley volley;
+        [SerializeField] private float volleyIntervalPhaseOne = 6f;
+        [SerializeField] private float volleyIntervalPhaseTwo = 4.5f;
+
+        [Tooltip("The volley timer runs this many times faster while the player " +
+                 "is inside weakPointRange, so camping at his feet gets punished.")]
+        [SerializeField] private float volleyCloseUrgency = 2.5f;
+
         [Header("Apple barrage")]
         [SerializeField] private AppleBarrage barrage;
 
@@ -69,12 +85,25 @@ namespace Pickleball.Sandbox
         [SerializeField] private Transform body;
         [SerializeField] private Animator animator;
 
-        [Tooltip("Range inside which he is vulnerable. Outside it hits still land " +
-                 "but are heavily reduced — his weak point is close.")]
+        [Tooltip("Distance at which hits on him do exactly their listed damage. " +
+                 "Closer scales up by (range/r)², further scales down by it — the " +
+                 "same law his volley uses on you.")]
         [SerializeField] private float weakPointRange = 4.5f;
 
         [Range(0f, 1f)]
         [SerializeField] private float farDamageMultiplier = 0.25f;
+
+        [Tooltip("Ceiling on the close-range bonus.")]
+        [SerializeField] private float closeDamageCap = 2f;
+
+        [Header("Personality / reward")]
+        [SerializeField] private NewtonBarks barks;
+
+        [Tooltip("Dropped where he falls. Built by Setup Newton Fight as the " +
+                 "Gravity Anchor pickup.")]
+        [SerializeField] private GameObject rewardPrefab;
+
+        [SerializeField] private float unpromptedBarkInterval = 22f;
 
         [SerializeField] private float turnDegreesPerSecond = 90f;
 
@@ -87,7 +116,7 @@ namespace Pickleball.Sandbox
         static readonly int HitHash = Animator.StringToHash("Hit");
         static readonly int DeadHash = Animator.StringToHash("Dead");
 
-        float _wellTimer, _beamTimer, _barrageTimer;
+        float _wellTimer, _beamTimer, _barrageTimer, _volleyTimer, _barkTimer;
         bool _barrageOn;
 
         ChibiLocomotion _player;
@@ -108,6 +137,8 @@ namespace Pickleball.Sandbox
             Health = GetComponent<Health>();
             if (body == null) body = transform;
             if (animator == null) animator = GetComponentInChildren<Animator>();
+            if (volley == null) volley = GetComponent<InverseSquareVolley>();
+            if (barks == null) barks = GetComponent<NewtonBarks>();
             _bodyBaseScale = body.localScale;
             _facing = transform.rotation;
 
@@ -139,6 +170,9 @@ namespace Pickleball.Sandbox
             _wellTimer = 2f;                 // a beat before the first well
             _beamTimer = beamIntervalPhaseOne;
             _barrageTimer = barrageOffDuration;
+            _volleyTimer = volleyIntervalPhaseOne * 0.6f;
+            _barkTimer = unpromptedBarkInterval;
+            Bark(NewtonBarks.Occasion.Intro);
         }
 
         void Update()
@@ -177,11 +211,46 @@ namespace Pickleball.Sandbox
             {
                 beam.Fire();
                 Telegraph(0.9f);
+                Bark(NewtonBarks.Occasion.Beam);
                 if (animator != null) animator.SetTrigger(Attack2Hash);
                 _beamTimer = Phase >= 2 ? beamIntervalPhaseTwo : beamIntervalPhaseOne;
             }
 
+            UpdateVolley(dt);
+
             if (Phase >= 2 && barrage != null) UpdateBarrage(dt);
+
+            _barkTimer -= dt;
+            if (_barkTimer <= 0f)
+            {
+                _barkTimer = unpromptedBarkInterval;
+                Bark(NewtonBarks.Occasion.Unprompted);
+            }
+        }
+
+        void UpdateVolley(float dt)
+        {
+            if (volley == null || _player == null) return;
+
+            bool close = Vector3.Distance(_player.transform.position, transform.position)
+                         <= weakPointRange;
+            _volleyTimer -= dt * (close ? volleyCloseUrgency : 1f);
+            if (_volleyTimer > 0f) return;
+
+            volley.Fire();
+            // Phase two staggers a second ring behind the first, so a single
+            // jump no longer clears the whole attack.
+            if (Phase >= 2) volley.Fire(0.65f);
+
+            Telegraph(1f);
+            Bark(NewtonBarks.Occasion.Volley);
+            if (animator != null) animator.SetTrigger(AttackHash);
+            _volleyTimer = Phase >= 2 ? volleyIntervalPhaseTwo : volleyIntervalPhaseOne;
+        }
+
+        void Bark(NewtonBarks.Occasion occasion)
+        {
+            if (barks != null) barks.Say(occasion);
         }
 
         void UpdatePhase()
@@ -191,6 +260,7 @@ namespace Pickleball.Sandbox
 
             Phase = 2;
             Debug.Log("Newton phase 2 — apple barrage online.");
+            Bark(NewtonBarks.Occasion.PhaseTwo);
             // A fresh well immediately, so the first barrage already has a field
             // to bend through rather than falling straight for its opening seconds.
             if (LiveWellCount() < maxLiveWells) DropWell();
@@ -223,6 +293,7 @@ namespace Pickleball.Sandbox
                 barrage.Begin();
                 _barrageTimer = barrageOnDuration;
                 Telegraph(1.2f);
+                Bark(NewtonBarks.Occasion.Barrage);
                 if (animator != null) animator.SetTrigger(AttackHash);
             }
             else
@@ -274,6 +345,7 @@ namespace Pickleball.Sandbox
 
             Instantiate(wellPrefab, chosen, Quaternion.identity);
             Telegraph(0.7f);
+            Bark(NewtonBarks.Occasion.Well);
             if (animator != null) animator.SetTrigger(AttackHash);
             return true;
         }
@@ -346,6 +418,7 @@ namespace Pickleball.Sandbox
         {
             _recoil = 1f;
             if (animator != null) animator.SetTrigger(HitHash);
+            Bark(NewtonBarks.Occasion.Hurt);
 
             if (_player == null) return;
             var playerHealth = _player.GetComponent<Health>();
@@ -357,26 +430,50 @@ namespace Pickleball.Sandbox
             if (animator != null) animator.SetBool(DeadHash, true);
             if (barrage != null) { barrage.End(); barrage.ClearAirborne(); }
             if (beam != null) beam.Stop();
+            if (volley != null) volley.Clear();
+            Bark(NewtonBarks.Occasion.Death);
 
             // Collapse the field with him — leaving wells running after the fight
             // means the player is still being dragged around a won arena.
             for (int i = GravityWell.Active.Count - 1; i >= 0; i--)
                 if (GravityWell.Active[i] != null) GravityWell.Active[i].Collapse();
 
+            DropReward();
             Debug.Log("Newton defeated.");
         }
 
+        /// <summary>The Gravity Anchor pickup, set down on the floor in front of
+        /// him so the player walks into it on the way to his body.</summary>
+        void DropReward()
+        {
+            if (rewardPrefab == null) return;
+            Vector3 at = transform.position + transform.forward * 2f;
+            float floorY = barrage != null ? barrage.GroundY : transform.position.y;
+            at.y = floorY + 0.9f;
+            Instantiate(rewardPrefab, at, Quaternion.identity);
+        }
+
         /// <summary>
-        /// His weak point is close range. Applied as a filter on his own Health
-        /// so the sword stays ignorant of who it hit — MeleeCombat deals its
-        /// number to an IDamageable and this decides what that number is worth.
+        /// His weak point is close range, by the inverse-square law: damage is
+        /// scaled by (weakPointRange / r)², clamped between farDamageMultiplier
+        /// and closeDamageCap. Applied as a filter on his own Health so the sword
+        /// stays ignorant of who it hit.
         /// </summary>
         float ScaleByRange(float rawDamage, Vector3 point)
         {
             if (_player == null) return rawDamage;
 
             float distance = Vector3.Distance(_player.transform.position, transform.position);
-            return distance <= weakPointRange ? rawDamage : rawDamage * farDamageMultiplier;
+            return rawDamage * RangeMultiplier(distance, weakPointRange,
+                                               farDamageMultiplier, closeDamageCap);
+        }
+
+        /// <summary>Pure so the falloff can be tested without a scene.</summary>
+        public static float RangeMultiplier(float distance, float reference, float min, float max)
+        {
+            float d = Mathf.Max(distance, 0.01f);
+            float ratio = reference / d;
+            return Mathf.Clamp(ratio * ratio, min, max);
         }
 
         void OnDrawGizmosSelected()

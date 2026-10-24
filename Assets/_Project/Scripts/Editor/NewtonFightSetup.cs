@@ -1,6 +1,7 @@
 using Pickleball;
 using Pickleball.Sandbox;
 using Pickleball.UI;
+using TMPro;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -26,10 +27,14 @@ public static class NewtonFightSetup
     const string WellPrefabPath = PrefabDir + "/GravityWell.prefab";
     const string ApplePrefabPath = PrefabDir + "/Apple.prefab";
     const string MarkerPrefabPath = PrefabDir + "/AppleImpactMarker.prefab";
+    const string OrbPrefabPath = PrefabDir + "/InverseSquareOrb.prefab";
+    const string RewardPrefabPath = PrefabDir + "/Pickup_GravityAnchor.prefab";
 
     static readonly Color WellColour = new(0.42f, 0.26f, 0.95f);
     static readonly Color AppleColour = new(0.86f, 0.19f, 0.22f);
     static readonly Color MarkerColour = new(1f, 0.45f, 0.2f, 0.45f);
+    static readonly Color OrbColour = new(1f, 0.85f, 0.35f);
+    static readonly Color GoldenAppleColour = new(1f, 0.78f, 0.2f);
 
     [MenuItem("Tools/Pickleball/Setup Newton Fight")]
     public static void Run()
@@ -62,9 +67,11 @@ public static class NewtonFightSetup
         var wellPrefab = BuildWellPrefab();
         var markerPrefab = BuildMarkerPrefab();
         var applePrefab = BuildApplePrefab();
+        var orbPrefab = BuildOrbPrefab();
+        var rewardPrefab = BuildRewardPrefab();
 
         SetupPlayerHealth(player);
-        SetupBoss(boss, wellPrefab, applePrefab, markerPrefab);
+        SetupBoss(boss, wellPrefab, applePrefab, markerPrefab, orbPrefab, rewardPrefab);
         BuildHud(player, boss);
 
         EditorUtility.SetDirty(boss);
@@ -77,8 +84,8 @@ public static class NewtonFightSetup
         // is not this script's call.
         UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(boss.scene);
 
-        Debug.Log("Newton fight ready — wells, Fluxion beam, apple barrage and " +
-                  "rolling HP wired. SAVE THE SCENE (Ctrl+S) to persist the wiring, " +
+        Debug.Log("Newton fight ready — wells, Fluxion beam, inverse-square volley, " +
+                  "apple barrage, barks, Gravity Anchor reward and rolling HP wired. SAVE THE SCENE (Ctrl+S) to persist the wiring, " +
                   "then press Play.");
     }
 
@@ -190,6 +197,56 @@ public static class NewtonFightSetup
         return saved.GetComponent<Apple>();
     }
 
+    /// <summary>One orb of the inverse-square ring. A glowing, collider-free
+    /// sphere; the volley scales it with distance so its size reads as its damage.</summary>
+    static GameObject BuildOrbPrefab()
+    {
+        var root = PrimitiveFactory.CreateSphere("InverseSquareOrb", 1f, OrbColour);
+        Object.DestroyImmediate(root.GetComponent<Collider>());
+        root.GetComponent<Renderer>().sharedMaterial =
+            SandboxVfxBuilder.BuildGlowMaterial(VfxDir, "InverseSquareOrb", OrbColour);
+        return SavePrefab(root, OrbPrefabPath);
+    }
+
+    /// <summary>
+    /// Newton's drop: a golden apple that grants the Gravity Anchor. Laid out
+    /// like the sandbox's other pickups — trigger on the root, bobbing visual
+    /// on a child, a point light for the glow.
+    /// </summary>
+    static GameObject BuildRewardPrefab()
+    {
+        var root = new GameObject("Pickup_GravityAnchor");
+        var trigger = root.AddComponent<SphereCollider>();
+        trigger.isTrigger = true;
+        trigger.radius = 0.9f;
+
+        var visual = PrimitiveFactory.CreateSphere("Visual", 0.5f, GoldenAppleColour, root.transform);
+        Object.DestroyImmediate(visual.GetComponent<Collider>());
+        visual.GetComponent<Renderer>().sharedMaterial =
+            SandboxVfxBuilder.BuildGlowMaterial(VfxDir, "GoldenApple", GoldenAppleColour);
+        var stalk = PrimitiveFactory.CreateBox("Stalk", new Vector3(0.05f, 0.16f, 0.05f),
+                                               new Color(0.35f, 0.25f, 0.15f), visual.transform);
+        Object.DestroyImmediate(stalk.GetComponent<Collider>());
+        stalk.transform.localPosition = new Vector3(0f, 0.6f, 0f);
+
+        var lightGo = new GameObject("Glow");
+        lightGo.transform.SetParent(root.transform, false);
+        var light = lightGo.AddComponent<Light>();
+        light.type = LightType.Point;
+        light.range = 5f;
+        light.color = GoldenAppleColour;
+        light.intensity = 2.5f;
+
+        var pickup = root.AddComponent<AbilityPickup>();
+        var so = new SerializedObject(pickup);
+        so.FindProperty("ability").enumValueIndex = (int)AbilityKind.GravityAnchor;
+        so.FindProperty("visual").objectReferenceValue = visual.transform;
+        so.FindProperty("glowLight").objectReferenceValue = light;
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        return SavePrefab(root, RewardPrefabPath);
+    }
+
     static GameObject BuildMarkerPrefab()
     {
         var root = PrimitiveFactory.CreateBox("AppleImpactMarker",
@@ -210,8 +267,21 @@ public static class NewtonFightSetup
     }
 
     static void SetupBoss(GameObject boss, GravityWell wellPrefab,
-                          Apple applePrefab, GameObject markerPrefab)
+                          Apple applePrefab, GameObject markerPrefab,
+                          GameObject orbPrefab, GameObject rewardPrefab)
     {
+        // The fight components are rebuilt fresh every run rather than found and
+        // reused. Their tunables are serialized into the scene, so an old instance
+        // keeps the numbers it was created with and every change to the code
+        // defaults is silently ignored — which is how the first tuning pass never
+        // reached the game. Every reference is re-wired below, so nothing is lost.
+        // NewtonBoss goes first: it requires Health, which is kept.
+        RemoveIfPresent<NewtonBoss>(boss);
+        RemoveIfPresent<NewtonBarks>(boss);
+        RemoveIfPresent<InverseSquareVolley>(boss);
+        RemoveIfPresent<AppleBarrage>(boss);
+        RemoveIfPresent<FluxionBeam>(boss);
+
         var health = boss.GetComponent<Health>();
         if (health == null) health = boss.AddComponent<Health>();
 
@@ -222,8 +292,7 @@ public static class NewtonFightSetup
         bossHealth.FindProperty("regainShare").floatValue = 0f;
         bossHealth.ApplyModifiedPropertiesWithoutUndo();
 
-        var barrage = boss.GetComponent<AppleBarrage>();
-        if (barrage == null) barrage = boss.AddComponent<AppleBarrage>();
+        var barrage = boss.AddComponent<AppleBarrage>();
         var barrageSo = new SerializedObject(barrage);
         barrageSo.FindProperty("applePrefab").objectReferenceValue = applePrefab;
         barrageSo.FindProperty("impactMarkerPrefab").objectReferenceValue = markerPrefab;
@@ -239,8 +308,7 @@ public static class NewtonFightSetup
             muzzle.localPosition = new Vector3(0f, 1.6f, 0.4f);
         }
 
-        var beam = boss.GetComponent<FluxionBeam>();
-        if (beam == null) beam = boss.AddComponent<FluxionBeam>();
+        var beam = boss.AddComponent<FluxionBeam>();
 
         var line = muzzle.GetComponent<LineRenderer>();
         if (line == null) line = muzzle.gameObject.AddComponent<LineRenderer>();
@@ -257,20 +325,36 @@ public static class NewtonFightSetup
         beamSo.FindProperty("line").objectReferenceValue = line;
         beamSo.ApplyModifiedPropertiesWithoutUndo();
 
-        var newton = boss.GetComponent<NewtonBoss>();
-        if (newton == null) newton = boss.AddComponent<NewtonBoss>();
+        var volley = boss.AddComponent<InverseSquareVolley>();
+        var volleySo = new SerializedObject(volley);
+        volleySo.FindProperty("orbPrefab").objectReferenceValue = orbPrefab;
+        volleySo.ApplyModifiedPropertiesWithoutUndo();
+
+        var barks = boss.AddComponent<NewtonBarks>();
+
+        var newton = boss.AddComponent<NewtonBoss>();
 
         var model = boss.transform.Find("NewtonModel");
         var newtonSo = new SerializedObject(newton);
         newtonSo.FindProperty("wellPrefab").objectReferenceValue = wellPrefab;
         newtonSo.FindProperty("beam").objectReferenceValue = beam;
         newtonSo.FindProperty("barrage").objectReferenceValue = barrage;
+        newtonSo.FindProperty("volley").objectReferenceValue = volley;
+        newtonSo.FindProperty("barks").objectReferenceValue = barks;
+        newtonSo.FindProperty("rewardPrefab").objectReferenceValue = rewardPrefab;
         if (model != null) newtonSo.FindProperty("body").objectReferenceValue = model;
         newtonSo.FindProperty("animator").objectReferenceValue =
             boss.GetComponentInChildren<Animator>();
         newtonSo.ApplyModifiedPropertiesWithoutUndo();
 
-        Debug.Log("  boss: Health(600) + NewtonBoss + FluxionBeam + AppleBarrage");
+        Debug.Log("  boss: Health(600) + NewtonBoss + FluxionBeam + InverseSquareVolley " +
+                  "+ AppleBarrage + NewtonBarks");
+    }
+
+    static void RemoveIfPresent<T>(GameObject go) where T : Component
+    {
+        var existing = go.GetComponent<T>();
+        if (existing != null) Object.DestroyImmediate(existing);
     }
 
     /// <summary>Two bars: the player's bottom-left with its grey regain region,
@@ -297,7 +381,40 @@ public static class NewtonFightSetup
                  new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -50f),
                  new Vector2(900f, 22f), new Color(0.85f, 0.3f, 0.35f));
 
+        BuildBarkLine(canvasGo.transform, boss.GetComponent<NewtonBarks>());
+
         EditorUtility.SetDirty(canvasGo);
+    }
+
+    /// <summary>Newton's subtitle line, just under his health bar.</summary>
+    static void BuildBarkLine(Transform parent, NewtonBarks source)
+    {
+        const string name = "NewtonBark";
+        var existing = parent.Find(name);
+        if (existing != null) Object.DestroyImmediate(existing.gameObject);
+
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        var rect = (RectTransform)go.transform;
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = new Vector2(0f, -84f);
+        rect.sizeDelta = new Vector2(1400f, 80f);
+
+        var text = go.AddComponent<TextMeshProUGUI>();
+        text.alignment = TextAlignmentOptions.Top;
+        text.fontSize = 34f;
+        text.fontStyle = FontStyles.Italic;
+        text.color = new Color(1f, 0.93f, 0.78f);
+        text.textWrappingMode = TextWrappingModes.Normal;
+        text.raycastTarget = false;
+        text.text = "";
+
+        var view = go.AddComponent<BarkView>();
+        var so = new SerializedObject(view);
+        so.FindProperty("source").objectReferenceValue = source;
+        so.FindProperty("text").objectReferenceValue = text;
+        so.ApplyModifiedPropertiesWithoutUndo();
     }
 
     static void BuildBar(Transform parent, string name, Health source,

@@ -30,13 +30,16 @@ namespace Pickleball.Sandbox
     /// <b>What the player actually feels is a drift speed, not an acceleration.</b>
     /// ChibiLocomotion damps field velocity proportionally, so a steady pull
     /// settles at (acceleration / fieldDamping) rather than building forever. At
-    /// the shipped tuning — strength 55, damping 2.5 — that ladder is:
+    /// the shipped tuning — strength 90, damping 2.5 — that ladder is:
     ///
-    ///     14 m (rim)  0.11 m/s     a hint that the ground is tilted
-    ///      8 m        0.34 m/s     a drift you correct for without thinking
-    ///      5 m        0.88 m/s     a current you have to lean against
-    ///      3 m        2.44 m/s     half a sprint, spent just holding station
-    ///    1.8 m (core) 6.79 m/s     faster than a sprint; you are not walking out
+    ///     14 m (rim)  0.18 m/s     a hint that the ground is tilted
+    ///      8 m        0.56 m/s     a drift you correct for
+    ///      5 m        1.44 m/s     a current you have to lean against
+    ///      3 m        4.00 m/s     most of a sprint, spent just holding station
+    ///    1.8 m (core) 11.1 m/s     you are not walking out
+    ///
+    /// (It shipped at 55, where everything outside 5 m — i.e. everywhere a well
+    /// is allowed to spawn relative to you — was under 0.9 m/s and barely felt.)
     ///
     /// against a 4.84 m/s sprint. That ladder IS the gradient the fight is built
     /// to be read off, so <see cref="strength"/> and the locomotion's damping are
@@ -47,7 +50,7 @@ namespace Pickleball.Sandbox
         [Header("Field")]
         [Tooltip("G·m in the equation above — the pull one metre out, in m/s². " +
                  "Everything else follows from the inverse square.")]
-        [SerializeField] private float strength = 55f;
+        [SerializeField] private float strength = 90f;
 
         [Tooltip("Beyond this the well is ignored entirely. Keeps the arena " +
                  "readable and the per-frame cost bounded.")]

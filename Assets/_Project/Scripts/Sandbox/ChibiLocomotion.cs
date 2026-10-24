@@ -84,6 +84,25 @@ namespace Pickleball.Sandbox
         [SerializeField, Range(0f, 1f)] private float dashExitHorizontalKeep = 0.7f;
         [SerializeField] private DashEffects dashEffects;
 
+        [Tooltip("How strongly gravity wells bend a dash, as a multiple of the " +
+                 "pull they apply to walking. A dash is the dodge, and Newton's " +
+                 "wells exist to disrupt dodges: dashing past a well curves the " +
+                 "45° arc toward it. 0 restores the old immune dash.")]
+        [SerializeField] private float dashFieldBend = 2.5f;
+
+        [Header("Gravity Anchor (Newton's reward)")]
+        [Tooltip("Seconds one anchor lasts. G halts your own gravity (hover); " +
+                 "holding Jump while anchored inverts it and you rise.")]
+        [SerializeField] private float anchorDuration = 2f;
+        [SerializeField] private float anchorCooldown = 1.5f;
+        [Tooltip("Upward acceleration while anchored with Jump held — gravity, " +
+                 "inverted and gentler.")]
+        [SerializeField] private float anchorRiseAcceleration = 9f;
+        [SerializeField] private float anchorMaxRiseSpeed = 4.5f;
+        [Tooltip("How quickly vertical speed is brought to rest when the anchor " +
+                 "halts you, m/s².")]
+        [SerializeField] private float anchorHaltRate = 25f;
+
         [Header("Carried momentum")]
         [Tooltip("Horizontal velocity carried from swings and launches, on top " +
                  "of input movement. Walking alone never sets this; it exists " +
@@ -95,14 +114,14 @@ namespace Pickleball.Sandbox
                  "field is asking for, in 1/s. This is a DAMPING RATE, not a " +
                  "deceleration: a steady pull settles at (acceleration / this), so " +
                  "half the pull is half the drift and there is no cut-off below " +
-                 "which a field does nothing. At 2.5, a strength-55 well settles " +
-                 "you at 0.11 m/s at 14 m, 0.34 at 8 m, 0.88 at 5 m, 2.44 at 3 m " +
-                 "and 6.79 at the core rim, against a 4.84 m/s sprint. " +
+                 "which a field does nothing. At 2.5, a strength-90 well settles " +
+                 "you at 0.18 m/s at 14 m, 0.56 at 8 m, 1.44 at 5 m, 4.0 at 3 m " +
+                 "and 11.1 at the core rim, against a 4.84 m/s sprint. " +
                  "PROVISIONAL — the fight's tuning pass owns the final value.")]
         [SerializeField] private float fieldDamping = 2.5f;
 
         [Tooltip("Backstop on force-field velocity. The damping above already gives " +
-                 "the field a terminal speed of its own (6.79 m/s at one well's core " +
+                 "the field a terminal speed of its own (11.1 m/s at one well's core " +
                  "rim), so this only bites when several wells stack or strength is " +
                  "pushed well past its shipped value — it is a guard rail, not the " +
                  "thing that shapes the pull. PROVISIONAL, with the numbers above.")]
@@ -188,7 +207,8 @@ namespace Pickleball.Sandbox
         static readonly int FireHash = Animator.StringToHash("Fire");
 
         CharacterController _cc;
-        InputAction _move, _sprint, _jump, _crouch, _flip, _mount, _dash, _tether;
+        InputAction _move, _sprint, _jump, _crouch, _flip, _mount, _dash, _tether, _anchor;
+        float _anchorLeft, _anchorReadyAt;
         Vector3 _dashVelocity;
         float _dashTimeLeft, _dashReadyAt;
         bool _airDashUsed;
@@ -308,6 +328,9 @@ namespace Pickleball.Sandbox
 
         public bool IsMovementLocked => _moveLockLeft > 0f;
 
+        /// <summary>True while the Gravity Anchor is holding his own gravity off.</summary>
+        public bool IsAnchored => _anchorLeft > 0f;
+
         void Awake()
         {
             _cc = GetComponent<CharacterController>();
@@ -394,13 +417,18 @@ namespace Pickleball.Sandbox
             _tether.AddBinding("<Mouse>/rightButton");
             _tether.AddBinding("<Gamepad>/leftShoulder");
 
+            _anchor = new InputAction("GravityAnchor", InputActionType.Button);
+            _anchor.AddBinding("<Keyboard>/g");
+            _anchor.AddBinding("<Gamepad>/rightStickPress");
+
             _move.Enable(); _sprint.Enable(); _jump.Enable(); _crouch.Enable();
             _flip.Enable(); _mount.Enable(); _dash.Enable(); _tether.Enable();
+            _anchor.Enable();
         }
 
         void OnDisable()
         {
-            foreach (var a in new[] { _move, _sprint, _jump, _crouch, _flip, _mount, _dash, _tether })
+            foreach (var a in new[] { _move, _sprint, _jump, _crouch, _flip, _mount, _dash, _tether, _anchor })
             {
                 a?.Disable();
                 a?.Dispose();
@@ -433,6 +461,7 @@ namespace Pickleball.Sandbox
             // Ticked here for the same reason: a lock applied just before a dash
             // would otherwise never expire.
             if (_moveLockLeft > 0f) _moveLockLeft -= dt;
+            HandleAnchor(dt);
 
             HandleMount(grounded);
             UpdateRideLift(dt);
@@ -451,6 +480,11 @@ namespace Pickleball.Sandbox
             if (_dashTimeLeft > 0f)
             {
                 ClearField();
+                // Wells bend the dash rather than being ignored by it. Applied to
+                // the dash velocity itself, not banked as field velocity, so it
+                // curves the arc while it lasts and leaves nothing to release
+                // when the dash hands movement back.
+                _dashVelocity += fieldAccel * (dashFieldBend * dt);
                 _dashTimeLeft -= dt;
                 _cc.Move(_dashVelocity * dt);
                 if (_dashTimeLeft <= 0f) EndDash();
@@ -592,6 +626,15 @@ namespace Pickleball.Sandbox
                 _jumpLatchUntil = Time.time + 0.15f;
                 if (animator != null) animator.SetTrigger(JumpHash);
             }
+            else if (_anchorLeft > 0f && (!grounded || _jump.IsPressed()))
+            {
+                // Gravity Anchor: his own gravity is off. Jump held inverts it,
+                // which also lifts him straight off the floor.
+                if (grounded) _verticalVelocity = Mathf.Max(_verticalVelocity, 0f);
+                _verticalVelocity = _jump.IsPressed()
+                    ? Mathf.Min(_verticalVelocity + anchorRiseAcceleration * dt, anchorMaxRiseSpeed)
+                    : Mathf.MoveTowards(_verticalVelocity, 0f, anchorHaltRate * dt);
+            }
             else if (grounded && _verticalVelocity < 0f)
             {
                 _verticalVelocity = groundedStick;
@@ -701,11 +744,11 @@ namespace Pickleball.Sandbox
         /// <summary>
         /// Cut the character loose from every force field, banked velocity and all.
         ///
-        /// <b>The tether and the dash are immune to wells.</b> That is the decision,
-        /// and this is what implements it. Neither one reads field velocity — the
-        /// swing runs its own gravity against a rope constraint, and the dash's
-        /// whole value is a fixed 45° reach you can design gaps against — so
-        /// leaving a field to act on them would quietly undo both.
+        /// <b>The tether ignores wells; the dash is bent by them instead.</b>
+        /// Neither reads banked field velocity — the swing runs its own gravity
+        /// against a rope constraint, and the dash applies the frame's pull
+        /// straight to its own velocity (see <see cref="dashFieldBend"/>) — so this
+        /// keeps the banked channel empty while either owns movement.
         ///
         /// Zeroing is the point rather than an implementation detail. Field
         /// velocity used to keep accumulating while those systems owned movement,
@@ -1020,6 +1063,34 @@ namespace Pickleball.Sandbox
             var flat = new Vector3(_dashVelocity.x, 0f, _dashVelocity.z);
             _currentSpeed = Mathf.Min(flat.magnitude * dashExitHorizontalKeep, sprintSpeed);
             _dashVelocity = Vector3.zero;
+        }
+
+        /// <summary>G toggles the Gravity Anchor once Newton's pickup has been
+        /// collected. Ticked at the top of Update so it expires even while a dash
+        /// or the tether owns movement.</summary>
+        void HandleAnchor(float dt)
+        {
+            if (_anchorLeft > 0f)
+            {
+                _anchorLeft -= dt;
+                if (_anchorLeft <= 0f) EndAnchor();
+            }
+
+            if (_abilities == null || !_abilities.Has(AbilityKind.GravityAnchor)) return;
+            if (!_anchor.WasPressedThisFrame()) return;
+
+            if (_anchorLeft > 0f) { EndAnchor(); return; }
+            if (Time.time < _anchorReadyAt || _tethered || _skating) return;
+
+            _anchorLeft = anchorDuration;
+            // Halting starts from where he is: a fall in progress is caught.
+            if (_verticalVelocity < 0f) _verticalVelocity *= 0.25f;
+        }
+
+        void EndAnchor()
+        {
+            _anchorLeft = 0f;
+            _anchorReadyAt = Time.time + anchorCooldown;
         }
 
         /// <summary>R mounts/dismounts the board once the skateboard pickup has

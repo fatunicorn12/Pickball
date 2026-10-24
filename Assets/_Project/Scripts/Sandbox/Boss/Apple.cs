@@ -30,8 +30,8 @@ namespace Pickleball.Sandbox
     /// </summary>
     public class Apple : MonoBehaviour
     {
-        [SerializeField] private float baseGravity = -16f;
-        [SerializeField] private float damage = 12f;
+        [SerializeField] private float baseGravity = -38f;
+        [SerializeField] private float damage = 7f;
         [SerializeField] private float hitRadius = 0.55f;
         [SerializeField] private float cancelRadius = 0.75f;
         [SerializeField] private float knockback = 4.5f;
@@ -40,10 +40,10 @@ namespace Pickleball.Sandbox
                  "but not bounded over time, so an apple that falls through a core " +
                  "keeps gaining and a long orbit runs away. Must stay comfortably " +
                  "above free-fall impact speed — sqrt(2 * |baseGravity| * " +
-                 "AppleBarrage.spawnHeight), about 22.6 m/s at the defaults — or " +
+                 "AppleBarrage.spawnHeight), about 37 m/s at the defaults — or " +
                  "ordinary falls get clipped. PROVISIONAL: picked for headroom, " +
                  "not for feel.")]
-        [SerializeField] private float terminalSpeed = 30f;
+        [SerializeField] private float terminalSpeed = 50f;
 
         [Tooltip("Killed after this long regardless, so a stable orbit around a " +
                  "well cannot leave an apple circling forever.")]
