@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Playables;
 
 /// <summary>
 /// One-click setup: materials, Humanoid rigs, a locomotion blend tree, and a
@@ -50,8 +51,12 @@ public static class ChibiSandboxSetup
     /// reads naturally.</summary>
     const float TargetHeight = 1.7f;
 
-    // Blend thresholds are the clips' MEASURED authored speeds (m/s), taken off
-    // the source FBXs. Matching them is what stops the feet sliding.
+    // FALLBACK blend thresholds only. BuildController measures each clip's
+    // stride on the chibi himself (MeasureStrideSpeed) and uses that; these
+    // source-rig numbers apply only if the measurement fails. They are NOT
+    // right for the chibi: retargeting scales travel by his humanScale (0.72),
+    // and measured on him the armed walk strides 0.98 m/s and the armed run
+    // 2.57 m/s — so a 4.84 run threshold left the feet skating at ~1.9x.
     //
     // The armed clips were measured off the hip bone in Blender, same as the
     // unarmed originals (method re-validated: Walking.fbx re-measured 0.726,
@@ -74,9 +79,9 @@ public static class ChibiSandboxSetup
     const float MoveSpeed = 2.8f;
 
     /// <summary>Hand-tuned in the scene, kept here so re-running the setup does
-    /// not reset it. Large because the chibi's legs are far shorter than the
-    /// Mixamo source rig's, so retargeting seats the hips well below where a
-    /// 1.7m human's would be.</summary>
+    /// not reset it. Large because the clips' root height is based on the
+    /// Center of Mass: humanoid playback pins the root at the body's COM, so
+    /// the model sinks by roughly its hip height and this lifts it back.</summary>
     const float ModelYOffset = 0.64f;
 
     /// <summary>Ride speed. Far above the clips' authored 0.95 m/s, which is
@@ -182,6 +187,14 @@ public static class ChibiSandboxSetup
         // crossfade reads better than that clip did.
     };
 
+    /// <summary>Roles whose root height is baked into the pose (grounded
+    /// cycles). Measured with these settings, feet sit within 7 cm of the
+    /// ground: idle -0.3 cm, run -7 cm, stop -6 cm.</summary>
+    static readonly HashSet<string> BakedHeightRoles = new() { "idle", "walk", "run", "stop" };
+
+    /// <summary>Roles imported with Loop Pose — the genuine cycles.</summary>
+    static readonly HashSet<string> LoopPoseRoles = new() { "idle", "walk", "crouchWalk" };
+
     /// <summary>Loose files that belong in a canonical folder. Anything not
     /// found is skipped, so this is safe to re-run and safe when assets are
     /// already in place.</summary>
@@ -219,6 +232,11 @@ public static class ChibiSandboxSetup
 
     // Leftovers from the earlier "Animation Preview" version of this script.
     const string OldControllerPath = AnimDir + "/ChibiPreview.controller";
+    /// <summary>An older 6-state copy of the locomotion controller from before
+    /// controllers moved under Animation/Controllers. Nothing references it
+    /// (Chibi.prefab uses Controllers/ChibiLocomotion.controller); it only
+    /// invited editing the wrong file.</summary>
+    const string StaleRootControllerPath = "Assets/_Project/Animation/ChibiLocomotion.controller";
     const string OldScenePath = "Assets/_Project/Scenes/AnimationPreview.unity";
 
     const string AutoRunKey = "Pickleball.ChibiSandbox.AutoRunToken";
@@ -625,20 +643,33 @@ public static class ChibiSandboxSetup
                 firstFrame = d.first < 0 ? take.firstFrame : d.first,
                 lastFrame = d.last < 0 ? take.lastFrame : d.last,
                 loopTime = d.loop,
+                // Matches the per-clip import pass done on the metas by hand;
+                // re-running the setup must not undo it.
+                //   loopPose on the true cycles only, so their seams blend.
+                loopPose = LoopPoseRoles.Contains(d.role),
                 // Root motion is disabled on the Animator, so anything NOT
-                // baked into pose is discarded -- which is exactly what we want
-                // here, because the CharacterController owns all travel:
+                // baked into pose is discarded, and the CharacterController
+                // owns all travel:
                 //   XZ not baked -> cycles play in place instead of drifting
                 //                   forward and snapping back each loop.
-                //   Y  not baked -> the jump arc comes from the controller only,
-                //                   rather than adding to the clip's 0.24 rise.
-                //   Rotation not baked -> Sprint Turn cannot spin the character.
-                lockRootRotation = false,
-                lockRootHeightY = false,
+                //   Rotation BAKED (all roles) -> the clip's own heading drift
+                //                   stays in the pose instead of being thrown
+                //                   away and snapping at every loop seam.
+                //   Y baked on the grounded cycles only (BakedHeightRoles), so
+                //                   their bob stays in the pose; NOT baked on
+                //                   jumps/landings/crouches, so a jump's arc
+                //                   comes from the controller alone.
+                lockRootRotation = true,
+                lockRootHeightY = BakedHeightRoles.Contains(d.role),
                 lockRootPositionXZ = false,
-                // Based Upon: feet on the ground, body centred over the capsule.
+                // Based Upon: Y is the CENTER OF MASS (keepOriginalPositionY
+                // false, heightFromFeet false) — the root is pinned at the
+                // body's COM, so the model sinks by about its hip height.
+                // That, not the chibi's short legs, is what ModelYOffset
+                // (0.64) compensates for.
                 keepOriginalOrientation = true,
                 keepOriginalPositionY = false,
+                heightFromFeet = false,
                 keepOriginalPositionXZ = false,
             });
         }
@@ -664,13 +695,43 @@ public static class ChibiSandboxSetup
 
     // -------------------------------------------------------------- controller
 
+    /// <summary>Blend thresholds actually used by the last BuildController run
+    /// — measured on the chibi where possible — so BuildScene can hand the same
+    /// numbers to ChibiLocomotion.</summary>
+    static float _walkStride = WalkSpeed, _runStride = RunSpeed, _crouchStride = CrouchWalkSpeed;
+
+    /// <summary>
+    /// Stride speed of a locomotion clip on the chibi himself, falling back to
+    /// the source-rig constant if it cannot be measured. See MeasureStrideSpeed
+    /// for why the source-rig numbers are not enough on chibi proportions.
+    /// </summary>
+    static float StrideOnChibi(AnimationClip clip, float fallback)
+    {
+        var avatar = LoadAsset<Avatar>(ModelPath);
+        var modelAsset = AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
+        if (clip == null || avatar == null || modelAsset == null) return fallback;
+        var go = Object.Instantiate(modelAsset);
+        go.hideFlags = HideFlags.HideAndDontSave;
+        try
+        {
+            var anim = go.GetComponent<Animator>() ?? go.AddComponent<Animator>();
+            anim.avatar = avatar;
+            anim.Rebind();
+            float v = MeasureStrideSpeed(anim, clip, out _);
+            return v > 0.05f ? v : fallback;
+        }
+        finally { Object.DestroyImmediate(go); }
+    }
+
     static AnimatorController BuildController(Dictionary<string, AnimationClip> clips)
     {
-        var controller = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
+        // In place, so the GUID Chibi.prefab references survives the rebuild.
+        var controller = ResetControllerInPlace(ControllerPath);
         controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
         controller.AddParameter("SpeedMultiplier", AnimatorControllerParameterType.Float);
         controller.AddParameter("VerticalSpeed", AnimatorControllerParameterType.Float);
         controller.AddParameter("Grounded", AnimatorControllerParameterType.Bool);
+        controller.AddParameter("Moving", AnimatorControllerParameterType.Bool);
         controller.AddParameter("Crouch", AnimatorControllerParameterType.Bool);
         controller.AddParameter("Jump", AnimatorControllerParameterType.Trigger);
         controller.AddParameter("Stop", AnimatorControllerParameterType.Trigger);
@@ -679,6 +740,7 @@ public static class ChibiSandboxSetup
         controller.AddParameter("FlipSpeed", AnimatorControllerParameterType.Float);
         controller.AddParameter("Dash", AnimatorControllerParameterType.Trigger);
         controller.AddParameter("Tethered", AnimatorControllerParameterType.Bool);
+        // Kept for compatibility; the gesture is now crossfaded by name.
         controller.AddParameter("Fire", AnimatorControllerParameterType.Trigger);
 
         var ps = controller.parameters;
@@ -693,16 +755,33 @@ public static class ChibiSandboxSetup
         var sm = controller.layers[0].stateMachine;
 
         // ---- ground locomotion ------------------------------------------
+        // Thresholds are the strides measured ON THE CHIBI. The source-rig
+        // speeds (WalkSpeed/RunSpeed) are kept only as the fallback: humanoid
+        // retargeting scales stride to the target's legs, and the chibi's are
+        // far shorter than Mixamo's, so a threshold taken off the source rig
+        // puts the blend at a clip that strides slower than he travels.
+        clips.TryGetValue("run", out var run);
+        clips.TryGetValue("crouchWalk", out var cWalkClip);
+        _walkStride = StrideOnChibi(clips["walk"], WalkSpeed);
+        _runStride = run != null ? StrideOnChibi(run, RunSpeed) : RunSpeed;
+        _crouchStride = cWalkClip != null ? StrideOnChibi(cWalkClip, CrouchWalkSpeed) : CrouchWalkSpeed;
+        if (_runStride <= _walkStride) _runStride = RunSpeed;   // measurement nonsense guard
+
         var loco = controller.CreateBlendTreeInController("Locomotion", out BlendTree tree, 0);
         tree.blendType = BlendTreeType.Simple1D;
         tree.blendParameter = "Speed";
         tree.useAutomaticThresholds = false;
         tree.AddChild(clips["idle"], 0f);
-        tree.AddChild(clips["walk"], WalkSpeed);
-        if (clips.TryGetValue("run", out var run)) tree.AddChild(run, RunSpeed);
+        tree.AddChild(clips["walk"], _walkStride);
+        if (run != null) tree.AddChild(run, _runStride);
+        // ChibiLocomotion raises SpeedMultiplier above 1 once travel outruns
+        // the top threshold, so sprinting past the run clip's stride speeds the
+        // cycle up instead of skating.
         loco.speedParameterActive = true;
         loco.speedParameter = "SpeedMultiplier";
         sm.defaultState = loco;
+        Debug.Log($"Locomotion thresholds (measured on chibi): walk {_walkStride:0.00}, " +
+                  $"run {_runStride:0.00}, crouch walk {_crouchStride:0.00} m/s");
 
         // ---- crouch -------------------------------------------------------
         // With a real Crouching Idle (+ Crouched Walking) this becomes a proper
@@ -716,8 +795,9 @@ public static class ChibiSandboxSetup
             cTree.blendParameter = "Speed";
             cTree.useAutomaticThresholds = false;
             cTree.AddChild(cIdle, 0f);
-            if (clips.TryGetValue("crouchWalk", out var cWalk))
-                cTree.AddChild(cWalk, CrouchWalkSpeed);
+            if (cWalkClip != null) cTree.AddChild(cWalkClip, _crouchStride);
+            crouch.speedParameterActive = true;
+            crouch.speedParameter = "SpeedMultiplier";
         }
         else
         {
@@ -738,7 +818,7 @@ public static class ChibiSandboxSetup
             jTree.blendParameter = "Speed";
             jTree.useAutomaticThresholds = false;
             jTree.AddChild(jClip, 0f);
-            jTree.AddChild(rjClip, RunSpeed);
+            jTree.AddChild(rjClip, _runStride);
         }
         else
         {
@@ -752,40 +832,59 @@ public static class ChibiSandboxSetup
         var land = sm.AddState("Land");
         land.motion = clips.TryGetValue("land", out var lClip) ? lClip : clips["idle"];
 
+        // Transitions out of the grounded states may be cut short by a
+        // higher-priority transition of the same state (ordered interruption):
+        // a jump pressed during the 0.12s blend into Run To Stop should not
+        // have to wait for that blend to finish.
+        AnimatorStateTransition Go(AnimatorState from, AnimatorState to, float duration)
+        {
+            var tr = from.AddTransition(to);
+            tr.hasExitTime = false;
+            tr.duration = duration;
+            tr.interruptionSource = TransitionInterruptionSource.Source;
+            tr.orderedInterruption = true;
+            return tr;
+        }
+
         // ---- transitions ---------------------------------------------------
         // Jump is a trigger, so it must not wait for exit time.
-        var t = loco.AddTransition(jump);
-        t.hasExitTime = false; t.duration = 0.05f;
+        var t = Go(loco, jump, 0.05f);
         t.AddCondition(AnimatorConditionMode.If, 0, "Jump");
 
         // Walked off a ledge (falling, not jumping).
-        t = loco.AddTransition(fall);
-        t.hasExitTime = false; t.duration = 0.15f;
+        t = Go(loco, fall, 0.15f);
         t.AddCondition(AnimatorConditionMode.IfNot, 0, "Grounded");
         t.AddCondition(AnimatorConditionMode.Less, -0.1f, "VerticalSpeed");
 
         // Past the apex -> fall.
-        t = jump.AddTransition(fall);
-        t.hasExitTime = false; t.duration = 0.12f;
+        t = Go(jump, fall, 0.12f);
         t.AddCondition(AnimatorConditionMode.Less, -0.1f, "VerticalSpeed");
         t.AddCondition(AnimatorConditionMode.IfNot, 0, "Grounded");
 
         // Short hop that lands before the apex condition fires.
-        t = jump.AddTransition(land);
-        t.hasExitTime = false; t.duration = 0.08f;
+        t = Go(jump, land, 0.08f);
         t.AddCondition(AnimatorConditionMode.If, 0, "Grounded");
 
-        t = fall.AddTransition(land);
-        t.hasExitTime = false; t.duration = 0.06f;
+        // Coyote jump: walked off the ledge, pressed Jump inside the grace
+        // window. The physics jump happens; without this the trigger had no
+        // consumer in Fall and fired a jump animation after landing instead.
+        t = Go(fall, jump, 0.05f);
+        t.AddCondition(AnimatorConditionMode.If, 0, "Jump");
+
+        t = Go(fall, land, 0.06f);
         t.AddCondition(AnimatorConditionMode.If, 0, "Grounded");
 
-        // Landing recovery is interruptible so movement stays responsive.
+        // Landing recovery: re-jumpable at once, cut short by fresh input (a
+        // running landing should not plant the legs for half a second while
+        // the body slides on at speed), otherwise played out.
+        t = Go(land, jump, 0.05f);
+        t.AddCondition(AnimatorConditionMode.If, 0, "Jump");
+
+        t = Go(land, loco, 0.15f);
+        t.AddCondition(AnimatorConditionMode.If, 0, "Moving");
+
         t = land.AddTransition(loco);
         t.hasExitTime = true; t.exitTime = 0.55f; t.duration = 0.18f;
-
-        t = land.AddTransition(jump);
-        t.hasExitTime = false; t.duration = 0.05f;
-        t.AddCondition(AnimatorConditionMode.If, 0, "Jump");
 
         // ---- run-to-stop ---------------------------------------------------
         if (clips.TryGetValue("stop", out var stopClip))
@@ -793,29 +892,29 @@ public static class ChibiSandboxSetup
             var stop = sm.AddState("Stop");
             stop.motion = stopClip;
 
-            t = loco.AddTransition(stop);
-            t.hasExitTime = false; t.duration = 0.12f;
+            t = Go(loco, stop, 0.12f);
             t.AddCondition(AnimatorConditionMode.If, 0, "Stop");
 
-            // Moving again cancels the stop immediately â€” responsiveness beats
-            // playing the plant out.
-            t = stop.AddTransition(loco);
-            t.hasExitTime = false; t.duration = 0.15f;
-            t.AddCondition(AnimatorConditionMode.Greater, 0.6f, "Speed");
+            t = Go(stop, jump, 0.05f);
+            t.AddCondition(AnimatorConditionMode.If, 0, "Jump");
+
+            t = Go(stop, fall, 0.15f);
+            t.AddCondition(AnimatorConditionMode.IfNot, 0, "Grounded");
+
+            // Moving again cancels the stop immediately — responsiveness beats
+            // playing the plant out. Keyed on INPUT (Moving), not on Speed:
+            // the stop is triggered above 3 m/s and decelerates through every
+            // speed threshold on its own, so the old "Speed > 0.6" exit was
+            // already true the moment the state was entered and bounced him
+            // straight back into the run — the plant never actually played.
+            t = Go(stop, loco, 0.15f);
+            t.AddCondition(AnimatorConditionMode.If, 0, "Moving");
 
             // The character is at rest 54% in; the tail is just settling.
             t = stop.AddTransition(loco);
             t.hasExitTime = true; t.exitTime = 0.62f; t.duration = 0.25f;
-
-            // Still jumpable and still falls off ledges mid-stop.
-            t = stop.AddTransition(jump);
-            t.hasExitTime = false; t.duration = 0.05f;
-            t.AddCondition(AnimatorConditionMode.If, 0, "Jump");
-
-            t = stop.AddTransition(fall);
-            t.hasExitTime = false; t.duration = 0.15f;
-            t.AddCondition(AnimatorConditionMode.IfNot, 0, "Grounded");
         }
+        var stopState = sm.states.Select(s => s.state).FirstOrDefault(s => s.name == "Stop");
 
         // ---- front flip: ground trick AND the feather's double jump ---------
         AnimatorState flip = null;
@@ -823,13 +922,23 @@ public static class ChibiSandboxSetup
         {
             flip = sm.AddState("FrontFlip");
             flip.motion = flipClip;
-            // No foot IK mid-flip; his feet are over his head for most of it.
-            flip.iKOnFeet = false;
 
             // Ground trick (F): the full clip, wind-up and landing included.
-            t = loco.AddTransition(flip);
-            t.hasExitTime = false; t.duration = 0.08f;
-            t.AddCondition(AnimatorConditionMode.If, 0, "Flip");
+            // Reachable from every grounded standing state, so a press during a
+            // landing or a stop is not left latched to fire later.
+            foreach (var from in new[] { loco, land, stopState })
+            {
+                if (from == null) continue;
+                t = Go(from, flip, 0.08f);
+                t.AddCondition(AnimatorConditionMode.If, 0, "Flip");
+            }
+
+            // A real jump cancels the trick, and so does walking off a ledge.
+            t = Go(flip, jump, 0.06f);
+            t.AddCondition(AnimatorConditionMode.If, 0, "Jump");
+            t = Go(flip, fall, 0.15f);
+            t.AddCondition(AnimatorConditionMode.IfNot, 0, "Grounded");
+            t.AddCondition(AnimatorConditionMode.Less, -0.1f, "VerticalSpeed");
 
             t = flip.AddTransition(loco);
             t.hasExitTime = true; t.exitTime = 0.88f; t.duration = 0.18f;
@@ -838,23 +947,21 @@ public static class ChibiSandboxSetup
         // Air variant for the double jump: only the airborne portion, and time
         // scaled by the script so it finishes exactly as he lands. Matching it
         // by jump height instead would need a 3.24m leap.
+        AnimatorState flipAir = null;
         if (clips.TryGetValue("flipAir", out var flipAirClip))
         {
-            var flipAir = sm.AddState("FlipAir");
+            flipAir = sm.AddState("FlipAir");
             flipAir.motion = flipAirClip;
-            flipAir.iKOnFeet = false;
             flipAir.speedParameterActive = true;
             flipAir.speedParameter = "FlipSpeed";
 
             foreach (var from in new[] { jump, fall })
             {
-                t = from.AddTransition(flipAir);
-                t.hasExitTime = false; t.duration = 0.06f;
+                t = Go(from, flipAir, 0.06f);
                 t.AddCondition(AnimatorConditionMode.If, 0, "Flip");
             }
 
-            t = flipAir.AddTransition(land);
-            t.hasExitTime = false; t.duration = 0.08f;
+            t = Go(flipAir, land, 0.08f);
             t.AddCondition(AnimatorConditionMode.If, 0, "Grounded");
 
             t = flipAir.AddTransition(fall);
@@ -863,35 +970,44 @@ public static class ChibiSandboxSetup
         }
 
         // ---- dash -------------------------------------------------------------
+        AnimatorState dash = null;
         if (clips.TryGetValue("dashPose", out var dashClip))
         {
-            var dash = sm.AddState("Dash");
+            dash = sm.AddState("Dash");
             dash.motion = dashClip;
-            dash.iKOnFeet = false;      // airborne, and the pose is the point
 
-            // Enterable from anywhere on the ground or in the air.
-            foreach (var from in new[] { loco, jump, fall, land })
+            // From ANY state. The dash can start mid-stop, mid-flip, mid-landing
+            // and mid-air-flip as well as from locomotion and the air states;
+            // per-state transitions missed most of those, and the unconsumed
+            // trigger then played a dash pose out of nowhere on the next return
+            // to Locomotion. (Tether and crouch never reach here: the code
+            // refuses to dash in either.)
+            t = sm.AddAnyStateTransition(dash);
+            t.hasExitTime = false; t.duration = 0.04f;   // snap in, no ramp
+            t.canTransitionToSelf = false;
+            t.AddCondition(AnimatorConditionMode.If, 0, "Dash");
+
+            t = Go(dash, land, 0.08f);
+            t.AddCondition(AnimatorConditionMode.If, 0, "Grounded");
+
+            // Double jump straight out of an air dash.
+            if (flipAir != null)
             {
-                t = from.AddTransition(dash);
-                t.hasExitTime = false; t.duration = 0.04f;   // snap in, no ramp
-                t.AddCondition(AnimatorConditionMode.If, 0, "Dash");
+                t = Go(dash, flipAir, 0.06f);
+                t.AddCondition(AnimatorConditionMode.If, 0, "Flip");
             }
 
             t = dash.AddTransition(fall);
             t.hasExitTime = true; t.exitTime = 0.9f; t.duration = 0.12f;
             t.AddCondition(AnimatorConditionMode.IfNot, 0, "Grounded");
-
-            t = dash.AddTransition(land);
-            t.hasExitTime = false; t.duration = 0.08f;
-            t.AddCondition(AnimatorConditionMode.If, 0, "Grounded");
         }
 
         // ---- tether ----------------------------------------------------------
+        AnimatorState hang = null;
         if (clips.TryGetValue("hang", out var hangClip))
         {
-            var hang = sm.AddState("Tethered");
+            hang = sm.AddState("Tethered");
             hang.motion = hangClip;
-            hang.iKOnFeet = false;      // he is hanging; there is no ground
 
             // Any state can be interrupted by latching on.
             t = sm.AddAnyStateTransition(hang);
@@ -899,21 +1015,19 @@ public static class ChibiSandboxSetup
             t.canTransitionToSelf = false;
             t.AddCondition(AnimatorConditionMode.If, 0, "Tethered");
 
-            t = hang.AddTransition(fall);
-            t.hasExitTime = false; t.duration = 0.15f;
+            t = Go(hang, fall, 0.15f);
             t.AddCondition(AnimatorConditionMode.IfNot, 0, "Tethered");
             t.AddCondition(AnimatorConditionMode.IfNot, 0, "Grounded");
 
-            t = hang.AddTransition(loco);
-            t.hasExitTime = false; t.duration = 0.15f;
+            t = Go(hang, loco, 0.15f);
             t.AddCondition(AnimatorConditionMode.IfNot, 0, "Tethered");
             t.AddCondition(AnimatorConditionMode.If, 0, "Grounded");
         }
 
         // ---- skateboard ------------------------------------------------------
+        AnimatorState skate = null;
         if (clips.TryGetValue("skate", out var skateClip))
         {
-            AnimatorState skate;
             if (clips.TryGetValue("skatePush", out var pushClip))
             {
                 skate = controller.CreateBlendTreeInController("Skate", out BlendTree sTree, 0);
@@ -928,38 +1042,37 @@ public static class ChibiSandboxSetup
                 skate = sm.AddState("Skate");
                 skate.motion = skateClip;
             }
-            // Feet are on the board, not the ground â€” IK would fight the deck.
-            skate.iKOnFeet = false;
 
-            t = loco.AddTransition(skate);
-            t.hasExitTime = false; t.duration = 0.25f;
+            t = Go(loco, skate, 0.25f);
             t.AddCondition(AnimatorConditionMode.If, 0, "Skating");
 
-            t = skate.AddTransition(loco);
-            t.hasExitTime = false; t.duration = 0.25f;
+            t = Go(skate, loco, 0.25f);
             t.AddCondition(AnimatorConditionMode.IfNot, 0, "Skating");
         }
 
-        t = loco.AddTransition(crouch);
-        t.hasExitTime = false; t.duration = 0.15f;
+        t = Go(loco, crouch, 0.15f);
         t.AddCondition(AnimatorConditionMode.If, 0, "Crouch");
 
-        t = crouch.AddTransition(loco);
-        t.hasExitTime = false; t.duration = 0.2f;
+        t = Go(crouch, loco, 0.2f);
         t.AddCondition(AnimatorConditionMode.IfNot, 0, "Crouch");
 
-        // Foot IK on every grounded state. The chibi's legs are far shorter
-        // relative to its body than the Mixamo source rig's, so humanoid
-        // retargeting places the hips too low and the feet penetrate the floor.
-        // Foot IK re-plants them on the surface after retargeting, which is the
-        // actual fix for that clipping â€” no amount of collider tuning helps,
-        // because the capsule is already sitting correctly on the ground.
-        // Deliberately NOT enabled on Jump/Fall: planting feet mid-air is wrong.
+        // Foot IK on the planted, upright states only. The chibi's legs are far
+        // shorter relative to its body than the Mixamo source rig's, so humanoid
+        // retargeting places the hips too low and the feet penetrate the floor;
+        // Foot IK re-plants them after retargeting. Everywhere the feet are
+        // off the ground — airborne, mid-flip (feet over his head), dashing,
+        // hanging off the rope, stood on a deck — pinning them to their
+        // ground-relative goals drags the legs, so it stays off there.
+        //
+        // This loop used to run last and set IK on for every state that was
+        // not Jump or Fall, silently overwriting the per-state "off" each of
+        // those states had just been given.
+        //
+        // Crouch is off too: measured, its Foot IK goals float the crouched
+        // soles ~28 cm (+0.277 m with IK against +0.063 m without).
+        var noFootIK = new HashSet<AnimatorState> { jump, fall, flip, flipAir, dash, hang, skate, crouch };
         foreach (var s in sm.states)
-        {
-            bool airborne = s.state == jump || s.state == fall;
-            s.state.iKOnFeet = !airborne;
-        }
+            s.state.iKOnFeet = !noFootIK.Contains(s.state);
 
         BuildGestureLayer(controller, clips);
 
@@ -971,7 +1084,7 @@ public static class ChibiSandboxSetup
         controller.layers = layers;
 
         EditorUtility.SetDirty(controller);
-        Debug.Log($"Controller: {ControllerPath} â€” locomotion({tree.children.Length}), " +
+        Debug.Log($"Controller: {ControllerPath} — locomotion({tree.children.Length}), " +
                   $"jump, fall, land, crouch{(clips.ContainsKey("crouchIdle") ? " (blend)" : " (held pose)")}" +
                   ", foot IK on grounded states");
         return controller;
@@ -1040,14 +1153,14 @@ public static class ChibiSandboxSetup
         var empty = gestureSm.AddState("None");      // no motion: the rest pose
         var fire = gestureSm.AddState("Fire");
         fire.motion = throwClip;
+        empty.iKOnFeet = fire.iKOnFeet = false;
         gestureSm.defaultState = empty;
 
-        var t = empty.AddTransition(fire);
-        t.hasExitTime = false; t.duration = 0.05f;
-        t.AddCondition(AnimatorConditionMode.If, 0, "Fire");
-
-        t = fire.AddTransition(empty);
-        t.hasExitTime = true; t.exitTime = 0.85f; t.duration = 0.15f;
+        // No transitions. ChibiLocomotion crossfades into Fire by name and
+        // then fades the layer weight out while Fire holds its last frame.
+        // The old Fire -> None exit blended the arm toward the empty state's
+        // bind pose at FULL layer weight for its last 0.15s plus the fade —
+        // a T-pose flick on the arm at the end of every hook throw.
 
         controller.AddLayer(new AnimatorControllerLayer
         {
@@ -1074,7 +1187,7 @@ public static class ChibiSandboxSetup
         // Safe to remove the old preview assets now that they are not open.
         // OldWorldFbx was my Blender GLB->FBX conversion, made before glTFast
         // was installed; the GLB now imports natively so it is dead weight.
-        foreach (var stale in new[] { OldScenePath, OldControllerPath, OldWorldFbx })
+        foreach (var stale in new[] { OldScenePath, OldControllerPath, OldWorldFbx, StaleRootControllerPath })
             if (AssetDatabase.LoadAssetAtPath<Object>(stale) != null && AssetDatabase.DeleteAsset(stale))
                 Debug.Log($"Removed superseded asset: {stale}");
 
@@ -1097,8 +1210,12 @@ public static class ChibiSandboxSetup
         animator.avatar = avatar;
         animator.runtimeAnimatorController = controller;
         animator.applyRootMotion = false;   // the CharacterController owns travel
+        animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
         if (model.GetComponent<ChibiFootIK>() == null)
             model.AddComponent<ChibiFootIK>();
+        // Spring-cloth chains on the coat/cloak; needs the avatar assigned
+        // above, and must land before the prefab is saved below.
+        ClothSetup.Apply(model);
 
         // Size the capsule from the actual renderer bounds rather than guessing.
         var bounds = new Bounds(go.transform.position, Vector3.zero);
@@ -1127,6 +1244,10 @@ public static class ChibiSandboxSetup
         so.FindProperty("moveSpeed").floatValue = MoveSpeed;
         so.FindProperty("sprintSpeed").floatValue = RunSpeed;
         so.FindProperty("crouchSpeed").floatValue = CrouchWalkSpeed;
+        // The strides BuildController measured: above them ChibiLocomotion
+        // speeds the cycle up rather than letting the feet skate.
+        so.FindProperty("runClipStride").floatValue = _runStride;
+        so.FindProperty("crouchClipStride").floatValue = _crouchStride;
 
         var cam = Camera.main;
         if (cam != null)
@@ -1719,4 +1840,193 @@ public static class ChibiSandboxSetup
 
     static T LoadAsset<T>(string path) where T : Object =>
         AssetDatabase.LoadAllAssetsAtPath(path).OfType<T>().FirstOrDefault();
+
+    // ------------------------------------------------------- animator rebuild
+
+    /// <summary>
+    /// Empties the controller at <paramref name="path"/> IN PLACE and hands it
+    /// back with a single blank "Base Layer", creating it only if missing.
+    ///
+    /// CreateAnimatorControllerAtPath replaces the asset, and with it the only
+    /// guarantee that Chibi.prefab and NewtonBoss.prefab (which reference the
+    /// controller by GUID) still point at it afterwards. Clearing the existing
+    /// asset keeps the GUID by construction, and destroying every sub-asset
+    /// first means no orphaned state machines or blend trees pile up inside the
+    /// .controller across re-runs.
+    /// </summary>
+    public static AnimatorController ResetControllerInPlace(string path)
+    {
+        var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
+        if (controller == null)
+            return AnimatorController.CreateAnimatorControllerAtPath(path);
+
+        foreach (var sub in AssetDatabase.LoadAllAssetsAtPath(path))
+            if (sub != null && sub != controller && !(sub is AnimatorController))
+                Object.DestroyImmediate(sub, true);
+
+        controller.layers = new AnimatorControllerLayer[0];
+        controller.parameters = new AnimatorControllerParameter[0];
+        controller.AddLayer("Base Layer");
+        EditorUtility.SetDirty(controller);
+        return controller;
+    }
+
+    /// <summary>
+    /// Rebuilds ONLY the chibi's Animator controller — base locomotion, the
+    /// gesture layer and the sword combo layer — from the clips as they are
+    /// currently imported. Touches no import settings and no scene, so it is
+    /// the safe way to pick up a controller change without re-running the
+    /// full sandbox setup (which reimports every clip and rebuilds the scene).
+    /// </summary>
+    [MenuItem("Tools/Pickleball/Rebuild Chibi Animator")]
+    public static void RebuildAnimator()
+    {
+        var clips = new Dictionary<string, AnimationClip>();
+        foreach (var (role, file, _, _, _) in ClipDefs)
+        {
+            var clip = AssetDatabase.LoadAllAssetsAtPath(file).OfType<AnimationClip>()
+                .FirstOrDefault(c => c.name == role);
+            if (clip != null) clips[role] = clip;
+            else Debug.LogWarning($"Rebuild Chibi Animator: no '{role}' clip in {file}");
+        }
+        if (!clips.ContainsKey("idle") || !clips.ContainsKey("walk"))
+        {
+            Debug.LogError("Rebuild Chibi Animator: idle/walk missing — run Setup Chibi Sandbox.");
+            return;
+        }
+        BuildController(clips);
+        WeaponSetup.RewireControllerFromImportedClips();
+        AssetDatabase.SaveAssets();
+        Debug.Log("Chibi animator rebuilt in place (GUID preserved).");
+    }
+
+    /// <summary>Command-line entry point (-executeMethod): rebuilds both
+    /// characters' controllers in place and logs the measured strides.</summary>
+    public static void BatchRebuildAnimators()
+    {
+        NewtonBossSetup.RebuildAnimator();
+        RebuildAnimator();
+        ReportStrideSpeeds();
+    }
+
+    // ------------------------------------------------------------ diagnostics
+
+    /// <summary>
+    /// Ground speed a locomotion cycle travels at ON A GIVEN CHARACTER, in m/s
+    /// — the number a blend-tree threshold has to equal for the feet not to
+    /// slide.
+    ///
+    /// Measured on the character rather than read off the source FBX.
+    /// Humanoid retargeting rescales travel to the target's proportions (by
+    /// Animator.humanScale: 0.72 for the chibi, against ~1 for a Mixamo rig),
+    /// so a speed measured on the Mixamo skeleton — which is what the old
+    /// WalkSpeed/RunSpeed constants were — is only right for a character with
+    /// Mixamo proportions. The clip is sampled onto the character with
+    /// AnimationClip.SampleAnimation, which applies the clip's root motion to
+    /// the body: the hips' horizontal travel over one cycle is exactly the
+    /// distance the planted feet stay still over. (A PlayableGraph evaluated
+    /// manually in edit mode does not write the pose at all, so it cannot be
+    /// used for this.) Also returns when either hand is furthest from the
+    /// hips, which is how a cast's peak is found.
+    /// </summary>
+    public static float MeasureStrideSpeed(Animator animator, AnimationClip clip,
+                                           out float handPeakTime)
+    {
+        handPeakTime = 0f;
+        if (animator == null || clip == null || !animator.isHuman || clip.length <= 0f) return 0f;
+
+        var hips = animator.GetBoneTransform(HumanBodyBones.Hips);
+        var lh = animator.GetBoneTransform(HumanBodyBones.LeftHand);
+        var rh = animator.GetBoneTransform(HumanBodyBones.RightHand);
+        if (hips == null) return 0f;
+
+        var root = animator.transform;
+        Vector3 rootPos = root.localPosition;
+        Quaternion rootRot = root.localRotation;
+        try
+        {
+            const int samples = 120;
+            float bestReach = -1f;
+            Vector3 start = Vector3.zero, end = Vector3.zero;
+            for (int i = 0; i <= samples; i++)
+            {
+                float time = clip.length * i / samples * 0.999f;
+                root.localPosition = rootPos;
+                root.localRotation = rootRot;
+                clip.SampleAnimation(animator.gameObject, time);
+                if (i == 0) start = hips.position;
+                if (i == samples) end = hips.position;
+                if (lh != null && rh != null)
+                {
+                    float reach = Mathf.Max(Vector3.Distance(lh.position, hips.position),
+                                            Vector3.Distance(rh.position, hips.position));
+                    if (reach > bestReach) { bestReach = reach; handPeakTime = time; }
+                }
+            }
+            var travel = end - start;
+            travel.y = 0f;
+            return travel.magnitude / (clip.length * 0.999f);
+        }
+        finally
+        {
+            root.localPosition = rootPos;
+            root.localRotation = rootRot;
+        }
+    }
+
+    /// <summary>Logs every locomotion clip's measured stride speed on the
+    /// chibi and on Newton, next to the thresholds currently in use.</summary>
+    [MenuItem("Tools/Pickleball/Diagnostics/Measure Clip Stride Speeds")]
+    public static void ReportStrideSpeeds()
+    {
+        void Report(string prefabPath, IEnumerable<(string label, string file, string clipName)> clips)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null) { Debug.LogWarning($"Stride probe: no {prefabPath}"); return; }
+            var go = (GameObject)Object.Instantiate(prefab);
+            go.hideFlags = HideFlags.HideAndDontSave;
+            go.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            try
+            {
+                var anim = go.GetComponentInChildren<Animator>();
+                anim.Rebind();
+                var lines = new List<string>();
+                foreach (var (label, file, clipName) in clips)
+                {
+                    var clip = AssetDatabase.LoadAllAssetsAtPath(file).OfType<AnimationClip>()
+                        .FirstOrDefault(c => clipName == null ? !c.name.StartsWith("__preview__")
+                                                              : c.name == clipName);
+                    if (clip == null) { lines.Add($"  {label,-12} (missing)"); continue; }
+                    float v = MeasureStrideSpeed(anim, clip, out float peak);
+                    lines.Add($"  {label,-14} len {clip.length:0.00}s  stride {v:0.00} m/s  " +
+                              $"(averageSpeed x humanScale {clip.averageSpeed.magnitude * anim.humanScale:0.00})  " +
+                              $"hand-reach peak {peak:0.00}s");
+                }
+                Debug.Log($"[StrideProbe] {prefabPath} humanScale={anim.humanScale:0.000} " +
+                          $"lossyScale={anim.transform.lossyScale.y:0.000}\n" + string.Join("\n", lines));
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        Report($"{PrefabDir}/Chibi.prefab", new (string, string, string)[]
+        {
+            ("walk", PackDir + "/sword and shield walk.fbx", "walk"),
+            ("run", PackDir + "/sword and shield run.fbx", "run"),
+            ("crouchWalk", ClipDir + "/Crouched Walking.fbx", "crouchWalk"),
+            ("skatePush", ClipDir + "/Skateboarding (1).fbx", "skatePush"),
+            ("walk(unarmed)", ClipDir + "/Walking.fbx", "walk"),
+            ("run(unarmed)", ClipDir + "/Running.fbx", "run"),
+        });
+        Report($"{PrefabDir}/NewtonBoss.prefab", new (string, string, string)[]
+        {
+            ("walk", "Assets/_Project/Animation/Newton/Walking.fbx", null),
+            ("walk(chibi)", ClipDir + "/Walking.fbx", "walk"),
+            ("throw", "Assets/_Project/Animation/Newton/Throw.fbx", null),
+            ("cast", "Assets/_Project/Animation/Newton/Cast.fbx", null),
+            ("cast2", "Assets/_Project/Animation/Newton/Cast2.fbx", null),
+            ("powerUp", "Assets/_Project/Animation/Newton/PowerUp.fbx", null),
+            ("hit", "Assets/_Project/Animation/Newton/Hit.fbx", null),
+            ("death", "Assets/_Project/Animation/Newton/Death.fbx", null),
+        });
+    }
 }

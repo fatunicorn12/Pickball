@@ -27,7 +27,8 @@ Cross-cutting systems:
 - [x] Ability unlock system — `PlayerAbilities`, `AbilityPickup`
 - [ ] Boss dialogue / barks system (Newton has a first version — `NewtonBarks`)
 - [ ] Item drops with flavour text (Bean, Book of Restoration, Galois's notes)
-- [ ] Boss animation clips (Newton is fully procedural right now — `Animation/Newton/` is empty)
+- [ ] Boss animation clips (Newton has a first set borrowed from the shared humanoid clips in
+  `Animation/Newton/`; several are sword-and-shield poses — swap in clips made for him)
 
 ---
 
@@ -113,7 +114,8 @@ idea unprompted.
 - [x] **Unlocks: Gravity Anchor** — dropped as a pickup when he dies. Press **G** to halt your own
   gravity (hover); hold **Jump** while anchored to invert it and rise.
 - [ ] Play-test tuning pass (numbers are first-pass — see "Tuning" in `NewtonBoss`)
-- [ ] Real animation clips (all tells are procedural today)
+- [ ] Real animation clips (idle/walk, cast, throw, hit and death states exist on borrowed clips;
+  procedural tells still layer on top at 0.35)
 
 ## 6. Euler — The Network ⬜
 

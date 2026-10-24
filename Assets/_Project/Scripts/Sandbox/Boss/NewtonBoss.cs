@@ -25,12 +25,13 @@ namespace Pickleball.Sandbox
     ///
     /// When he dies he drops the Gravity Anchor pickup.
     ///
-    /// <b>No animation clips exist for Newton</b> (Animation/Newton/ is empty and
-    /// NewtonBoss.controller has a single motionless Idle state), so every tell
-    /// here is procedural: a wind-up crouch and lean, a scale pulse on release,
-    /// a recoil on being hit. The animator parameters are still driven, so
-    /// dropping Mixamo FBXs into Animation/Newton/ and re-running the setup
-    /// layers real clips on top without touching this file.
+    /// <b>Animation.</b> NewtonBoss.controller (built by Setup Newton (Boss) /
+    /// Rebuild Newton Animator) has an idle/walk locomotion blend, one cast per
+    /// ability (Summon, Volley, Beam, Barrage), a flinch and a death, all on
+    /// shared Humanoid clips until bespoke ones land in Animation/Newton/. The
+    /// procedural tells (wind-up crouch and lean, scale pulse, recoil) still
+    /// run on top, scaled down by <see cref="tellStrengthWithClips"/> once real
+    /// clips are carrying the silhouette, so the two do not double up.
     /// </summary>
     [RequireComponent(typeof(Health))]
     public class NewtonBoss : MonoBehaviour
@@ -107,14 +108,40 @@ namespace Pickleball.Sandbox
 
         [SerializeField] private float turnDegreesPerSecond = 90f;
 
+        [Header("Animation")]
+        [Tooltip("Turning on the spot is fed into the locomotion blend as this " +
+                 "much ground speed per radian/second, so he steps round to track " +
+                 "the player instead of rotating on frozen feet. Roughly the " +
+                 "radius his feet travel on when pivoting.")]
+        [SerializeField] private float turnShuffleRadius = 0.35f;
+        [Tooltip("Damping on the Speed parameter, seconds.")]
+        [SerializeField] private float speedDampTime = 0.15f;
+        [Tooltip("Strength of the procedural tells (scale pulse, lean, recoil) " +
+                 "once the controller has real clips. 1 = the full procedural " +
+                 "stand-in, which on top of a cast clip reads as rubbery.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float tellStrengthWithClips = 0.35f;
+        [Tooltip("An ability trigger nobody consumed within this long is dropped, " +
+                 "rather than staying latched and firing a stale cast later.")]
+        [SerializeField] private float triggerLifetime = 0.3f;
+
         public int Phase { get; private set; } = 1;
         public Health Health { get; private set; }
 
+        // The contract with NewtonBossSetup.BuildController.
         static readonly int SpeedHash = Animator.StringToHash("Speed");
-        static readonly int AttackHash = Animator.StringToHash("Attack");
-        static readonly int Attack2Hash = Animator.StringToHash("Attack2");
+        static readonly int SummonHash = Animator.StringToHash("Summon");
+        static readonly int VolleyHash = Animator.StringToHash("Volley");
+        static readonly int BeamHash = Animator.StringToHash("Beam");
+        static readonly int BarrageHash = Animator.StringToHash("Barrage");
         static readonly int HitHash = Animator.StringToHash("Hit");
         static readonly int DeadHash = Animator.StringToHash("Dead");
+        static readonly int ChannelingHash = Animator.StringToHash("Channeling");
+        static readonly int[] TriggerHashes = { SummonHash, VolleyHash, BeamHash, BarrageHash, HitHash };
+        readonly float[] _triggerExpiry = new float[5];
+
+        float _tellScale = 1f;
+        Quaternion _lastFacing = Quaternion.identity;
 
         float _wellTimer, _beamTimer, _barrageTimer, _volleyTimer, _barkTimer;
         bool _barrageOn;
@@ -141,6 +168,16 @@ namespace Pickleball.Sandbox
             if (barks == null) barks = GetComponent<NewtonBarks>();
             _bodyBaseScale = body.localScale;
             _facing = transform.rotation;
+            _lastFacing = _facing;
+
+            if (animator != null)
+            {
+                // A boss's tells must never pause because his bounds briefly
+                // left the frustum (the orbit camera sits close mid-combo).
+                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                var rac = animator.runtimeAnimatorController;
+                if (rac != null && rac.animationClips.Length > 0) _tellScale = tellStrengthWithClips;
+            }
 
             _bodyIsRoot = body == transform;
             if (_bodyIsRoot)
@@ -183,6 +220,7 @@ namespace Pickleball.Sandbox
             UpdatePhase();
             FacePlayer(dt);
             UpdateTells(dt);
+            UpdateAnimator(dt);
 
             _wellTimer -= dt;
             if (_wellTimer <= 0f)
@@ -212,7 +250,7 @@ namespace Pickleball.Sandbox
                 beam.Fire();
                 Telegraph(0.9f);
                 Bark(NewtonBarks.Occasion.Beam);
-                if (animator != null) animator.SetTrigger(Attack2Hash);
+                Fire(BeamHash);
                 _beamTimer = Phase >= 2 ? beamIntervalPhaseTwo : beamIntervalPhaseOne;
             }
 
@@ -244,7 +282,7 @@ namespace Pickleball.Sandbox
 
             Telegraph(1f);
             Bark(NewtonBarks.Occasion.Volley);
-            if (animator != null) animator.SetTrigger(AttackHash);
+            Fire(VolleyHash);
             _volleyTimer = Phase >= 2 ? volleyIntervalPhaseTwo : volleyIntervalPhaseOne;
         }
 
@@ -294,7 +332,7 @@ namespace Pickleball.Sandbox
                 _barrageTimer = barrageOnDuration;
                 Telegraph(1.2f);
                 Bark(NewtonBarks.Occasion.Barrage);
-                if (animator != null) animator.SetTrigger(AttackHash);
+                Fire(BarrageHash);
             }
             else
             {
@@ -346,48 +384,10 @@ namespace Pickleball.Sandbox
             Instantiate(wellPrefab, chosen, Quaternion.identity);
             Telegraph(0.7f);
             Bark(NewtonBarks.Occasion.Well);
-            if (animator != null) animator.SetTrigger(AttackHash);
+            Fire(SummonHash);
             return true;
         }
 
-        void FacePlayer(float dt)
-        {
-            if (_player == null) return;
-            Vector3 look = _player.transform.position - transform.position;
-            look.y = 0f;
-            if (look.sqrMagnitude < 0.01f) return;
-
-            // Turned from the stored facing rather than from transform.rotation.
-            // When there is no model child the tells write their lean onto this
-            // same transform, and reading that back would feed the lean into the
-            // turn and let the rate limit spend itself undoing a pitch.
-            _facing = Quaternion.RotateTowards(
-                _facing,
-                Quaternion.LookRotation(look.normalized, Vector3.up),
-                turnDegreesPerSecond * dt);
-            transform.rotation = _facing;
-
-            if (animator != null) animator.SetFloat(SpeedHash, 0f);
-        }
-
-        /// <summary>Procedural stand-in for animation. A crouch-and-swell before a
-        /// cast, a snap back after, and a recoil when struck — enough for the
-        /// player to read intent off the silhouette alone.</summary>
-        void UpdateTells(float dt)
-        {
-            _windUp = Mathf.MoveTowards(_windUp, 0f, dt * 1.6f);
-            _recoil = Mathf.MoveTowards(_recoil, 0f, dt * 4f);
-
-            float swell = 1f + _windUp * 0.12f - _recoil * 0.08f;
-            float squash = 1f - _windUp * 0.09f + _recoil * 0.05f;
-
-            body.localScale = new Vector3(_bodyBaseScale.x * swell,
-                                          _bodyBaseScale.y * squash,
-                                          _bodyBaseScale.z * swell);
-
-            Quaternion tilt = Quaternion.Euler(_windUp * 9f - _recoil * 14f, 0f, 0f);
-
-            if (_bodyIsRoot)
         static readonly RaycastHit[] GroundHits = new RaycastHit[8];
 
         /// <summary>
@@ -424,6 +424,82 @@ namespace Pickleball.Sandbox
             return y;
         }
 
+        void FacePlayer(float dt)
+        {
+            if (_player == null) return;
+            Vector3 look = _player.transform.position - transform.position;
+            look.y = 0f;
+            if (look.sqrMagnitude < 0.01f) return;
+
+            // Turned from the stored facing rather than from transform.rotation.
+            // When there is no model child the tells write their lean onto this
+            // same transform, and reading that back would feed the lean into the
+            // turn and let the rate limit spend itself undoing a pitch.
+            _facing = Quaternion.RotateTowards(
+                _facing,
+                Quaternion.LookRotation(look.normalized, Vector3.up),
+                turnDegreesPerSecond * dt);
+            transform.rotation = _facing;
+        }
+
+        /// <summary>
+        /// Per-frame animator drive. Speed is what his feet should be doing:
+        /// he never travels, so it is the turn rate expressed as ground speed
+        /// (see <see cref="turnShuffleRadius"/>), damped so starting and
+        /// stopping a turn eases the walk in and out instead of popping it.
+        /// Channeling holds the Beam cast for exactly as long as the beam is live.
+        /// </summary>
+        void UpdateAnimator(float dt)
+        {
+            if (animator == null || dt <= 0f) return;
+
+            float degrees = Quaternion.Angle(_lastFacing, _facing);
+            _lastFacing = _facing;
+            float shuffle = degrees * Mathf.Deg2Rad / dt * turnShuffleRadius;
+            animator.SetFloat(SpeedHash, shuffle, speedDampTime, dt);
+            animator.SetBool(ChannelingHash, beam != null && beam.IsActive);
+
+            for (int i = 0; i < TriggerHashes.Length; i++)
+            {
+                if (_triggerExpiry[i] <= 0f || Time.time < _triggerExpiry[i]) continue;
+                animator.ResetTrigger(TriggerHashes[i]);
+                _triggerExpiry[i] = 0f;
+            }
+        }
+
+        /// <summary>
+        /// Set an ability trigger with a shelf life. Unity latches an unconsumed
+        /// trigger indefinitely, so a Hit that lands mid-cast (Hit is only
+        /// reachable from Locomotion, by design) would otherwise sit armed and
+        /// play a flinch seconds later with nothing touching him.
+        /// </summary>
+        void Fire(int hash)
+        {
+            if (animator == null) return;
+            animator.SetTrigger(hash);
+            int i = System.Array.IndexOf(TriggerHashes, hash);
+            if (i >= 0) _triggerExpiry[i] = Time.time + triggerLifetime;
+        }
+
+        /// <summary>Procedural stand-in for animation. A crouch-and-swell before a
+        /// cast, a snap back after, and a recoil when struck — enough for the
+        /// player to read intent off the silhouette alone.</summary>
+        void UpdateTells(float dt)
+        {
+            _windUp = Mathf.MoveTowards(_windUp, 0f, dt * 1.6f);
+            _recoil = Mathf.MoveTowards(_recoil, 0f, dt * 4f);
+
+            float windUp = _windUp * _tellScale, recoil = _recoil * _tellScale;
+            float swell = 1f + windUp * 0.12f - recoil * 0.08f;
+            float squash = 1f - windUp * 0.09f + recoil * 0.05f;
+
+            body.localScale = new Vector3(_bodyBaseScale.x * swell,
+                                          _bodyBaseScale.y * squash,
+                                          _bodyBaseScale.z * swell);
+
+            Quaternion tilt = Quaternion.Euler(windUp * 9f - recoil * 14f, 0f, 0f);
+
+            if (_bodyIsRoot)
             {
                 // No model child, so the tell rides on the very transform
                 // FacePlayer aims. Composed onto the facing instead of written
@@ -453,7 +529,7 @@ namespace Pickleball.Sandbox
         void OnHurt(float amount, Vector3 at)
         {
             _recoil = 1f;
-            if (animator != null) animator.SetTrigger(HitHash);
+            Fire(HitHash);
             Bark(NewtonBarks.Occasion.Hurt);
 
             if (_player == null) return;
@@ -463,7 +539,18 @@ namespace Pickleball.Sandbox
 
         void OnDied(Health health)
         {
-            if (animator != null) animator.SetBool(DeadHash, true);
+            if (animator != null)
+            {
+                animator.SetBool(DeadHash, true);
+                animator.SetBool(ChannelingHash, false);
+                foreach (var h in TriggerHashes) animator.ResetTrigger(h);
+            }
+            // Update stops running once he is dead, so a tell caught mid-swell
+            // would otherwise freeze him squashed and leaning for good.
+            _windUp = _recoil = 0f;
+            body.localScale = _bodyBaseScale;
+            if (_bodyIsRoot) body.rotation = _facing;
+            else body.localRotation = Quaternion.identity;
             if (barrage != null) { barrage.End(); barrage.ClearAirborne(); }
             if (beam != null) beam.Stop();
             if (volley != null) volley.Clear();

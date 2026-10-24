@@ -33,7 +33,9 @@ namespace Pickleball.Sandbox
         [System.Serializable]
         public class Attack
         {
-            [Tooltip("Animator trigger that starts this attack.")]
+            [Tooltip("Name of the Attack-layer state that plays this swing (the " +
+                     "same-named trigger also exists on the controller). The state " +
+                     "is crossfaded into directly — see MeleeCombat.Begin.")]
             public string trigger = "Attack1";
             [Tooltip("How long the swing lasts on screen. Filled in by the setup " +
                      "as the real clip's length divided by the state's playback " +
@@ -97,6 +99,10 @@ namespace Pickleball.Sandbox
         [Tooltip("Layer weight fade, in weight per second. Fast enough that the " +
                  "swing does not visibly ramp in, slow enough not to pop.")]
         [SerializeField] private float layerFadeSpeed = 12f;
+        [Tooltip("Crossfade into the first swing of a chain (or the air attack), seconds.")]
+        [SerializeField] private float firstSwingBlend = 0.06f;
+        [Tooltip("Crossfade between chained swings, seconds.")]
+        [SerializeField] private float chainBlend = 0.1f;
 
         static readonly int ComboHash = Animator.StringToHash("Combo");
 
@@ -255,10 +261,24 @@ namespace Pickleball.Sandbox
             var def = Current;
             if (def == null) { End(); return; }
 
-            if (animator != null)
+            int layer = AttackLayerIndex();
+            if (animator != null && layer >= 0)
             {
                 animator.SetInteger(ComboHash, airborne ? 0 : index + 1);
-                animator.SetTrigger(def.trigger);
+                // Crossfaded directly instead of triggered. This component
+                // already owns every window by its own timer, so the state
+                // machine only has to play what it is told:
+                //  - no trigger can be left latched by a click that landed while
+                //    the layer was mid-transition and fire a swing later;
+                //  - a fresh chain can start while the last swing is still
+                //    fading out, which trigger transitions out of None could not;
+                //  - swings never transition back to the empty None state.
+                //    Blending an Override layer toward an empty state at full
+                //    weight drags the arms toward the bind pose; instead the
+                //    swing holds its last frame while UpdateLayerWeight fades
+                //    the layer out from under it.
+                float blend = index == 0 || airborne ? firstSwingBlend : chainBlend;
+                animator.CrossFadeInFixedTime(def.trigger, blend, layer, 0f);
             }
             // Nothing is done to locomotion here, and that is the point: the
             // swing adds no displacement of its own and takes none away, so you

@@ -149,6 +149,8 @@ public static class WeaponSetup
 
         var weapon = AttachWeapon(hand, out Transform bladeBase, out Transform bladeTip);
         WireCombat(player, animator, weapon, bladeBase, bladeTip, clips);
+        // The Attack layer's mask drops the swings' hip turn; put it back.
+        SwingTwistSetup.Bake(player);
         EditorUtility.SetDirty(player);
         return true;
     }
@@ -209,7 +211,13 @@ public static class WeaponSetup
                 foreach (var d in defs)
                 {
                     d.loopTime = false;                 // attacks are one-shots
-                    d.lockRootRotation = false;
+                    // Bake the body's turn into the pose, from its original
+                    // orientation. These swings are authored side-on, hips
+                    // turned up to ~110°; left as root motion (and root motion
+                    // is off) that turn was simply discarded. SwingTwist bakes
+                    // it from the clip, so it has to be in the pose to be seen.
+                    d.lockRootRotation = true;
+                    d.keepOriginalOrientation = true;
                     d.lockRootHeightY = false;
                     d.lockRootPositionXZ = false;       // lunge is scripted
                     d.keepOriginalPositionY = false;
@@ -340,6 +348,24 @@ public static class WeaponSetup
 
     // ------------------------------------------------------------- controller
 
+    /// <summary>
+    /// Rebuilds the Attack layer from the attack clips exactly as they are
+    /// imported now, WITHOUT the SaveAndReimport that PrepareAssets does — so
+    /// it cannot overwrite import settings tuned on those FBXs since. Used by
+    /// ChibiSandboxSetup.RebuildAnimator.
+    /// </summary>
+    public static void RewireControllerFromImportedClips()
+    {
+        var clips = new Dictionary<string, AnimationClip>();
+        foreach (var (role, file, _, _, _, _, _, _) in AttackClips)
+        {
+            var clip = AssetDatabase.LoadAllAssetsAtPath($"{PackDir}/{file}").OfType<AnimationClip>()
+                .FirstOrDefault(c => !c.name.StartsWith("__preview__"));
+            if (clip != null) clips[role] = clip;
+        }
+        WireController(clips);
+    }
+
     static void WireController(Dictionary<string, AnimationClip> clips)
     {
         var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
@@ -388,50 +414,40 @@ public static class WeaponSetup
         var idle = sm.AddState("None");
         sm.defaultState = idle;
 
-        var chainStates = new List<AnimatorState>();
+        // One state per swing, named after its trigger so MeleeCombat can
+        // crossfade to it by name. There are deliberately NO transitions on
+        // this layer:
+        //  - MeleeCombat's timer already owns every window (when the blade is
+        //    live, when the chain may extend), so it crossfades straight to the
+        //    next state itself. Trigger transitions duplicated that timing, and
+        //    a click that landed while the layer was mid-blend left its trigger
+        //    latched to fire a swing later on.
+        //  - No exit back to None. An Override layer blending toward an empty
+        //    state at full weight drags the arms toward the bind pose; the
+        //    swing instead holds its last frame while MeleeCombat fades the
+        //    layer weight to zero underneath it.
+        int chain = 0;
         for (int i = 0; i < 4; i++)
         {
             string role = $"attack{i + 1}";
             if (!clips.TryGetValue(role, out var clip)) break;
-            var st = sm.AddState($"Attack{i + 1}");
+            var st = sm.AddState(AttackClips[i].trigger);
             st.motion = clip;
-            // Exit times below are normalised to state time, so they scale with
-            // this automatically and need no adjustment.
+            // MeleeCombat's windows are fractions of duration, and duration is
+            // written as clip length / this speed, so the two stay in step.
             st.speed = AttackClips[i].speed;
-            chainStates.Add(st);
-        }
-
-        // Chain: the empty state opens it, each attack can only reach the next
-        // one. That is what makes the combo a chain rather than four separate
-        // moves. Transitions live entirely inside this layer now, so the base
-        // layer never leaves Locomotion and the legs keep running underneath.
-        for (int i = 0; i < chainStates.Count; i++)
-        {
-            var from = i == 0 ? idle : chainStates[i - 1];
-            var t = from.AddTransition(chainStates[i]);
-            t.hasExitTime = false;
-            t.duration = i == 0 ? 0.06f : 0.1f;   // snap into the first, blend later ones
-            t.AddCondition(AnimatorConditionMode.If, 0, $"Attack{i + 1}");
-
-            var back = chainStates[i].AddTransition(idle);
-            back.hasExitTime = true; back.exitTime = 0.85f; back.duration = 0.18f;
+            chain++;
         }
 
         if (clips.TryGetValue("airAttack", out var airClip))
         {
-            var air = sm.AddState("AttackAir");
+            var air = sm.AddState(AttackClips[^1].trigger);   // "AirAttack"
             air.motion = airClip;
             air.speed = AttackClips[^1].speed;
-
-            // No longer gated on the base layer being in Fall specifically, so
-            // the air attack now works on the way up as well as the way down.
-            var t = idle.AddTransition(air);
-            t.hasExitTime = false; t.duration = 0.06f;
-            t.AddCondition(AnimatorConditionMode.If, 0, "AirAttack");
-
-            var back = air.AddTransition(idle);
-            back.hasExitTime = true; back.exitTime = 0.9f; back.duration = 0.15f;
         }
+
+        // Upper-body layer: Foot IK has nothing to do here.
+        foreach (var s in sm.states) s.state.iKOnFeet = false;
 
         controller.AddLayer(new AnimatorControllerLayer
         {
@@ -444,7 +460,7 @@ public static class WeaponSetup
 
         EditorUtility.SetDirty(controller);
         Debug.Log($"Combo chain wired on masked '{AttackLayer}' layer: " +
-                  $"{chainStates.Count} ground attack(s)" +
+                  $"{chain} ground attack(s)" +
                   (clips.ContainsKey("airAttack") ? " + air attack" : "") +
                   " — legs stay under locomotion, so you can swing while moving.");
     }

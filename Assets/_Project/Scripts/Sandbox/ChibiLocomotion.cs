@@ -188,6 +188,24 @@ namespace Pickleball.Sandbox
         [SerializeField, Range(-0.3f, 0.7f)] private float modelYOffset;
         [Tooltip("Nudge if the feet still slide — scales clip playback against travel.")]
         [SerializeField, Range(0.5f, 2f)] private float strideScale = 1f;
+        [Tooltip("Ground speed the RUN clip strides at on this character (the " +
+                 "locomotion tree's top threshold, measured by Tools ▸ Pickleball ▸ " +
+                 "Diagnostics ▸ Measure Clip Stride Speeds). Above it the blend " +
+                 "tree has nothing faster to blend to, so playback is sped up " +
+                 "instead, by speed / this — otherwise the feet skate.")]
+        [SerializeField] private float runClipStride = 2.57f;
+        [Tooltip("Same, for the crouch-walk clip and the crouch tree.")]
+        [SerializeField] private float crouchClipStride = 0.69f;
+        [Tooltip("Damping on the Speed parameter, seconds. Raw speed jumps " +
+                 "(dash exit, tether release, landing) would otherwise pop the " +
+                 "blend tree between clips in one frame.")]
+        [SerializeField] private float speedDampTime = 0.08f;
+        [Tooltip("A one-shot trigger (Jump, Stop, Flip, Dash) the Animator has not " +
+                 "consumed within this long is withdrawn. Unity latches an " +
+                 "unconsumed trigger forever, so one set while the current state " +
+                 "had no transition for it would fire seconds later — a stray " +
+                 "flip or jump replaying after landing.")]
+        [SerializeField] private float triggerLifetime = 0.2f;
 
         [Header("Camera")]
         [SerializeField] private Transform cameraTransform;
@@ -216,7 +234,14 @@ namespace Pickleball.Sandbox
         static readonly int FlipSpeedHash = Animator.StringToHash("FlipSpeed");
         static readonly int DashHash = Animator.StringToHash("Dash");
         static readonly int TetheredHash = Animator.StringToHash("Tethered");
-        static readonly int FireHash = Animator.StringToHash("Fire");
+        static readonly int MovingHash = Animator.StringToHash("Moving");
+        /// <summary>Gesture-layer state the hook throw lives in. Played by
+        /// crossfade rather than a trigger: see <see cref="Latch"/>.</summary>
+        const string FireState = "Fire";
+
+        // Buffered one-shot triggers; see triggerLifetime.
+        static readonly int[] BufferedTriggers = { JumpHash, StopHash, FlipHash, DashHash };
+        readonly float[] _triggerExpiry = new float[4];
 
         CharacterController _cc;
         MeleeCombat _combat;
@@ -364,6 +389,11 @@ namespace Pickleball.Sandbox
                 // which matters more than usual on chibi proportions where
                 // retargeting error is large.
                 animator.stabilizeFeet = true;
+                // The FBX-imported Animator defaults to culling by renderer
+                // bounds, and the orbit camera regularly sits close enough
+                // (or swings through) that the bounds leave the frustum for a
+                // frame — the pose then freezes and pops on return.
+                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             }
             if (cameraTransform == null && Camera.main != null)
                 cameraTransform = Camera.main.transform;
@@ -491,10 +521,10 @@ namespace Pickleball.Sandbox
             // as long as advertised, which is what makes it designable.
             // The tether owns movement entirely while latched.
             HandleTetherInput(grounded);
-            if (_tethered) { ClearField(); UpdateSwing(dt); return; }
+            if (_tethered) { ClearField(); UpdateSwing(dt); ExpireTriggers(); return; }
 
             if (grounded) _airDashUsed = false;
-            if (TryStartDash(grounded)) { ClearField(); return; }
+            if (TryStartDash(grounded)) { ClearField(); ExpireTriggers(); return; }
             if (_dashTimeLeft > 0f)
             {
                 ClearField();
@@ -508,9 +538,12 @@ namespace Pickleball.Sandbox
                 if (_dashTimeLeft <= 0f) EndDash();
                 if (animator != null)
                 {
-                    animator.SetFloat(SpeedHash, _currentSpeed);
+                    animator.SetFloat(SpeedHash, _currentSpeed, speedDampTime, dt);
+                    animator.SetFloat(VerticalHash, _dashVelocity.y);
                     animator.SetBool(GroundedHash, false);
+                    animator.SetBool(MovingHash, false);
                 }
+                ExpireTriggers();
                 return;
             }
 
@@ -563,7 +596,7 @@ namespace Pickleball.Sandbox
                 _currentSpeed > stopTriggerSpeed && !_stopping)
             {
                 _stopping = true;
-                if (animator != null) animator.SetTrigger(StopHash);
+                SetTriggerBuffered(StopHash);
             }
             else if (_stopping && (target > 0.01f || _currentSpeed < 0.05f))
             {
@@ -612,9 +645,8 @@ namespace Pickleball.Sandbox
             // ---- jump / gravity --------------------------------------------
             // Front flip on the ground is a trick; in the air it is the double
             // jump's animation and is triggered from the jump path below.
-            if (_flip.WasPressedThisFrame() && grounded && !_crouching && !_skating
-                && animator != null)
-                animator.SetTrigger(FlipHash);
+            if (_flip.WasPressedThisFrame() && grounded && !_crouching && !_skating)
+                SetTriggerBuffered(FlipHash);
 
             if (_jump.WasPressedThisFrame()) _jumpPressedTime = Time.time;
 
@@ -645,7 +677,7 @@ namespace Pickleball.Sandbox
                     float airtime = 2f * _verticalVelocity / Mathf.Abs(gravity);
                     float scale = flipAirborneSeconds / Mathf.Max(airtime, 0.05f);
                     animator.SetFloat(FlipSpeedHash, Mathf.Clamp(scale, 0.5f, 2.5f));
-                    animator.SetTrigger(FlipHash);
+                    SetTriggerBuffered(FlipHash);
                 }
                 if (doubleJumpEffect != null)
                 {
@@ -667,7 +699,10 @@ namespace Pickleball.Sandbox
                 // or two after launch. Without this latch the Jump -> Land
                 // transition fires immediately and clips the jump.
                 _jumpLatchUntil = Time.time + 0.15f;
-                if (animator != null) animator.SetTrigger(JumpHash);
+                // A pending ground flip or run-stop is superseded by the jump.
+                ClearTrigger(FlipHash);
+                ClearTrigger(StopHash);
+                SetTriggerBuffered(JumpHash);
             }
             else if (_anchorLeft > 0f && (!grounded || _jump.IsPressed()))
             {
@@ -732,12 +767,51 @@ namespace Pickleball.Sandbox
 
             // ---- animator ---------------------------------------------------
             if (animator == null) return;
-            animator.SetFloat(SpeedHash, _currentSpeed, 0.08f, dt);
-            animator.SetFloat(MultiplierHash, strideScale);
+            animator.SetFloat(SpeedHash, _currentSpeed, speedDampTime, dt);
+            // Read back the DAMPED value: the multiplier has to track what the
+            // blend tree is actually showing, not where it is headed.
+            float shown = animator.GetFloat(SpeedHash);
+            float topStride = _crouching ? crouchClipStride : runClipStride;
+            float overspeed = topStride > 0.01f && !_skating
+                ? Mathf.Max(1f, shown / topStride) : 1f;
+            animator.SetFloat(MultiplierHash, strideScale * overspeed);
             animator.SetBool(GroundedHash, grounded && Time.time >= _jumpLatchUntil);
             animator.SetBool(CrouchHash, _crouching);
             animator.SetBool(SkatingHash, _skating);
             animator.SetFloat(VerticalHash, _verticalVelocity);
+            // Intent, not speed: Run To Stop decelerates through every speed
+            // threshold on its own, so only fresh input may cut it short.
+            animator.SetBool(MovingHash, target > 0.01f);
+            ExpireTriggers();
+        }
+
+        void SetTriggerBuffered(int hash)
+        {
+            if (animator == null) return;
+            animator.SetTrigger(hash);
+            int i = System.Array.IndexOf(BufferedTriggers, hash);
+            if (i >= 0) _triggerExpiry[i] = Time.time + triggerLifetime;
+        }
+
+        void ClearTrigger(int hash)
+        {
+            if (animator == null) return;
+            animator.ResetTrigger(hash);
+            int i = System.Array.IndexOf(BufferedTriggers, hash);
+            if (i >= 0) _triggerExpiry[i] = 0f;
+        }
+
+        /// <summary>Withdraws buffered triggers the Animator never consumed.
+        /// Called on every path out of Update, tether and dash included.</summary>
+        void ExpireTriggers()
+        {
+            if (animator == null) return;
+            for (int i = 0; i < BufferedTriggers.Length; i++)
+            {
+                if (_triggerExpiry[i] <= 0f || Time.time < _triggerExpiry[i]) continue;
+                animator.ResetTrigger(BufferedTriggers[i]);
+                _triggerExpiry[i] = 0f;
+            }
         }
 
         // ------------------------------------------------------- force fields
@@ -940,7 +1014,14 @@ namespace Pickleball.Sandbox
             if (animator != null)
             {
                 animator.SetBool(TetheredHash, true);
-                animator.SetTrigger(FireHash);
+                // Crossfaded straight in rather than triggered, and never
+                // transitioned back out: the gesture layer is faded to zero
+                // weight by UpdateGesture while Fire holds its last frame. A
+                // state-machine exit to the empty None state would blend the
+                // arm toward the bind pose at full layer weight first — a
+                // visible T-pose flick at the end of every throw.
+                int layer = GestureLayer();
+                if (layer >= 0) animator.CrossFadeInFixedTime(FireState, 0.05f, layer, 0f);
             }
             _gestureTimeLeft = gestureSeconds;
         }
@@ -1054,7 +1135,7 @@ namespace Pickleball.Sandbox
 
             if (animator != null)
             {
-                animator.SetFloat(SpeedHash, _swingVelocity.magnitude);
+                animator.SetFloat(SpeedHash, _swingVelocity.magnitude, speedDampTime, dt);
                 animator.SetBool(GroundedHash, false);
             }
         }
@@ -1090,7 +1171,7 @@ namespace Pickleball.Sandbox
 
             if (animator != null)
             {
-                animator.SetTrigger(DashHash);
+                SetTriggerBuffered(DashHash);
                 animator.SetBool(GroundedHash, false);
             }
             if (dashEffects != null) dashEffects.Play(dir, dashDuration);

@@ -174,7 +174,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f27ba70382127e14c8a27e3088e7e109, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Pickleball.Sandbox.TetherAnchor
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.TetherAnchor
   attachPoint: {fileID: 4501959342154726535}
   maxRange: 9
   highlightRenderer: {fileID: 224523154879249526}

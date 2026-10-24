@@ -164,7 +164,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c3eb97c7999876747a832eb67f0cc20b, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Pickleball.Sandbox.AbilityPickup
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.AbilityPickup
   ability: 0
   consumeOnPickup: 1
   spinDegreesPerSecond: 75

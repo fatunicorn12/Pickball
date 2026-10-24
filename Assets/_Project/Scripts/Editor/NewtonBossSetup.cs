@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -39,17 +40,52 @@ public static class NewtonBossSetup
     /// </summary>
     const float ModelYOffset = 0f;
 
-    /// <summary>Clip roles, matched by filename. Idle is the only one required;
-    /// everything else is picked up when the file appears.</summary>
-    static readonly (string role, string file, bool loop)[] ClipDefs =
+    /// <summary>Where the shared clips live. Both characters are Humanoid, so
+    /// any of these retargets onto Newton through his avatar.</summary>
+    const string SharedClipDir = "Assets/_Project/Animation/Chibi";
+    const string SharedPackDir = SharedClipDir + "/SwordShield";
+
+    /// <summary>
+    /// Clip roles. Each one is loaded from Animation/Newton/&lt;file&gt;; when
+    /// that file does not exist yet it is COPIED there from the shared library
+    /// first, so Newton gets real animation today and a bespoke clip later just
+    /// replaces the file. Copies rather than references because this setup
+    /// rewrites the importer settings (Humanoid, root baking, frame range), and
+    /// doing that to the chibi's own files would silently change the player.
+    ///
+    /// Frame ranges are on the 30 fps Mixamo takes; -1/-1 is the whole take.
+    ///   summon : Throw.fbx 40-95 — the short wind-up, the overhand fling and
+    ///            the follow-through. The well appears the moment he throws, so
+    ///            the long idle lead-in (0-40) is cut.
+    ///   volley : a one-hand cast, timed by the state speed below so the cast
+    ///            peaks as the ring is released.
+    ///   beam   : the second cast, cut at frame 22 — the moment of fullest
+    ///            extension — so the state HOLDS the casting pose for as long
+    ///            as the beam is live instead of finishing and standing idle.
+    ///   barrage: "power up" — arms flung wide, which is the sky opening.
+    /// </summary>
+    static readonly (string role, string file, string source, bool loop, int first, int last)[] ClipDefs =
     {
-        ("idle",   "Idle.fbx",   true),
-        ("walk",   "Walking.fbx", true),
-        ("attack", "Attack.fbx", false),
-        ("attack2", "Attack2.fbx", false),
-        ("hit",    "Hit.fbx",    false),
-        ("death",  "Death.fbx",  false),
+        ("idle",    "Idle.fbx",    SharedClipDir + "/Idle.fbx",    true,  -1, -1),
+        ("walk",    "Walking.fbx", SharedClipDir + "/Walking.fbx", true,  -1, -1),
+        ("summon",  "Throw.fbx",   SharedClipDir + "/Throw.fbx",   false, 40, 95),
+        ("volley",  "Cast.fbx",    SharedPackDir + "/sword and shield casting.fbx",     false, -1, -1),
+        ("beam",    "Cast2.fbx",   SharedPackDir + "/sword and shield casting (2).fbx", false, -1, 22),
+        ("barrage", "PowerUp.fbx", SharedPackDir + "/sword and shield power up.fbx",    false, -1, -1),
+        ("hit",     "Hit.fbx",     SharedPackDir + "/sword and shield impact.fbx",      false, -1, -1),
+        ("death",   "Death.fbx",   SharedPackDir + "/sword and shield death.fbx",       false, -1, -1),
     };
+
+    /// <summary>Mirrors InverseSquareVolley.windUp: the ring leaves this long
+    /// after the Volley trigger, so the cast is time-scaled to peak then.</summary>
+    const float VolleyReleaseSeconds = 0.55f;
+
+    /// <summary>Mirrors FluxionBeam.chargeTime: the beam cast is time-scaled to
+    /// reach full extension as the charge completes and the beam fires.</summary>
+    const float BeamChargeSeconds = 1.1f;
+
+    /// <summary>Walk threshold used if the stride cannot be measured.</summary>
+    const float FallbackWalkStride = 1.0f;
 
     [MenuItem("Tools/Pickleball/Setup Newton (Boss)")]
     public static void Run()
@@ -69,34 +105,57 @@ public static class NewtonBossSetup
         ChibiSandboxSetup.SetupMaterialPublic(importer, ModelPath, CharacterDir, "Newton");
         if (!ChibiSandboxSetup.SetupRigPublic(importer, BossHeight)) return;
 
+        var avatar = LoadAvatar();
+        if (avatar == null) return;
+        Debug.Log($"Newton avatar OK — human={avatar.isHuman}, scale {BossHeight}.");
+
+        var controller = BuildController(LoadClips(), avatar);
+        Place(avatar, controller);
+        AssetDatabase.SaveAssets();
+    }
+
+    /// <summary>
+    /// Rebuilds only Newton's clips and controller, in place. Unlike
+    /// Setup Newton (Boss) this does NOT rebuild the NewtonBoss object, so the
+    /// fight wiring that Setup Newton Fight attached survives — use this after
+    /// changing clips or the state machine.
+    /// </summary>
+    [MenuItem("Tools/Pickleball/Rebuild Newton Animator")]
+    public static void RebuildAnimator()
+    {
+        ChibiSandboxSetup.EnsureFolderPublic(ClipDir);
+        var avatar = LoadAvatar();
+        if (avatar == null) return;
+        BuildController(LoadClips(), avatar);
+        AssetDatabase.SaveAssets();
+    }
+
+    static Avatar LoadAvatar()
+    {
         var avatar = AssetDatabase.LoadAllAssetsAtPath(ModelPath)
             .OfType<Avatar>().FirstOrDefault();
         if (avatar == null || !avatar.isValid || !avatar.isHuman)
         {
             Debug.LogError($"Newton avatar invalid (valid={avatar?.isValid}, " +
                            $"human={avatar?.isHuman}). Check FBX ▸ Rig ▸ Configure.");
-            return;
+            return null;
         }
-        Debug.Log($"Newton avatar OK — human={avatar.isHuman}, scale {BossHeight}.");
-
-        var clips = LoadClips();
-        if (clips.Count == 0)
-        {
-            Debug.LogWarning($"No clips in {ClipDir}. Drop Mixamo FBXs there " +
-                             "(Idle.fbx, Attack.fbx, ...) and re-run. Rig is still set up.");
-        }
-
-        var controller = BuildController(clips);
-        Place(avatar, controller);
-        AssetDatabase.SaveAssets();
+        return avatar;
     }
 
-    static System.Collections.Generic.Dictionary<string, AnimationClip> LoadClips()
+    static Dictionary<string, AnimationClip> LoadClips()
     {
-        var result = new System.Collections.Generic.Dictionary<string, AnimationClip>();
-        foreach (var (role, file, loop) in ClipDefs)
+        var result = new Dictionary<string, AnimationClip>();
+        foreach (var (role, file, source, loop, first, last) in ClipDefs)
         {
             string path = $"{ClipDir}/{file}";
+            if (AssetImporter.GetAtPath(path) == null && !string.IsNullOrEmpty(source) &&
+                AssetImporter.GetAtPath(source) != null)
+            {
+                if (AssetDatabase.CopyAsset(source, path))
+                    Debug.Log($"  {role,-8} copied {Path.GetFileName(source)} -> {path}");
+            }
+
             var imp = AssetImporter.GetAtPath(path) as ModelImporter;
             if (imp == null) continue;
 
@@ -108,16 +167,31 @@ public static class NewtonBossSetup
             var defs = imp.defaultClipAnimations;
             if (defs is { Length: > 0 })
             {
-                foreach (var d in defs)
-                {
-                    d.loopTime = loop;
-                    // In place: the boss's controller owns his movement.
-                    d.lockRootRotation = false;
-                    d.lockRootHeightY = false;
-                    d.lockRootPositionXZ = false;
-                    d.keepOriginalPositionY = false;
-                }
-                imp.clipAnimations = defs;
+                var take = defs[0];
+                // He never leaves the spot he is placed on — NewtonBoss only
+                // turns him — so travel is code-owned and root motion is off.
+                //   Loops (idle, walk): XZ and rotation NOT baked, so the
+                //     cycle plays in place and cannot drift or spin him.
+                //   One-shots (casts, hit, death): everything baked, so a
+                //     stagger, a lunge or a fall shows as authored instead of
+                //     being projected out and thrown away.
+                //   Height always baked, feet-based: with Y left as root
+                //     motion and root motion off, every crouch, flinch and
+                //     the death fall would be flattened to standing height
+                //     — dying in mid-air.
+                take.name = role;
+                take.loopTime = loop;
+                take.loopPose = loop;
+                if (first >= 0) take.firstFrame = first;
+                if (last >= 0) take.lastFrame = last;
+                take.lockRootRotation = !loop;
+                take.lockRootPositionXZ = !loop;
+                take.lockRootHeightY = true;
+                take.keepOriginalOrientation = true;
+                take.keepOriginalPositionXZ = true;
+                take.keepOriginalPositionY = false;
+                take.heightFromFeet = true;
+                imp.clipAnimations = new[] { take };
             }
             imp.SaveAndReimport();
 
@@ -127,42 +201,130 @@ public static class NewtonBossSetup
             result[role] = clip;
             Debug.Log($"  {role,-8} <- {file,-16} {clip.length:0.00}s loop={loop}");
         }
+        if (result.Count == 0)
+            Debug.LogWarning($"No clips in {ClipDir} and no shared sources found. " +
+                             "Newton will hold his bind pose.");
         return result;
     }
 
-    static AnimatorController BuildController(
-        System.Collections.Generic.Dictionary<string, AnimationClip> clips)
+    /// <summary>
+    /// Newton's state machine.
+    ///
+    ///   Locomotion  1D blend idle/walk on Speed. He never travels, but turning
+    ///               to track the player is driven into Speed as a shuffle, so
+    ///               he steps round instead of skating on the spot.
+    ///   Summon / Volley / Beam / Barrage
+    ///               one cast per ability, entered from ANY state on its own
+    ///               trigger (a cast is a tell, and a tell that waits for a
+    ///               flinch to finish arrives too late to read). Beam is held
+    ///               on the Channeling bool for as long as the beam is live.
+    ///   Hit         a flinch, from Locomotion only — getting hit never cancels
+    ///               a tell; mid-cast the procedural recoil covers it instead.
+    ///   Death       any state, on the Dead bool, and nothing leaves it.
+    ///
+    /// Parameter names are the contract with NewtonBoss.
+    /// </summary>
+    static AnimatorController BuildController(Dictionary<string, AnimationClip> clips, Avatar avatar)
     {
-        var controller = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
-        controller.AddParameter("Attack", AnimatorControllerParameterType.Trigger);
-        controller.AddParameter("Attack2", AnimatorControllerParameterType.Trigger);
-        controller.AddParameter("Hit", AnimatorControllerParameterType.Trigger);
-        controller.AddParameter("Dead", AnimatorControllerParameterType.Bool);
+        var controller = ChibiSandboxSetup.ResetControllerInPlace(ControllerPath);
         controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
+        controller.AddParameter("Dead", AnimatorControllerParameterType.Bool);
+        controller.AddParameter("Channeling", AnimatorControllerParameterType.Bool);
+        foreach (var trigger in new[] { "Summon", "Volley", "Beam", "Barrage", "Hit" })
+            controller.AddParameter(trigger, AnimatorControllerParameterType.Trigger);
 
         var sm = controller.layers[0].stateMachine;
 
-        var idle = sm.AddState("Idle");
-        if (clips.TryGetValue("idle", out var idleClip)) idle.motion = idleClip;
-        sm.defaultState = idle;
-
-        // One-shots that return to idle on their own. Kept as a loop over roles
-        // so adding a third attack is one line in ClipDefs, not new plumbing.
-        foreach (var (role, param) in new[]
-                 { ("attack", "Attack"), ("attack2", "Attack2"), ("hit", "Hit") })
+        // ---- locomotion ------------------------------------------------------
+        AnimatorState loco;
+        clips.TryGetValue("idle", out var idleClip);
+        if (idleClip != null && clips.TryGetValue("walk", out var walkClip))
         {
-            if (!clips.TryGetValue(role, out var clip)) continue;
-            var state = sm.AddState(char.ToUpper(role[0]) + role[1..]);
-            state.motion = clip;
+            float stride = MeasureStride(avatar, walkClip, out _);
+            loco = controller.CreateBlendTreeInController("Locomotion", out BlendTree tree, 0);
+            tree.blendType = BlendTreeType.Simple1D;
+            tree.blendParameter = "Speed";
+            tree.useAutomaticThresholds = false;
+            tree.AddChild(idleClip, 0f);
+            tree.AddChild(walkClip, stride);
+            Debug.Log($"  Newton walk threshold {stride:0.00} m/s (measured stride on his rig)");
+        }
+        else
+        {
+            loco = sm.AddState("Locomotion");
+            loco.motion = idleClip;
+        }
+        sm.defaultState = loco;
 
-            var t = idle.AddTransition(state);
-            t.hasExitTime = false; t.duration = 0.1f;
-            t.AddCondition(AnimatorConditionMode.If, 0, param);
-
-            var back = state.AddTransition(idle);
-            back.hasExitTime = true; back.exitTime = 0.9f; back.duration = 0.15f;
+        // ---- casts -----------------------------------------------------------
+        AnimatorState AddCast(string role, string trigger, float speed, bool yieldsToBeam)
+        {
+            if (!clips.TryGetValue(role, out var clip)) return null;
+            var st = sm.AddState(trigger);
+            st.motion = clip;
+            st.speed = speed;
+            var t = sm.AddAnyStateTransition(st);
+            t.hasExitTime = false; t.duration = 0.12f;
+            t.canTransitionToSelf = false;
+            t.AddCondition(AnimatorConditionMode.If, 0, trigger);
+            t.AddCondition(AnimatorConditionMode.IfNot, 0, "Dead");
+            // The beam is the one ability he channels for seconds; a well or a
+            // volley dropped mid-beam must not knock him out of the casting
+            // pose (play-tested: a Summon cut the beam pose off and the beam
+            // then fired from an idling Newton). Their trigger simply expires.
+            if (yieldsToBeam) t.AddCondition(AnimatorConditionMode.IfNot, 0, "Channeling");
+            return st;
         }
 
+        float volleySpeed = 1f;
+        if (clips.TryGetValue("volley", out var volleyClip))
+        {
+            MeasureStride(avatar, volleyClip, out float peak);
+            if (peak > 0.05f) volleySpeed = Mathf.Clamp(peak / VolleyReleaseSeconds, 0.75f, 2.5f);
+        }
+        float beamSpeed = clips.TryGetValue("beam", out var beamClip)
+            ? Mathf.Clamp(beamClip.length / BeamChargeSeconds, 0.4f, 1.5f) : 1f;
+
+        var summon = AddCast("summon", "Summon", 1f, true);
+        var volley = AddCast("volley", "Volley", volleySpeed, true);
+        var beam = AddCast("beam", "Beam", beamSpeed, false);
+        var barrage = AddCast("barrage", "Barrage", 1f, true);
+
+        foreach (var st in new[] { summon, volley, barrage })
+        {
+            if (st == null) continue;
+            var back = st.AddTransition(loco);
+            back.hasExitTime = true; back.exitTime = 0.9f; back.duration = 0.25f;
+        }
+        if (beam != null)
+        {
+            // Held while the beam is live (the clip holds its last frame if it
+            // runs out first), released the moment it stops.
+            var back = beam.AddTransition(loco);
+            back.hasExitTime = false; back.duration = 0.3f;
+            back.AddCondition(AnimatorConditionMode.IfNot, 0, "Channeling");
+
+            // Back into the pose whenever he returns to Locomotion with the
+            // beam still live (e.g. after a flinch, or a cast that started
+            // the same frame the beam did) — no trigger needed.
+            var resume = loco.AddTransition(beam);
+            resume.hasExitTime = false; resume.duration = 0.2f;
+            resume.AddCondition(AnimatorConditionMode.If, 0, "Channeling");
+        }
+
+        // ---- hit -------------------------------------------------------------
+        if (clips.TryGetValue("hit", out var hitClip))
+        {
+            var hit = sm.AddState("Hit");
+            hit.motion = hitClip;
+            var t = loco.AddTransition(hit);
+            t.hasExitTime = false; t.duration = 0.06f;
+            t.AddCondition(AnimatorConditionMode.If, 0, "Hit");
+            var back = hit.AddTransition(loco);
+            back.hasExitTime = true; back.exitTime = 0.75f; back.duration = 0.25f;
+        }
+
+        // ---- death -----------------------------------------------------------
         if (clips.TryGetValue("death", out var deathClip))
         {
             var dead = sm.AddState("Death");
@@ -171,11 +333,45 @@ public static class NewtonBossSetup
             t.hasExitTime = false; t.duration = 0.2f;
             t.canTransitionToSelf = false;
             t.AddCondition(AnimatorConditionMode.If, 0, "Dead");
+            // AnyState transitions are tested in list order: death goes first,
+            // so a cast trigger landing on the frame he dies cannot win.
+            var any = sm.anyStateTransitions;
+            sm.anyStateTransitions = new[] { any[^1] }.Concat(any.Take(any.Length - 1)).ToArray();
         }
 
+        // Per-state Foot IK replays the clip's own foot goals, which is what
+        // keeps retargeted feet planted on a standing stance. Off for death:
+        // pinning the feet of a falling body drags it.
+        foreach (var s in sm.states)
+            s.state.iKOnFeet = s.state.name != "Death";
+
         EditorUtility.SetDirty(controller);
-        Debug.Log($"Newton controller: {ControllerPath} ({sm.states.Length} states)");
+        Debug.Log($"Newton controller: {ControllerPath} ({sm.states.Length} states: " +
+                  $"{string.Join(", ", sm.states.Select(s => s.state.name))}; " +
+                  $"volley x{volleySpeed:0.00}, beam x{beamSpeed:0.00})");
         return controller;
+    }
+
+    /// <summary>Stride speed of <paramref name="clip"/> on Newton's own rig,
+    /// measured off a throwaway instance of his model — see
+    /// ChibiSandboxSetup.MeasureStrideSpeed. Also returns when the hands are
+    /// furthest from the hips, which is how a cast's peak is found.</summary>
+    static float MeasureStride(Avatar avatar, AnimationClip clip, out float handPeak)
+    {
+        handPeak = 0f;
+        var modelAsset = AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
+        if (modelAsset == null) return FallbackWalkStride;
+        var go = Object.Instantiate(modelAsset);
+        go.hideFlags = HideFlags.HideAndDontSave;
+        try
+        {
+            var anim = go.GetComponent<Animator>() ?? go.AddComponent<Animator>();
+            anim.avatar = avatar;
+            anim.Rebind();
+            float v = ChibiSandboxSetup.MeasureStrideSpeed(anim, clip, out handPeak);
+            return v > 0.05f ? v : FallbackWalkStride;
+        }
+        finally { Object.DestroyImmediate(go); }
     }
 
     static void Place(Avatar avatar, AnimatorController controller)
@@ -208,6 +404,12 @@ public static class NewtonBossSetup
         animator.avatar = avatar;
         animator.runtimeAnimatorController = controller;
         animator.applyRootMotion = false;
+        // A boss's tells must never pause because his bounds left the frustum
+        // for a moment (the camera orbits close to him mid-combo).
+        animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+        // Spring-cloth chains on the coat; needs the avatar assigned above,
+        // and must land before the prefab is saved below.
+        ClothSetup.Apply(model);
 
         // Capsule sized from his actual bounds, like the player's.
         var renderers = model.GetComponentsInChildren<Renderer>();
