@@ -192,6 +192,18 @@ namespace Pickleball.Sandbox
         [Header("Camera")]
         [SerializeField] private Transform cameraTransform;
 
+        [Header("Lock-on")]
+        [Tooltip("Found on this object if empty. While it holds a target he turns " +
+                 "to face it when stopped and on every swing.")]
+        [SerializeField] private LockOnTargeting lockOn;
+        [Tooltip("Below this speed, with no stick input, a locked-on character " +
+                 "turns to face the target. Kept above zero so the turn starts " +
+                 "while Run To Stop is still settling, not after.")]
+        [SerializeField] private float lockFaceSpeed = 0.6f;
+        [Tooltip("Turn time when a swing starts while locked on. Much faster " +
+                 "than walking turns: the swing has to land on the target.")]
+        [SerializeField] private float lockAttackTurnTime = 0.04f;
+
         static readonly int SpeedHash = Animator.StringToHash("Speed");
         static readonly int MultiplierHash = Animator.StringToHash("SpeedMultiplier");
         static readonly int GroundedHash = Animator.StringToHash("Grounded");
@@ -207,6 +219,10 @@ namespace Pickleball.Sandbox
         static readonly int FireHash = Animator.StringToHash("Fire");
 
         CharacterController _cc;
+        MeleeCombat _combat;
+        /// <summary>Travel direction while facing is held on the lock-on target,
+        /// so turning to face it does not drag movement round with it.</summary>
+        Vector3 _lockTravel;
         InputAction _move, _sprint, _jump, _crouch, _flip, _mount, _dash, _tether, _anchor;
         float _anchorLeft, _anchorReadyAt;
         Vector3 _dashVelocity;
@@ -335,6 +351,8 @@ namespace Pickleball.Sandbox
         {
             _cc = GetComponent<CharacterController>();
             _abilities = GetComponent<PlayerAbilities>();
+            _combat = GetComponent<MeleeCombat>();
+            if (lockOn == null) lockOn = GetComponent<LockOnTargeting>();
             _board = GetComponentInChildren<SkateboardMount>(true);
             _standHeight = _cc.height;
             _standCenter = _cc.center;
@@ -557,7 +575,31 @@ namespace Pickleball.Sandbox
                         : acceleration;
             _currentSpeed = Mathf.MoveTowards(_currentSpeed, target, accel * dt);
 
-            if (magnitude > 0.001f)
+            // Locked on, he squares up to the target when he stops and whenever
+            // he swings — but runs freely the rest of the time. Movement is
+            // normally along transform.forward, so while facing is held on the
+            // target, travel is carried separately in _lockTravel instead.
+            bool attacking = _combat != null && _combat.IsAttacking;
+            bool faceTarget = lockOn != null && lockOn.IsLocked && !_skating &&
+                              (attacking || (target < 0.01f && _currentSpeed < lockFaceSpeed));
+            Vector3 travel = transform.forward;
+            if (faceTarget)
+            {
+                if (magnitude > 0.001f) _lockTravel = desired;
+                travel = _lockTravel;
+
+                Vector3 to = lockOn.AimPoint - transform.position;
+                to.y = 0f;
+                if (to.sqrMagnitude > 0.01f)
+                {
+                    float wanted = Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg;
+                    float smooth = attacking ? lockAttackTurnTime : turnSmoothTime;
+                    float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, wanted,
+                                                        ref _turnVelocity, smooth);
+                    transform.rotation = Quaternion.Euler(0f, angle, 0f);
+                }
+            }
+            else if (magnitude > 0.001f)
             {
                 float wanted = Mathf.Atan2(desired.x, desired.z) * Mathf.Rad2Deg;
                 float smooth = _skating ? skateTurnSmoothTime : turnSmoothTime;
@@ -565,6 +607,7 @@ namespace Pickleball.Sandbox
                                                     ref _turnVelocity, smooth);
                 transform.rotation = Quaternion.Euler(0f, angle, 0f);
             }
+            if (!faceTarget) _lockTravel = transform.forward;
 
             // ---- jump / gravity --------------------------------------------
             // Front flip on the ground is a trick; in the air it is the double
@@ -649,7 +692,7 @@ namespace Pickleball.Sandbox
             // Input movement plus whatever momentum is still being carried.
             // Momentum's own y is dropped on purpose — the vertical channel is
             // _verticalVelocity's alone, so a launch has to go through that.
-            Vector3 own = transform.forward * _currentSpeed + _momentum;
+            Vector3 own = travel * _currentSpeed + _momentum;
             own.y = _verticalVelocity;
 
             // Field velocity rides on top, EXCEPT vertically while he is stood on

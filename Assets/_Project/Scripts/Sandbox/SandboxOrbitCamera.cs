@@ -24,6 +24,22 @@ namespace Pickleball.Sandbox
         [SerializeField] private float maxPitch = 65f;
         [SerializeField] private float followSmoothTime = 0.06f;
 
+        [Header("Lock-on")]
+        [Tooltip("Read for the locked target. Found on the follow target if empty.")]
+        [SerializeField] private LockOnTargeting lockOn;
+        [Tooltip("How quickly the camera swings round to keep the target framed.")]
+        [SerializeField] private float lockTurnSmoothTime = 0.12f;
+        [Tooltip("Downward look while locked. Looking down past the player puts " +
+                 "the target above him on screen instead of behind his head.")]
+        [SerializeField] private float lockPitch = 16f;
+        [Tooltip("How much of the height difference to the target the camera " +
+                 "follows. 0 ignores it; 1 aims straight at a target overhead.")]
+        [SerializeField, Range(0f, 1f)] private float lockPitchFollow = 0.5f;
+        [Tooltip("Extra pull-back while locked, so player and target both fit.")]
+        [SerializeField] private float lockDistanceBonus = 1.2f;
+        [Tooltip("Recentre behind the player (lock pressed with nothing to lock).")]
+        [SerializeField] private float recenterSmoothTime = 0.12f;
+
         float _yaw = 180f;
         float _pitch = 12f;
         Vector3 _velocity;
@@ -33,11 +49,26 @@ namespace Pickleball.Sandbox
         float _baseFov, _punchAmount, _punchTime, _punchDuration;
         float _shakeAmount, _shakeTime, _shakeDuration;
         int _relockFrame = -10;
+        float _yawVelocity, _pitchVelocity, _lockBlend;
+        float? _recenterYaw;
 
         /// <summary>True on the frame left-click was used to re-capture the
         /// cursor. Attack input checks this so the click that grabs the cursor
         /// back does not also swing the weapon.</summary>
         public bool JustRelocked => Time.frameCount - _relockFrame <= 1;
+
+        /// <summary>True while the camera owns the mouse. Lock-on only reads
+        /// mouse flicks then, not while the cursor is free over the Editor.</summary>
+        public bool CursorCaptured => _locked;
+
+        /// <summary>Swing round behind the player — what the lock-on button does
+        /// when there is nothing to lock. Any mouse look cancels it.</summary>
+        public void RecenterBehind(Vector3 forward)
+        {
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 1e-4f) return;
+            _recenterYaw = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
+        }
 
         /// <summary>Positional shake, for weapon impacts.</summary>
         public void Shake(float amount, float duration)
@@ -79,6 +110,7 @@ namespace Pickleball.Sandbox
             _cam = GetComponent<Camera>();
             if (_cam != null) _baseFov = _cam.fieldOfView;
             SetLocked(true);
+            if (lockOn == null && target != null) lockOn = target.GetComponent<LockOnTargeting>();
             if (target != null)
             {
                 Vector3 e = transform.eulerAngles;
@@ -92,6 +124,49 @@ namespace Pickleball.Sandbox
             _locked = locked;
             Cursor.lockState = locked ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !locked;
+        }
+
+        bool IsLockedOn => lockOn != null && lockOn.IsLocked;
+
+        /// <summary>
+        /// Drives yaw and pitch while locked on, or while recentring.
+        ///
+        /// Yaw points along the line from the player to the target, so the target
+        /// sits straight ahead beyond him; pitch looks down past him so the
+        /// target clears his head. Both are smoothed rather than snapped, and
+        /// written back into the same _yaw/_pitch the mouse drives — so releasing
+        /// the lock hands control back from exactly where the camera is, with
+        /// no jump.
+        /// </summary>
+        void UpdateLockOn(Vector3 focus, float dt)
+        {
+            bool locked = IsLockedOn;
+            _lockBlend = Mathf.MoveTowards(_lockBlend, locked ? 1f : 0f, dt * 3f);
+
+            if (locked)
+            {
+                _recenterYaw = null;
+                Vector3 to = lockOn.AimPoint - focus;
+                var flat = new Vector3(to.x, 0f, to.z);
+                // Standing on top of the target: hold the current yaw rather
+                // than spinning on a near-zero vector.
+                if (flat.sqrMagnitude < 0.25f) return;
+
+                float yawWanted = Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg;
+                float rise = Mathf.Atan2(to.y, flat.magnitude) * Mathf.Rad2Deg;
+                float pitchWanted = Mathf.Clamp(lockPitch - rise * lockPitchFollow, minPitch, maxPitch);
+
+                _yaw = Mathf.SmoothDampAngle(_yaw, yawWanted, ref _yawVelocity, lockTurnSmoothTime);
+                _pitch = Mathf.SmoothDampAngle(_pitch, pitchWanted, ref _pitchVelocity, lockTurnSmoothTime);
+                return;
+            }
+
+            if (_recenterYaw.HasValue)
+            {
+                _yaw = Mathf.SmoothDampAngle(_yaw, _recenterYaw.Value, ref _yawVelocity, recenterSmoothTime);
+                _pitch = Mathf.SmoothDampAngle(_pitch, lockPitch, ref _pitchVelocity, recenterSmoothTime);
+                if (Mathf.Abs(Mathf.DeltaAngle(_yaw, _recenterYaw.Value)) < 0.5f) _recenterYaw = null;
+            }
         }
 
         void LateUpdate()
@@ -111,11 +186,13 @@ namespace Pickleball.Sandbox
                     _relockFrame = Time.frameCount;
                 }
 
-                if (_locked)
+                // While locked the mouse belongs to target switching, not look.
+                if (_locked && !IsLockedOn)
                 {
                     Vector2 delta = mouse.delta.ReadValue();
                     _yaw += delta.x * sensitivity;
                     _pitch = Mathf.Clamp(_pitch - delta.y * sensitivity, minPitch, maxPitch);
+                    if (delta.sqrMagnitude > 4f) _recenterYaw = null;
                 }
 
                 float scroll = mouse.scroll.ReadValue().y;
@@ -123,9 +200,12 @@ namespace Pickleball.Sandbox
                     distance = Mathf.Clamp(distance - scroll * 0.003f, minDistance, maxDistance);
             }
 
-            Quaternion rot = Quaternion.Euler(_pitch, _yaw, 0f);
             Vector3 focus = target.position + targetOffset;
-            Vector3 wanted = focus - rot * Vector3.forward * distance;
+            UpdateLockOn(focus, Time.deltaTime);
+
+            Quaternion rot = Quaternion.Euler(_pitch, _yaw, 0f);
+            float dist = distance + lockDistanceBonus * _lockBlend;
+            Vector3 wanted = focus - rot * Vector3.forward * dist;
 
             transform.position = Vector3.SmoothDamp(transform.position, wanted,
                                                     ref _velocity, followSmoothTime);
