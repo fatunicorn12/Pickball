@@ -174,14 +174,13 @@ namespace Pickleball.Sandbox
             Vector3 landing = origin + lateral * time;
             landing.y = groundY + 0.02f;
 
-            // Unrotated. The prefab is a cube already scaled flat in XZ, so it is
-            // a decal lying on the floor exactly as authored. The 90° X rotation
-            // this used to apply is what a Quad needs — a Quad's face lies in XY —
-            // and on a box it tipped the slab onto its edge as a 1.3 m wall, which
-            // told the player nothing about where the apple was going to land.
-            // Lives exactly as long as the fall, so a marker on the floor always
-            // means an apple is still coming.
+            // Unrotated. The prefab's root lies flat by construction — its ring and
+            // countdown disc are child quads already turned face-up — so the root
+            // must not be tipped again. (A 90° X here once stood the old slab
+            // marker on its edge as a 1.3 m wall.) Lives exactly as long as the
+            // fall, so a marker on the floor always means an apple is still coming.
             var marker = Instantiate(impactMarkerPrefab, landing, Quaternion.identity);
+            if (marker.TryGetComponent(out ImpactMarker countdown)) countdown.Begin(time);
             Destroy(marker, time + markerLinger);
         }
 

@@ -454,6 +454,36 @@ namespace Pickleball.Tests
                         "RecoverableNormalised is the far edge of grey, not its width.");
         }
 
+        // ------------------------------------------------------------ last hit
+
+        [Test]
+        public void LastHit_ReportsWhatTheFilterDidAndWhetherTheHitWasRecoverable()
+        {
+            // The damage numbers style weak-point and permanent hits off these two
+            // readings, from inside the Hurt handler — so they must already be
+            // current when Hurt fires, not only afterwards.
+            Health health = NewHealth(max: 100f);
+            health.IncomingDamageFilter = (amount, _) => amount * 2f;
+            float scaleSeenInHurt = 0f;
+            bool recoverableSeenInHurt = true;
+            health.Hurt += (_, _) =>
+            {
+                scaleSeenInHurt = health.LastHitScale;
+                recoverableSeenInHurt = health.LastHitRecoverable;
+            };
+
+            health.Damage(10f, Vector3.zero, recoverable: false);
+
+            Assert.That(scaleSeenInHurt, Is.EqualTo(2f).Within(Tolerance));
+            Assert.That(recoverableSeenInHurt, Is.False);
+
+            health.IncomingDamageFilter = (amount, _) => amount * 0.25f;
+            health.Damage(10f, Vector3.zero);
+
+            Assert.That(health.LastHitScale, Is.EqualTo(0.25f).Within(Tolerance));
+            Assert.That(health.LastHitRecoverable, Is.True);
+        }
+
         [Test]
         public void Normalised_ReadoutsSurviveAZeroMaxWithoutDividingByZero()
         {

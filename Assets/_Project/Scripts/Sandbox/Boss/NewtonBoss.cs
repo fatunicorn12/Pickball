@@ -331,7 +331,7 @@ namespace Pickleball.Sandbox
                 Vector3 candidate = transform.position
                                   + lane * along
                                   + Vector3.Cross(Vector3.up, lane) * lateral;
-                candidate.y = transform.position.y;
+                candidate.y = GroundHeightAt(candidate);
 
                 if (Vector3.Distance(candidate, _player.transform.position)
                     < wellMinDistanceFromPlayer) continue;
@@ -388,6 +388,42 @@ namespace Pickleball.Sandbox
             Quaternion tilt = Quaternion.Euler(_windUp * 9f - _recoil * 14f, 0f, 0f);
 
             if (_bodyIsRoot)
+        static readonly RaycastHit[] GroundHits = new RaycastHit[8];
+
+        /// <summary>
+        /// Floor height under a point, for seating a well on the ground.
+        ///
+        /// Wells used to take Newton's own height, and the arena is not flat:
+        /// in the sandbox he stands about 1.7 m above the ground around him, so
+        /// every well hung in mid-air with its core at the player's eye level.
+        /// The probe starts only a metre above Newton's feet: enough to find
+        /// ground that rises a little toward the player, low enough that a tree
+        /// canopy or colonnade roof overhead is never mistaken for the floor.
+        /// Newton's and the player's own colliders are skipped. With nothing
+        /// below, the old behaviour is kept rather than refusing the drop, so an
+        /// arena without a floor collider still gets wells.
+        /// </summary>
+        float GroundHeightAt(Vector3 point)
+        {
+            const float headroom = 1f;
+            const float reach = 30f;
+            Vector3 from = new(point.x, transform.position.y + headroom, point.z);
+            int count = Physics.RaycastNonAlloc(from, Vector3.down, GroundHits, reach,
+                                                ~0, QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            float y = transform.position.y;
+            for (int i = 0; i < count; i++)
+            {
+                var hit = GroundHits[i];
+                if (hit.collider.transform.IsChildOf(transform)) continue;   // Newton himself
+                if (hit.collider.GetComponentInParent<ChibiLocomotion>() != null) continue;
+                if (hit.distance >= best) continue;
+                best = hit.distance;
+                y = hit.point.y;
+            }
+            return y;
+        }
+
             {
                 // No model child, so the tell rides on the very transform
                 // FacePlayer aims. Composed onto the facing instead of written

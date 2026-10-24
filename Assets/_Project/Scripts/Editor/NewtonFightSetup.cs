@@ -31,8 +31,6 @@ public static class NewtonFightSetup
     const string RewardPrefabPath = PrefabDir + "/Pickup_GravityAnchor.prefab";
 
     static readonly Color WellColour = new(0.42f, 0.26f, 0.95f);
-    static readonly Color AppleColour = new(0.86f, 0.19f, 0.22f);
-    static readonly Color MarkerColour = new(1f, 0.45f, 0.2f, 0.45f);
     static readonly Color OrbColour = new(1f, 0.85f, 0.35f);
     static readonly Color GoldenAppleColour = new(1f, 0.78f, 0.2f);
 
@@ -94,19 +92,45 @@ public static class NewtonFightSetup
     static GravityWell BuildWellPrefab()
     {
         var root = new GameObject("GravityWell");
+        var well = root.AddComponent<GravityWell>();
+        var so = new SerializedObject(well);
 
-        // Core sphere: the visible mass. Collider stripped — the well is a field,
-        // and a solid body at its centre would let the player stand on the very
-        // thing that is supposed to be pulling them in.
+        // Core sphere: the visible mass, drawn dark and glossy inside a bright
+        // halo — that reads as "heavy" in a way a glowing ball never did. Lit,
+        // not unlit: an unlit near-black sphere rendered as a flat hole in the
+        // screen, with no shape at all. Collider stripped — the well is a field, and a solid body at
+        // its centre would let the player stand on the very thing that is
+        // supposed to be pulling them in.
         var core = PrimitiveFactory.CreateSphere("Core", 1f, WellColour, root.transform);
         Object.DestroyImmediate(core.GetComponent<Collider>());
+        core.GetComponent<Renderer>().sharedMaterial =
+            NewtonFightArt.LitMaterial(VfxDir, "WellCore", new Color(0.1f, 0.04f, 0.2f), 0.92f,
+                                       emission: new Color(0.07f, 0.02f, 0.18f));
+
+        // Child of the core, so it breathes and ramps with it.
+        NewtonFightArt.Quad("Halo", core.transform,
+            NewtonFightArt.ParticleMaterial("WellHalo", NewtonFightArt.WellHalo(),
+                                            new Color(0.72f, 0.5f, 1f, 0.7f), additive: true),
+            2.2f, flat: false);
+
+        // The floor decal draws the field to scale, contour rings at the same
+        // distances as the ladder in GravityWell's class comment.
+        var fieldTexture = NewtonFightArt.WellField(so.FindProperty("coreRadius").floatValue,
+                                                    so.FindProperty("influenceRadius").floatValue,
+                                                    new[] { 3f, 5f, 8f });
+        var field = NewtonFightArt.Quad("Field", root.transform,
+            NewtonFightArt.ParticleMaterial("WellField", fieldTexture,
+                                            new Color(0.5f, 0.28f, 0.95f, 0.85f), additive: false,
+                                            twoSided: false),
+            1f, flat: true);
+        // Placeholder height; GravityWell drops it onto the real ground at spawn.
+        field.transform.localPosition = new Vector3(0f, 0.05f, 0f);
 
         var debris = BuildDebrisSwirl(root.transform);
 
-        var well = root.AddComponent<GravityWell>();
-        var so = new SerializedObject(well);
         so.FindProperty("core").objectReferenceValue = core.transform;
         so.FindProperty("debris").objectReferenceValue = debris;
+        so.FindProperty("field").objectReferenceValue = field.GetComponent<Renderer>();
         so.ApplyModifiedPropertiesWithoutUndo();
 
         var saved = SavePrefab(root, WellPrefabPath);
@@ -158,8 +182,10 @@ public static class NewtonFightSetup
         // sharedMaterial, not material: touching .material at edit time makes Unity
         // instantiate a throwaway copy and leak it into the scene, and the prefab
         // would then be saved pointing at that copy instead of the shared asset.
-        renderer.sharedMaterial =
-            SandboxVfxBuilder.BuildGlowMaterial(VfxDir, "WellDebris", WellColour);
+        // Textured: an untextured particle material draws every mote as a hard
+        // square. White tint — the purple comes from startColor above.
+        renderer.sharedMaterial = NewtonFightArt.ParticleMaterial(
+            "WellDebris", NewtonFightArt.Glow(), Color.white, additive: true);
 
         var emitOnPlay = ps.main;
         emitOnPlay.playOnAwake = true;
@@ -169,24 +195,19 @@ public static class NewtonFightSetup
 
     static Apple BuildApplePrefab()
     {
-        var root = PrimitiveFactory.CreateSphere("Apple", 0.55f, AppleColour);
-        // No collider: Apple integrates and tests distances itself, exactly as
-        // BallController does, so PhysX must not also get a vote.
-        Object.DestroyImmediate(root.GetComponent<Collider>());
-
-        var stalk = PrimitiveFactory.CreateBox("Stalk", new Vector3(0.05f, 0.18f, 0.05f),
-                                               new Color(0.35f, 0.25f, 0.15f), root.transform);
-        Object.DestroyImmediate(stalk.GetComponent<Collider>());
-        stalk.transform.localPosition = new Vector3(0f, 0.32f, 0f);
+        // No collider anywhere: Apple integrates and tests distances itself,
+        // exactly as BallController does, so PhysX must not also get a vote.
+        var root = new GameObject("Apple");
+        NewtonFightArt.AppleVisual(root.transform, 0.6f);
 
         var apple = root.AddComponent<Apple>();
 
-        // Both VFX slots were left null, which made annihilation invisible — two
-        // apples simply vanished. That event IS the phase-two mechanic: it is how
-        // the player learns wells bend apples into each other and that well-adjacent
-        // ground is the safer ground. With no feedback the lesson cannot land.
-        var splat = SandboxVfxBuilder.BuildCloudPuff(VfxDir, VfxDir + "/AppleSplat.prefab");
-        var cancel = SandboxVfxBuilder.BuildCloudPuff(VfxDir, VfxDir + "/AppleCancel.prefab");
+        // Two different effects, deliberately. Annihilation IS the phase-two
+        // mechanic — it is how the player learns wells bend apples into each
+        // other and that well-adjacent ground is the safer ground — so it must
+        // not look like the splat of an apple that got through.
+        var splat = NewtonFightArt.AppleSplat(VfxDir + "/AppleSplat.prefab");
+        var cancel = NewtonFightArt.AppleCancel(VfxDir + "/AppleCancel.prefab");
 
         var appleSo = new SerializedObject(apple);
         appleSo.FindProperty("splatEffect").objectReferenceValue = splat;
@@ -203,8 +224,15 @@ public static class NewtonFightSetup
     {
         var root = PrimitiveFactory.CreateSphere("InverseSquareOrb", 1f, OrbColour);
         Object.DestroyImmediate(root.GetComponent<Collider>());
+        // Hot white core inside a gold halo. The halo is a child, so it scales
+        // with the orb and the size-is-damage reading carries over to it.
         root.GetComponent<Renderer>().sharedMaterial =
-            SandboxVfxBuilder.BuildGlowMaterial(VfxDir, "InverseSquareOrb", OrbColour);
+            NewtonFightArt.UnlitMaterial("InverseSquareOrbCore", new Color(1f, 0.96f, 0.8f));
+        NewtonFightArt.Quad("Halo", root.transform,
+            NewtonFightArt.ParticleMaterial("OrbHalo", NewtonFightArt.Glow(),
+                                            new Color(OrbColour.r, OrbColour.g * 0.9f, OrbColour.b, 0.9f),
+                                            additive: true),
+            2.8f, flat: false);
         return SavePrefab(root, OrbPrefabPath);
     }
 
@@ -220,14 +248,15 @@ public static class NewtonFightSetup
         trigger.isTrigger = true;
         trigger.radius = 0.9f;
 
-        var visual = PrimitiveFactory.CreateSphere("Visual", 0.5f, GoldenAppleColour, root.transform);
-        Object.DestroyImmediate(visual.GetComponent<Collider>());
-        visual.GetComponent<Renderer>().sharedMaterial =
-            SandboxVfxBuilder.BuildGlowMaterial(VfxDir, "GoldenApple", GoldenAppleColour);
-        var stalk = PrimitiveFactory.CreateBox("Stalk", new Vector3(0.05f, 0.16f, 0.05f),
-                                               new Color(0.35f, 0.25f, 0.15f), visual.transform);
-        Object.DestroyImmediate(stalk.GetComponent<Collider>());
-        stalk.transform.localPosition = new Vector3(0f, 0.6f, 0f);
+        // The same apple the barrage throws, gilded — so the reward is visibly
+        // the thing the fight was made of.
+        var visual = new GameObject("Visual");
+        visual.transform.SetParent(root.transform, false);
+        // Lit with a gold emission rather than flat unlit: unlit, the apple's
+        // facets vanished and it read as a yellow disc.
+        NewtonFightArt.AppleVisual(visual.transform, 0.55f,
+            NewtonFightArt.LitMaterial(VfxDir, "GoldenAppleLit", GoldenAppleColour, 0.8f,
+                                       emission: GoldenAppleColour * 0.35f));
 
         var lightGo = new GameObject("Glow");
         lightGo.transform.SetParent(root.transform, false);
@@ -247,12 +276,37 @@ public static class NewtonFightSetup
         return SavePrefab(root, RewardPrefabPath);
     }
 
+    /// <summary>Diameter of the apple telegraph: twice the apple's hit radius
+    /// plus the player's body radius (0.55 + 0.45), so standing outside the
+    /// ring really is standing outside the hit. The old slab was 1.3 m and
+    /// under-promised the danger by a third.</summary>
+    const float MarkerDiameter = 2f;
+
     static GameObject BuildMarkerPrefab()
     {
-        var root = PrimitiveFactory.CreateBox("AppleImpactMarker",
-                                              new Vector3(1.3f, 0.02f, 1.3f),
-                                              MarkerColour);
-        Object.DestroyImmediate(root.GetComponent<Collider>());
+        var root = new GameObject("AppleImpactMarker");
+        // Scaled flat in XZ on the root, so the ImpactMarker can drive the disc
+        // as a 0..1 fraction of the ring.
+        root.transform.localScale = new Vector3(MarkerDiameter, 1f, MarkerDiameter);
+
+        var fillMat = NewtonFightArt.ParticleMaterial("MarkerFill", NewtonFightArt.Disc(),
+                                                      new Color(0.7f, 0.1f, 0.06f, 0.45f), additive: false);
+        var ringMat = NewtonFightArt.ParticleMaterial("MarkerRing", NewtonFightArt.TargetRing(),
+                                                      Color.white, additive: false);
+        // Ring over disc, whatever the camera distance sorting decides.
+        fillMat.renderQueue = 3000;
+        ringMat.renderQueue = 3001;
+
+        var fill = NewtonFightArt.Quad("Fill", root.transform, fillMat, 1f, flat: true);
+        var ring = NewtonFightArt.Quad("Ring", root.transform, ringMat, 1f, flat: true);
+        ring.transform.localPosition = new Vector3(0f, 0.01f, 0f);
+
+        var marker = root.AddComponent<ImpactMarker>();
+        var so = new SerializedObject(marker);
+        so.FindProperty("fill").objectReferenceValue = fill.transform;
+        so.FindProperty("ring").objectReferenceValue = ring.GetComponent<Renderer>();
+        so.ApplyModifiedPropertiesWithoutUndo();
+
         return SavePrefab(root, MarkerPrefabPath);
     }
 
@@ -317,12 +371,22 @@ public static class NewtonFightSetup
         line.enabled = false;
         // sharedMaterial for the same reason as the debris renderer — with .material
         // every re-run of this menu item leaked another instance into the scene.
-        line.sharedMaterial = SandboxVfxBuilder.BuildGlowMaterial(VfxDir, "FluxionBeam",
-                                                            new Color(0.3f, 0.7f, 1f));
+        // White: the beam's own cool-to-hot ramp arrives as vertex colour.
+        line.sharedMaterial = NewtonFightArt.ParticleMaterial(
+            "FluxionBeam", NewtonFightArt.BeamStreak(), Color.white, additive: true);
+        // Tiled at 4 m a repeat, so the streaks keep their size at any range
+        // and FluxionBeam can scroll them in metres.
+        line.textureMode = LineTextureMode.Tile;
+        line.textureScale = new Vector2(0.25f, 1f);
+        line.numCapVertices = 4;
+        line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        var impact = NewtonFightArt.BeamImpact(boss.transform);
 
         var beamSo = new SerializedObject(beam);
         beamSo.FindProperty("muzzle").objectReferenceValue = muzzle;
         beamSo.FindProperty("line").objectReferenceValue = line;
+        beamSo.FindProperty("impact").objectReferenceValue = impact;
         beamSo.ApplyModifiedPropertiesWithoutUndo();
 
         var volley = boss.AddComponent<InverseSquareVolley>();
@@ -357,8 +421,9 @@ public static class NewtonFightSetup
         if (existing != null) Object.DestroyImmediate(existing);
     }
 
-    /// <summary>Two bars: the player's bottom-left with its grey regain region,
-    /// and Newton's across the top.</summary>
+    /// <summary>Two bars — the player's bottom-left with its grey regain region
+    /// and a number, Newton's across the top under his name with a notch where
+    /// phase two begins — plus the bark line and the damage numbers.</summary>
     static void BuildHud(ChibiLocomotion player, GameObject boss)
     {
         var canvasGo = GameObject.Find("FightHUD");
@@ -373,17 +438,46 @@ public static class NewtonFightSetup
             scaler.referenceResolution = new Vector2(1920f, 1080f);
         }
 
-        BuildBar(canvasGo.transform, "PlayerHealthBar", player.GetComponent<Health>(),
-                 new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(40f, 40f),
-                 new Vector2(520f, 34f), new Color(0.35f, 0.85f, 0.45f));
+        var style = new BarStyle
+        {
+            Mask = NewtonFightArt.BarMask(),
+            Frame = NewtonFightArt.BarFrame(),
+            Fill = NewtonFightArt.BarFill(),
+            Font = NewtonFightArt.Font("Oswald Bold SDF"),
+        };
+        style.FontMaterial = NewtonFightArt.OutlinedFontMaterial(style.Font, "HudLabel", 0.2f);
 
-        BuildBar(canvasGo.transform, "BossHealthBar", boss.GetComponent<Health>(),
-                 new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -50f),
-                 new Vector2(900f, 22f), new Color(0.85f, 0.3f, 0.35f));
+        // Damage numbers first, so they draw under the bars rather than over them.
+        BuildDamageNumbers(canvasGo.transform, player.GetComponent<Health>(), boss.GetComponent<Health>());
+
+        var playerBar = BuildBar(canvasGo.transform, "PlayerHealthBar", player.GetComponent<Health>(), style,
+                                 new Vector2(0f, 0f), new Vector2(48f, 48f), new Vector2(520f, 30f),
+                                 fillColour: new Color(0.38f, 0.88f, 0.46f),
+                                 frameColour: new Color(0.78f, 0.8f, 0.86f),
+                                 recoverable: true);
+        AddValueText(playerBar, style);
+
+        var bossBar = BuildBar(canvasGo.transform, "BossHealthBar", boss.GetComponent<Health>(), style,
+                               new Vector2(0.5f, 1f), new Vector2(0f, -70f), new Vector2(900f, 24f),
+                               fillColour: new Color(0.9f, 0.28f, 0.3f),
+                               frameColour: new Color(1f, 0.8f, 0.42f),
+                               recoverable: false);
+        AddNamePlate(bossBar, style, "SIR ISAAC NEWTON");
+
+        var newton = boss.GetComponent<NewtonBoss>();
+        if (newton != null)
+            AddNotch(bossBar, new SerializedObject(newton).FindProperty("phaseTwoAt").floatValue);
 
         BuildBarkLine(canvasGo.transform, boss.GetComponent<NewtonBarks>());
 
         EditorUtility.SetDirty(canvasGo);
+    }
+
+    struct BarStyle
+    {
+        public Sprite Mask, Frame, Fill;
+        public TMP_FontAsset Font;
+        public Material FontMaterial;
     }
 
     /// <summary>Newton's subtitle line, just under his health bar.</summary>
@@ -398,7 +492,7 @@ public static class NewtonFightSetup
         var rect = (RectTransform)go.transform;
         rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
         rect.pivot = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = new Vector2(0f, -84f);
+        rect.anchoredPosition = new Vector2(0f, -108f);
         rect.sizeDelta = new Vector2(1400f, 80f);
 
         var text = go.AddComponent<TextMeshProUGUI>();
@@ -417,9 +511,21 @@ public static class NewtonFightSetup
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
-    static void BuildBar(Transform parent, string name, Health source,
-                         Vector2 anchorMin, Vector2 anchorMax, Vector2 offset,
-                         Vector2 size, Color fillColour)
+    /// <summary>
+    /// One bar, painted back to front:
+    ///
+    ///   Well (rounded track, and the Mask that rounds everything inside it)
+    ///     Trail → Recoverable → Current → Flash
+    ///   Frame (hollow bevel, 5 px proud of the well)
+    ///
+    /// The fills are plain gradient strips; the Mask is what gives them the
+    /// rounded ends. A Filled image cannot be 9-sliced, so a rounded fill sprite
+    /// would have its corners stretched into ovals and then cut off square at
+    /// the fill edge.
+    /// </summary>
+    static RectTransform BuildBar(Transform parent, string name, Health source, BarStyle style,
+                                  Vector2 anchor, Vector2 offset, Vector2 size,
+                                  Color fillColour, Color frameColour, bool recoverable)
     {
         var existing = parent.Find(name);
         if (existing != null) Object.DestroyImmediate(existing.gameObject);
@@ -427,35 +533,177 @@ public static class NewtonFightSetup
         var root = new GameObject(name, typeof(RectTransform));
         root.transform.SetParent(parent, false);
         var rect = (RectTransform)root.transform;
-        rect.anchorMin = anchorMin;
-        rect.anchorMax = anchorMax;
-        rect.pivot = new Vector2(anchorMin.x, anchorMin.y);
+        rect.anchorMin = anchor;
+        rect.anchorMax = anchor;
+        rect.pivot = anchor;
         rect.anchoredPosition = offset;
         rect.sizeDelta = size;
 
-        // Track, grey, then solid — painted back to front.
-        AddImage(rect, "Track", new Color(0.08f, 0.08f, 0.1f, 0.85f), out _);
-        AddImage(rect, "Recoverable", new Color(0.75f, 0.75f, 0.78f, 0.9f),
-                 out Image recoverable);
-        AddImage(rect, "Current", fillColour, out Image current);
+        var well = AddImage(rect, "Well", new Color(0.06f, 0.05f, 0.08f, 0.92f), style.Mask, Image.Type.Sliced);
+        well.gameObject.AddComponent<Mask>().showMaskGraphic = true;
 
-        foreach (var img in new[] { recoverable, current })
-        {
-            img.type = Image.Type.Filled;
-            img.fillMethod = Image.FillMethod.Horizontal;
-            img.fillOrigin = (int)Image.OriginHorizontal.Left;
-            img.fillAmount = 1f;
-        }
+        var trail = AddFill(well.rectTransform, "Trail", new Color(1f, 0.93f, 0.72f), style.Fill);
+        Image recoverableFill = recoverable
+            ? AddFill(well.rectTransform, "Recoverable", new Color(0.66f, 0.66f, 0.7f), style.Fill)
+            : null;
+        var current = AddFill(well.rectTransform, "Current", fillColour, style.Fill);
+
+        var flash = AddImage(well.rectTransform, "Flash", new Color(1f, 1f, 1f, 0f), style.Fill, Image.Type.Simple);
+
+        var frame = AddImage(rect, "Frame", frameColour, style.Frame, Image.Type.Sliced);
+        frame.rectTransform.offsetMin = new Vector2(-5f, -5f);
+        frame.rectTransform.offsetMax = new Vector2(5f, 5f);
 
         var view = root.AddComponent<HealthBarView>();
         var so = new SerializedObject(view);
         so.FindProperty("source").objectReferenceValue = source;
         so.FindProperty("currentFill").objectReferenceValue = current;
-        so.FindProperty("recoverableFill").objectReferenceValue = recoverable;
+        so.FindProperty("recoverableFill").objectReferenceValue = recoverableFill;
+        so.FindProperty("trailFill").objectReferenceValue = trail;
+        so.FindProperty("flash").objectReferenceValue = flash;
+        // Only the player's bar should panic. A boss bar flashing red at 25%
+        // would read as a warning to the person winning.
+        if (!recoverable) so.FindProperty("lowThreshold").floatValue = 0f;
+        so.ApplyModifiedPropertiesWithoutUndo();
+        return rect;
+    }
+
+    static Image AddFill(RectTransform parent, string name, Color colour, Sprite sprite)
+    {
+        var img = AddImage(parent, name, colour, sprite, Image.Type.Filled);
+        img.fillMethod = Image.FillMethod.Horizontal;
+        img.fillOrigin = (int)Image.OriginHorizontal.Left;
+        img.fillAmount = 1f;
+        return img;
+    }
+
+    /// <summary>"73 / 100" inside the right end of the player's bar.</summary>
+    static void AddValueText(RectTransform bar, BarStyle style)
+    {
+        var text = AddText(bar, "Value", style, 20f, TextAlignmentOptions.Right);
+        var rect = text.rectTransform;
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = new Vector2(0f, 0f);
+        rect.offsetMax = new Vector2(-12f, 0f);
+        text.color = new Color(1f, 1f, 1f, 0.95f);
+
+        var so = new SerializedObject(bar.GetComponent<HealthBarView>());
+        so.FindProperty("valueText").objectReferenceValue = text;
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
-    static void AddImage(RectTransform parent, string name, Color colour, out Image image)
+    /// <summary>The boss's name, letter-spaced over the top of his bar.</summary>
+    static void AddNamePlate(RectTransform bar, BarStyle style, string label)
+    {
+        var text = AddText(bar, "Name", style, 30f, TextAlignmentOptions.Bottom);
+        text.text = label;
+        text.characterSpacing = 12f;
+        text.color = new Color(1f, 0.92f, 0.76f);
+        var rect = text.rectTransform;
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(0.5f, 0f);
+        rect.anchoredPosition = new Vector2(0f, 8f);
+        rect.sizeDelta = new Vector2(0f, 40f);
+    }
+
+    /// <summary>A dark tick across the bar where phase two starts, so the
+    /// player can see the barrage coming rather than be surprised by it.
+    /// Inside the well, so the mask clips it to the bar's shape.</summary>
+    static void AddNotch(RectTransform bar, float at)
+    {
+        var well = bar.Find("Well") as RectTransform;
+        if (well == null) return;
+        var notch = new GameObject("PhaseNotch", typeof(RectTransform), typeof(Image));
+        notch.transform.SetParent(well, false);
+        // Above the fills, below the flash.
+        notch.transform.SetSiblingIndex(well.Find("Flash").GetSiblingIndex());
+        var rect = (RectTransform)notch.transform;
+        rect.anchorMin = new Vector2(at, 0f);
+        rect.anchorMax = new Vector2(at, 1f);
+        rect.sizeDelta = new Vector2(4f, 0f);
+        var img = notch.GetComponent<Image>();
+        img.color = new Color(0.08f, 0.04f, 0.05f, 0.85f);
+        img.raycastTarget = false;
+    }
+
+    static TextMeshProUGUI AddText(RectTransform parent, string name, BarStyle style,
+                                   float size, TextAlignmentOptions alignment)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        var text = go.AddComponent<TextMeshProUGUI>();
+        text.font = style.Font;
+        text.fontSharedMaterial = style.FontMaterial;
+        text.fontSize = size;
+        text.alignment = alignment;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.raycastTarget = false;
+        return text;
+    }
+
+    /// <summary>
+    /// The damage-number layer: a full-screen rect holding one hidden template
+    /// that <see cref="DamageNumbers"/> clones into its pool. Newton's numbers
+    /// get the weak-point styling; the player's merge over a longer window,
+    /// because nearly everything that hurts the player hurts every frame.
+    /// </summary>
+    static void BuildDamageNumbers(Transform canvas, Health player, Health boss)
+    {
+        const string name = "DamageNumbers";
+        var existing = canvas.Find(name);
+        if (existing != null) Object.DestroyImmediate(existing.gameObject);
+
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(canvas, false);
+        go.transform.SetAsFirstSibling();
+        var rect = (RectTransform)go.transform;
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+
+        var font = NewtonFightArt.Font("Bangers SDF");
+        var templateGo = new GameObject("Template", typeof(RectTransform));
+        templateGo.transform.SetParent(rect, false);
+        var template = templateGo.AddComponent<TextMeshProUGUI>();
+        template.font = font;
+        template.fontSharedMaterial = NewtonFightArt.OutlinedFontMaterial(font, "DamageNumber", 0.28f);
+        template.fontSize = 46f;
+        template.alignment = TextAlignmentOptions.Center;
+        template.textWrappingMode = TextWrappingModes.NoWrap;
+        template.raycastTarget = false;
+        template.text = "0";
+        template.rectTransform.sizeDelta = new Vector2(300f, 90f);
+
+        var numbers = go.AddComponent<DamageNumbers>();
+        var so = new SerializedObject(numbers);
+        so.FindProperty("canvas").objectReferenceValue = rect;
+        so.FindProperty("template").objectReferenceValue = template;
+        so.FindProperty("baseFontSize").floatValue = 46f;
+
+        var sources = so.FindProperty("sources");
+        sources.arraySize = 2;
+        WriteSource(sources.GetArrayElementAtIndex(0), boss, Color.white,
+                    showRangeScaling: true, minHeight: 1.8f, mergeWindow: 0.1f);
+        WriteSource(sources.GetArrayElementAtIndex(1), player, new Color(1f, 0.36f, 0.3f),
+                    showRangeScaling: false, minHeight: 1.5f, mergeWindow: 0.3f);
+        so.ApplyModifiedPropertiesWithoutUndo();
+    }
+
+    static void WriteSource(SerializedProperty element, Health health, Color colour,
+                            bool showRangeScaling, float minHeight, float mergeWindow)
+    {
+        element.FindPropertyRelative("health").objectReferenceValue = health;
+        element.FindPropertyRelative("colour").colorValue = colour;
+        element.FindPropertyRelative("permanentColour").colorValue = new Color(0.45f, 0.8f, 1f);
+        element.FindPropertyRelative("showRangeScaling").boolValue = showRangeScaling;
+        element.FindPropertyRelative("minHeight").floatValue = minHeight;
+        element.FindPropertyRelative("mergeWindow").floatValue = mergeWindow;
+    }
+
+    static Image AddImage(RectTransform parent, string name, Color colour, Sprite sprite, Image.Type type)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image));
         go.transform.SetParent(parent, false);
@@ -464,25 +712,22 @@ public static class NewtonFightSetup
         rect.anchorMax = Vector2.one;
         rect.offsetMin = Vector2.zero;
         rect.offsetMax = Vector2.zero;
-        image = go.GetComponent<Image>();
+        var image = go.GetComponent<Image>();
         image.color = colour;
+        image.type = type;
 
-        // A sprite is NOT optional here, even though the bar is a plain rectangle.
-        // Image.OnPopulateMesh bails to a simple quad when sprite is null and never
-        // reaches the switch on Image.Type — so Type.Filled and every fillAmount
-        // write would be silently ignored and the bars would sit frozen at full.
-        //
-        // GetBuiltinExtraResource, not Resources.GetBuiltinResource: the UI skin
-        // lives in Unity's builtin EXTRA resources, and the plain call returns null
-        // for these paths. It fails silently — you get a null sprite, no exception,
-        // and a frozen bar that looks like a data-binding bug rather than a missing
-        // asset. Asserted below so it can never fail quietly again.
-        image.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        // A sprite is NOT optional here, even for a plain fill. Image.OnPopulateMesh
+        // bails to a simple quad when sprite is null and never reaches the switch on
+        // Image.Type — so Type.Filled and every fillAmount write would be silently
+        // ignored and the bars would sit frozen at full. Asserted so a failed
+        // texture generation can never pass for a data-binding bug.
+        image.sprite = sprite;
         if (image.sprite == null)
-            Debug.LogError("Could not load the builtin UI sprite. Health bars will " +
-                           "render as solid blocks and will not track damage — " +
-                           "Image ignores Type.Filled entirely without a sprite.");
+            Debug.LogError($"Health bar sprite for '{name}' failed to generate. The bar " +
+                           "will not track damage — Image ignores Type.Filled entirely " +
+                           "without a sprite.");
         image.raycastTarget = false;
+        return image;
     }
 
     static GameObject SavePrefab(GameObject instance, string path)

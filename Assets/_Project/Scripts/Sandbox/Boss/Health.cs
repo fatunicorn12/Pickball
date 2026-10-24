@@ -78,6 +78,17 @@ namespace Pickleball.Sandbox
         /// </summary>
         public Func<float, Vector3, float> IncomingDamageFilter;
 
+        /// <summary>What <see cref="IncomingDamageFilter"/> did to the most recent
+        /// hit, as applied ÷ raw: above 1 the hit was amplified (Newton's close-range
+        /// weak point), below 1 it was resisted. Valid inside a <see cref="Hurt"/>
+        /// handler, so feedback can say WHY a number is big without knowing who
+        /// installed the filter.</summary>
+        public float LastHitScale { get; private set; } = 1f;
+
+        /// <summary>Whether the most recent hit fed the grey pool. False for the
+        /// permanent kind — the Fluxion Beam — which UI shows differently.</summary>
+        public bool LastHitRecoverable { get; private set; } = true;
+
         float _lastHitTime = -999f;
         bool _deathAnnounced;
 
@@ -103,6 +114,7 @@ namespace Pickleball.Sandbox
         {
             if (amount <= 0f || IsDead) return;
 
+            float raw = amount;
             if (IncomingDamageFilter != null) amount = IncomingDamageFilter(amount, at);
             if (amount <= 0f) return;
 
@@ -126,6 +138,8 @@ namespace Pickleball.Sandbox
             // safety check and is provably inert is worse than no line at all.
 
             _lastHitTime = Time.time;
+            LastHitScale = amount / raw;
+            LastHitRecoverable = recoverable;
             Hurt?.Invoke(applied, at);
             Changed?.Invoke(this);
 

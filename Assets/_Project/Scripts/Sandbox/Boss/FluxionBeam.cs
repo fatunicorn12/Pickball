@@ -83,6 +83,11 @@ namespace Pickleball.Sandbox
         [SerializeField] private float chargeWidth = 0.06f;
         [SerializeField] private float fireWidth = 0.4f;
 
+        [Tooltip("Metres per second the beam texture streams away from Newton. " +
+                 "Slow while charging, full speed once it is live, so the change " +
+                 "of state is visible in the motion as well as the width.")]
+        [SerializeField] private float scrollSpeed = 14f;
+
         public bool IsFiring => _state == State.Firing;
         public bool IsActive => _state != State.Idle;
 
@@ -95,10 +100,16 @@ namespace Pickleball.Sandbox
         ChibiLocomotion _player;
         Health _playerHealth;
         float _speed;
+        float _scroll;
+        float _impactBaseSize = 1f;
+        MaterialPropertyBlock _block;
+        static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
 
         void Awake()
         {
             if (muzzle == null) muzzle = transform;
+            _block = new MaterialPropertyBlock();
+            if (impact != null) _impactBaseSize = impact.main.startSizeMultiplier;
             if (line != null)
             {
                 line.positionCount = 2;
@@ -131,7 +142,14 @@ namespace Pickleball.Sandbox
 
             if (_state == State.Charging)
             {
-                DrawBeam(chargeWidth, coolColour, 0f);
+                // The tell: the line widens and its flicker steadies as the charge
+                // completes, so "how long have I got" is readable off the line.
+                float progress = chargeTime > 0f ? Mathf.Clamp01(_stateTime / chargeTime) : 1f;
+                float flicker = Mathf.Lerp(0.45f, 1f, progress)
+                              * (0.8f + 0.2f * Mathf.Sin(_stateTime * 50f));
+                Color tell = coolColour;
+                tell.a *= flicker;
+                DrawBeam(chargeWidth * Mathf.Lerp(0.5f, 1.6f, progress), tell, 0f);
                 if (_stateTime >= chargeTime) EnterState(State.Firing);
                 return;
             }
@@ -231,14 +249,25 @@ namespace Pickleball.Sandbox
             line.startWidth = width;
             line.endWidth = width * 0.75f;
             line.startColor = colour;
-            line.endColor = new Color(colour.r, colour.g, colour.b, 0.35f);
+            line.endColor = new Color(colour.r, colour.g, colour.b, colour.a * 0.35f);
+
+            // Streams outward from the muzzle. A property block, not the shared
+            // material, so play mode never writes the offset into the asset.
+            _scroll += Time.deltaTime * scrollSpeed * (_state == State.Firing ? 1f : 0.2f)
+                       * line.textureScale.x;
+            _scroll %= 1f;
+            line.GetPropertyBlock(_block);
+            _block.SetVector(BaseMapStId, new Vector4(1f, 1f, -_scroll, 0f));
+            line.SetPropertyBlock(_block);
 
             if (impact == null) return;
             if (_state == State.Firing && HitsPlayer(out Vector3 point))
             {
                 impact.transform.position = point;
                 var main = impact.main;
-                main.startSizeMultiplier = Mathf.Lerp(0.3f, 1.4f, heat);
+                // Relative to the effect's authored size. Written as an absolute,
+                // it turned a spark effect into a 1.4 m white blob.
+                main.startSizeMultiplier = _impactBaseSize * Mathf.Lerp(0.5f, 1.8f, heat);
                 main.startColor = colour;
                 if (!impact.isPlaying) impact.Play();
             }

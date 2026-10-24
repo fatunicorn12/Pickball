@@ -82,6 +82,13 @@ namespace Pickleball.Sandbox
         [SerializeField] private Transform core;
         [SerializeField] private ParticleSystem debris;
 
+        [Tooltip("Flat decal on the floor drawing the field itself: contour rings " +
+                 "at fixed distances and a brightness that climbs as 1/r. Sized to " +
+                 "influenceRadius at runtime, so it always shows the real reach.")]
+        [SerializeField] private Renderer field;
+
+        [SerializeField] private float fieldSpinDegreesPerSecond = 28f;
+
         /// <summary>Every live well. Apples and any other field-sensitive body read
         /// this rather than each finding wells for itself.</summary>
         public static readonly List<GravityWell> Active = new();
@@ -94,6 +101,9 @@ namespace Pickleball.Sandbox
         public float Intensity { get; private set; }
 
         float _age;
+        Color _fieldColour = Color.white;
+        MaterialPropertyBlock _block;
+        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         ChibiLocomotion _player;
         Health _playerHealth;
 
@@ -112,6 +122,17 @@ namespace Pickleball.Sandbox
             // thing that is invisible with one well and ruinous with twelve.
             _player = FindFirstObjectByType<ChibiLocomotion>();
             if (_player != null) _playerHealth = _player.GetComponent<Health>();
+
+            if (field != null)
+            {
+                PlaceFieldOnGround();
+                // The decal is a unit quad: diameter, not radius.
+                field.transform.localScale = new Vector3(influenceRadius * 2f, influenceRadius * 2f, 1f);
+                _fieldColour = field.sharedMaterial != null && field.sharedMaterial.HasColor(BaseColorId)
+                    ? field.sharedMaterial.GetColor(BaseColorId)
+                    : Color.white;
+                _block = new MaterialPropertyBlock();
+            }
         }
 
         void Update()
@@ -137,6 +158,18 @@ namespace Pickleball.Sandbox
                 core.localScale = Vector3.one * (coreRadius * 2f * Intensity * pulse);
             }
 
+            if (field != null && _block != null)
+            {
+                // Fades in with the pull itself, so the floor never promises a
+                // field that is not yet acting.
+                field.transform.Rotate(Vector3.forward, fieldSpinDegreesPerSecond * dt, Space.Self);
+                var c = _fieldColour;
+                c.a *= Intensity;
+                field.GetPropertyBlock(_block);
+                _block.SetColor(BaseColorId, c);
+                field.SetPropertyBlock(_block);
+            }
+
             if (_player == null) return;
 
             Vector3 toCentre = transform.position - _player.transform.position;
@@ -152,6 +185,34 @@ namespace Pickleball.Sandbox
                     _playerHealth.Damage(coreDamagePerSecond * dt * Intensity,
                                          _player.transform.position);
             }
+        }
+
+        static readonly RaycastHit[] GroundHits = new RaycastHit[8];
+
+        /// <summary>
+        /// Drop the floor decal onto whatever is actually below the well.
+        ///
+        /// Wells spawn at Newton's own height, and the arena is not flat — in the
+        /// sandbox he stands well above the surrounding ground — so the decal
+        /// left at the well's centre hung in the air at eye level and, seen
+        /// edge-on, tinted the entire screen. The player's own collider is
+        /// skipped so a well dropped beside him cannot land its decal on his head.
+        /// </summary>
+        void PlaceFieldOnGround()
+        {
+            Vector3 from = transform.position + Vector3.up * 0.5f;
+            int count = Physics.RaycastNonAlloc(from, Vector3.down, GroundHits, 30f,
+                                                ~0, QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            Vector3 ground = Vector3.zero;
+            for (int i = 0; i < count; i++)
+            {
+                var hit = GroundHits[i];
+                if (hit.collider.GetComponentInParent<ChibiLocomotion>() != null) continue;
+                if (hit.distance < best) { best = hit.distance; ground = hit.point; }
+            }
+            if (best < float.MaxValue)
+                field.transform.position = ground + Vector3.up * 0.05f;
         }
 
         /// <summary>
