@@ -289,8 +289,8 @@ namespace Pickleball.Sandbox
         {
             if (_beams.Count == 0) return;
 
-            var meshIds = new NativeArray<int>(_beams.Count, Allocator.TempJob);
-            for (int i = 0; i < _beams.Count; i++) meshIds[i] = _beams[i].Mesh.GetInstanceID();
+            var meshIds = new NativeArray<EntityId>(_beams.Count, Allocator.TempJob);
+            for (int i = 0; i < _beams.Count; i++) meshIds[i] = _beams[i].Mesh.GetEntityId();
             new BakeJob { MeshIds = meshIds }.Schedule(meshIds.Length, 1).Complete();
             meshIds.Dispose();
 
@@ -317,7 +317,7 @@ namespace Pickleball.Sandbox
 
         struct BakeJob : IJobParallelFor
         {
-            [ReadOnly] public NativeArray<int> MeshIds;
+            [ReadOnly] public NativeArray<EntityId> MeshIds;
             // convex: false, and default cooking options, to match the
             // MeshColliders the cooked data is for. A mismatch silently cooks
             // again on assignment.
