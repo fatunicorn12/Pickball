@@ -1,80 +1,46 @@
+using System;
 using System.Collections.Generic;
+using Pickleball.Sandbox.Combat;
 using UnityEngine;
-using UnityEngine.InputSystem;
+using Object = UnityEngine.Object;
 
 namespace Pickleball.Sandbox
 {
     /// <summary>
-    /// Castle-Crashers-style combo melee. Left click swings; clicking again
-    /// inside a window near the end of the current swing chains into the next
-    /// attack instead of restarting the first.
+    /// The sword's gameplay: which swing plays next, when its blade is live,
+    /// and what it hits. Kingdom-Hearts-style — the chain grows as the player
+    /// learns abilities, the air has its own chain, finishers cap both.
     ///
-    /// The whole thing is driven from one timer rather than read back off the
-    /// Animator. Animator state info is awkward to query reliably the frame a
-    /// transition happens, and every window here (when the blade is live, when
-    /// the chain can be extended) needs frame-accurate timing. Clip durations
-    /// are written in by the setup script from the real clips — divided by each
-    /// state's playback speed — so the timer and the animation stay in step.
+    /// What to swing is decided by <see cref="ComboResolver"/> from data (a
+    /// <see cref="SwordMoveset"/> plus the learned <see cref="SwordAbilities"/>),
+    /// so a new slash is an asset, not a code change. See
+    /// Docs/Systems/SwordAbilities.md.
     ///
-    /// Attacking neither moves nor stops the character. Two separate things had
-    /// to go for that:
-    ///  - the scripted forward lunge, applied every frame of the active window,
-    ///    accumulated far faster than momentum drag could shed it and slid the
-    ///    player metres per swing (compounding across a chain, since nothing
-    ///    reset it between hits);
-    ///  - the attacks were full-body states on the base layer, so a swing
-    ///    replaced the run outright and froze the legs mid-stride.
-    /// The combo now lives on an upper-body-masked layer that this component
-    /// fades in for the duration of a swing, so the legs carry on running and
-    /// steering is never taken away.
+    /// This component only simulates. It reads no input (<see cref="SwordInput"/>
+    /// calls <see cref="QueueAttack"/>), plays no animation and spawns no
+    /// effects: it raises <see cref="SwingStarted"/>, <see cref="HitLanded"/>,
+    /// <see cref="BurstReleased"/> and friends, and SwordAnimatorDriver and
+    /// SwordEffects listen. Movement is read through <see cref="ICombatMovement"/>
+    /// only.
+    ///
+    /// Two rules carried over from the original combo, because breaking either
+    /// brought back a bug:
+    ///  - Timing is owned by <see cref="SwingTimeline"/>, not read back off the
+    ///    Animator, which is unreliable on the frame a transition happens.
+    ///  - Swinging neither moves nor stops the character. Steps may add a
+    ///    one-off lunge impulse, never a per-frame push: a per-frame lunge once
+    ///    slid the player metres per swing.
     /// </summary>
     public class MeleeCombat : MonoBehaviour
     {
-        [System.Serializable]
-        public class Attack
-        {
-            [Tooltip("Name of the Attack-layer state that plays this swing (the " +
-                     "same-named trigger also exists on the controller). The state " +
-                     "is crossfaded into directly — see MeleeCombat.Begin.")]
-            public string trigger = "Attack1";
-            [Tooltip("How long the swing lasts on screen. Filled in by the setup " +
-                     "as the real clip's length divided by the state's playback " +
-                     "speed, so it tracks the sped-up animation.")]
-            public float duration = 0.6f;
+        [Header("Moveset")]
+        [Tooltip("The base chains (ground, air and their default finishers). " +
+                 "Created by Tools ▸ Pickleball ▸ Setup Sword Abilities.")]
+        [SerializeField] private SwordMoveset moveset;
 
-            [Header("Windows (fraction of duration)")]
-            [Tooltip("When the blade goes live.")]
-            [Range(0f, 1f)] public float activeStart = 0.25f;
-            [Tooltip("When the blade stops hitting.")]
-            [Range(0f, 1f)] public float activeEnd = 0.6f;
-            [Tooltip("Earliest point a click can chain to the next attack. " +
-                     "Opening this before the blade finishes is what makes the " +
-                     "chain feel responsive rather than turn-based.")]
-            [Range(0f, 1f)] public float comboOpen = 0.35f;
-            [Tooltip("After this the chain is dropped and we return to idle.")]
-            [Range(0f, 1f)] public float comboClose = 0.95f;
-
-            [Header("Feel")]
-            public float damage = 12f;
-            public float knockback = 4f;
-            [Tooltip("Pops the target upward so following hits can juggle it.")]
-            public bool launcher;
-            [Tooltip("Seconds of freeze on contact. Bigger for heavier hits.")]
-            public float hitstop = 0.05f;
-        }
-
-        [Header("Chain")]
-        [SerializeField] private Attack[] chain =
-        {
-            new() { trigger = "Attack1", damage = 10f },
-            new() { trigger = "Attack2", damage = 12f },
-            new() { trigger = "Attack3", damage = 14f,
-                    launcher = true, knockback = 3f, hitstop = 0.07f },
-            new() { trigger = "Attack4", damage = 20f,
-                    knockback = 8f, hitstop = 0.1f },
-        };
-        [SerializeField] private Attack airAttack =
-            new() { trigger = "AirAttack", damage = 12f, knockback = 3f };
+        [Tooltip("Learned abilities layered onto the moveset. Found on this " +
+                 "object if left empty.")]
+        [SerializeField] private SwordAbilities abilities;
 
         [Header("Blade")]
         [Tooltip("Base of the blade — the pivot end.")]
@@ -82,221 +48,287 @@ namespace Pickleball.Sandbox
         [Tooltip("Tip of the blade. The swept volume is measured between the " +
                  "two, across frames.")]
         [SerializeField] private Transform bladeTip;
-        [SerializeField] private float bladeRadius = 0.18f;
+        [Tooltip("Thickness of the hit capsule around the blade, in metres. " +
+                 "Bigger is more forgiving and less honest.")]
+        [Min(0.01f)] [SerializeField] private float bladeRadius = 0.18f;
+        [Tooltip("Layers the blade and bursts can hit.")]
         [SerializeField] private LayerMask hittable = ~0;
 
         [Header("Wiring")]
-        [SerializeField] private Animator animator;
-        [SerializeField] private ChibiLocomotion locomotion;
-        [SerializeField] private BladeTrail trail;
-        [SerializeField] private SandboxOrbitCamera cameraRig;
-        [SerializeField] private ParticleSystem impactEffect;
+        [Tooltip("Component implementing ICombatMovement (and ICombatImpulses " +
+                 "for lunges) — normally ChibiMovementAdapter. Found on this " +
+                 "object if left empty.")]
+        [SerializeField] private MonoBehaviour movementSource;
+        [Tooltip("Attack button reader. Found on this object if left empty.")]
+        [SerializeField] private SwordInput input;
+        [Tooltip("Optional. Supplies the target distance that openers and " +
+                 "ranged finishers test against.")]
+        [SerializeField] private LockOnTargeting lockOn;
 
-        [Header("Layer")]
-        [Tooltip("Masked upper-body layer the combo states live on. Must match " +
-                 "WeaponSetup.AttackLayer.")]
-        [SerializeField] private string attackLayer = "Attack";
-        [Tooltip("Layer weight fade, in weight per second. Fast enough that the " +
-                 "swing does not visibly ramp in, slow enough not to pop.")]
-        [SerializeField] private float layerFadeSpeed = 12f;
-        [Tooltip("Crossfade into the first swing of a chain (or the air attack), seconds.")]
-        [SerializeField] private float firstSwingBlend = 0.06f;
-        [Tooltip("Crossfade between chained swings, seconds.")]
-        [SerializeField] private float chainBlend = 0.1f;
+        [Header("Feel")]
+        [Tooltip("Seconds a press made while unable to swing (mid-dash, in " +
+                 "hitstop after a swing ended) is remembered. Without it, pressing " +
+                 "a hair early simply does nothing.")]
+        [Range(0f, 0.5f)] [SerializeField] private float pressBufferSeconds = 0.15f;
+        [Tooltip("Seconds off the ground before the player counts as airborne " +
+                 "for chain bookkeeping. Absorbs one-frame grounded flicker on " +
+                 "slopes, which would otherwise reset a ground chain mid-combo.")]
+        [Range(0f, 0.3f)] [SerializeField] private float airborneGraceSeconds = 0.08f;
 
-        static readonly int ComboHash = Animator.StringToHash("Combo");
+        /// <summary>A step has started. Raised for every step, chained or not.</summary>
+        public event Action<ResolvedStep> SwingStarted;
 
-        InputAction _attack;
-        readonly HashSet<Object> _alreadyHit = new();
+        /// <summary>The chain is over — the last swing ended without a follow-up.
+        /// Not raised when one step chains into the next.</summary>
+        public event Action<ResolvedStep> ChainEnded;
 
-        int _attackLayerIndex = -1;
-        bool _layerResolved;
-        float _layerWeight;
+        /// <summary>The blade started (true) or stopped (false) hitting.</summary>
+        public event Action<bool> BladeLiveChanged;
 
-        int _index = -1;              // -1 = not attacking
-        bool _airborneAttack;
-        float _time;
-        bool _queued;
+        /// <summary>A hit connected and its damage has been dealt.</summary>
+        public event Action<MeleeHitReport> HitLanded;
+
+        /// <summary>A step's area burst was released.</summary>
+        public event Action<BurstReport> BurstReleased;
+
+        /// <summary>True while a swing is playing. ChibiLocomotion reads this to
+        /// square up to a lock-on target mid-combo.</summary>
+        public bool IsAttacking => _timeline != null && _timeline.IsRunning;
+
+        /// <summary>True while a connecting hit has frozen the action.</summary>
+        public bool IsInHitstop => _hitstopLeft > 0f;
+
+        /// <summary>The swing playing now; invalid when idle.</summary>
+        public ResolvedStep Current => IsAttacking ? _current : default;
+
+        /// <summary>Progress through the current swing, 0-1.</summary>
+        public float SwingProgress => IsAttacking ? _timeline.Normalized : 0f;
+
+        public SwordMoveset Moveset => moveset;
+
+        const int OverlapCapacity = 16;
+        const int BurstCapacity = 4;
+
+        ICombatMovement _movement;
+        ICombatImpulses _impulses;
+
+        // Runtime-built state is (re)created in OnEnable, never in readonly
+        // initializers, so a script reload in Play mode rebuilds it cleanly.
+        ComboResolver _resolver;
+        ComboProgress _progress;
+        SwingTimeline _timeline;
+        HashSet<Object> _alreadyHit;
+        Collider[] _overlap;
+        ActiveBurst[] _bursts;
+
+        ResolvedStep _current;
         float _hitstopLeft;
+        bool _queued;
+        float _startBufferedUntil = -1f;
+        float _airborneFor;
+        bool _airborne;
         Vector3 _prevTip, _prevBase;
         bool _hasPrev;
 
-        public bool IsAttacking => _index >= 0 || _airborneAttack;
-
-        Attack Current => _airborneAttack ? airAttack
-                        : (_index >= 0 && _index < chain.Length ? chain[_index] : null);
+        /// <summary>One ring in flight. Pooled: a finisher every second must not
+        /// allocate.</summary>
+        sealed class ActiveBurst
+        {
+            public bool Active;
+            public ResolvedStep Placement;
+            public AreaBurst Burst;
+            public Vector3 Centre;
+            public float Elapsed;
+            public readonly HashSet<Object> Struck = new();
+        }
 
         void Awake()
         {
-            if (animator == null) animator = GetComponentInChildren<Animator>();
-            if (locomotion == null) locomotion = GetComponent<ChibiLocomotion>();
-            if (cameraRig == null && Camera.main != null)
-                cameraRig = Camera.main.GetComponent<SandboxOrbitCamera>();
+            if (abilities == null) abilities = GetComponent<SwordAbilities>();
+            if (input == null) input = GetComponent<SwordInput>();
+            if (lockOn == null) lockOn = GetComponent<LockOnTargeting>();
+            ResolveMovement();
         }
 
-        /// <summary>
-        /// Index of the masked attack layer, resolved on first use.
-        ///
-        /// Deliberately NOT read in Awake: the Animator is on the model child
-        /// and this component is on the root, so the root wakes first and the
-        /// Animator has not built its playable graph yet. GetLayerIndex would
-        /// log "Animator is not playing an AnimatorController", return -1, and
-        /// leave the layer stuck at zero weight — the swing would play in the
-        /// state machine but never blend in, so nothing visible would happen.
-        /// Waiting on runtimeAnimatorController keeps that off the console.
-        /// </summary>
-        int AttackLayerIndex()
+        void ResolveMovement()
         {
-            if (_layerResolved) return _attackLayerIndex;
-            if (animator == null || animator.runtimeAnimatorController == null) return -1;
-
-            _layerResolved = true;
-            _attackLayerIndex = animator.GetLayerIndex(attackLayer);
-            if (_attackLayerIndex < 0)
-                Debug.LogWarning($"[MeleeCombat] No '{attackLayer}' layer on the " +
-                                 "Animator — swings will not play. Re-run " +
-                                 "Tools ▸ Pickleball ▸ Setup Chibi Sandbox.");
-            return _attackLayerIndex;
+            _movement = movementSource as ICombatMovement ?? GetComponent<ICombatMovement>();
+            _impulses = movementSource as ICombatImpulses ?? GetComponent<ICombatImpulses>();
         }
 
         void OnEnable()
         {
-            _attack = new InputAction("Attack", InputActionType.Button);
-            _attack.AddBinding("<Mouse>/leftButton");
-            _attack.AddBinding("<Gamepad>/buttonWest");
-            _attack.Enable();
+            _resolver = new ComboResolver();
+            _progress = new ComboProgress();
+            _timeline = new SwingTimeline();
+            _alreadyHit = new HashSet<Object>();
+            _overlap = new Collider[OverlapCapacity];
+            _bursts = new ActiveBurst[BurstCapacity];
+            for (int i = 0; i < _bursts.Length; i++) _bursts[i] = new ActiveBurst();
+            _hitstopLeft = 0f;
+            _queued = false;
+            _startBufferedUntil = -1f;
+
+            if (_movement == null) ResolveMovement();
+            if (input != null) input.AttackPressed += QueueAttack;
+            if (moveset == null)
+                Debug.LogWarning($"[MeleeCombat] {name} has no SwordMoveset — the sword " +
+                                 "will not swing. Run Tools ▸ Pickleball ▸ Setup Sword Abilities.", this);
         }
 
         void OnDisable()
         {
-            _attack?.Disable();
-            _attack?.Dispose();
+            if (input != null) input.AttackPressed -= QueueAttack;
+            if (_timeline != null && _timeline.IsRunning) FinishChain();
         }
+
+        /// <summary>
+        /// Ask for a swing. Starts one now if idle, otherwise buffers the press
+        /// until the current swing's chain window opens. Requiring the press to
+        /// land inside the window would punish pressing early, which is exactly
+        /// what players do.
+        /// </summary>
+        public void QueueAttack()
+        {
+            if (!isActiveAndEnabled) return;
+            if (IsAttacking) _queued = true;
+            else _startBufferedUntil = Time.time + pressBufferSeconds;
+        }
+
+        /// <summary>The whole chain the next fresh press on <paramref name="track"/>
+        /// would play — for a HUD preview or debugging. The list is reused.</summary>
+        public IReadOnlyList<ResolvedStep> PreviewChain(ComboTrack track)
+            => (_resolver ??= new ComboResolver()).BuildSequence(BuildContext(track, 0), moveset, Learned);
+
+        IReadOnlyList<SwordAbilityDefinition> Learned => abilities != null ? abilities.All : null;
 
         void Update()
         {
             float dt = Time.deltaTime;
+            TrackGround(dt);
 
-            // Before any early-out below: the fade-out has to keep running for a
-            // few frames after the swing ends, when IsAttacking is already false.
-            UpdateLayerWeight(dt);
-
-            // Hitstop: freeze the animation and hold movement for a few frames
-            // so a connecting hit reads as impact rather than a pass-through.
+            // Hitstop: hold the clock (and so the blade, the chain windows and
+            // any rings in flight) so a connecting hit reads as impact rather
+            // than a pass-through. The animator driver freezes the pose.
             if (_hitstopLeft > 0f)
             {
-                _hitstopLeft -= dt;
-                if (animator != null) animator.speed = 0f;
-                if (_hitstopLeft <= 0f && animator != null) animator.speed = 1f;
+                _hitstopLeft = Mathf.Max(0f, _hitstopLeft - dt);
                 return;
             }
 
-            bool pressed = _attack.WasPressedThisFrame() && !CursorJustRelocked();
+            TickBursts(dt);
 
-            if (!IsAttacking)
+            if (!_timeline.IsRunning)
             {
-                if (pressed && CanStart()) Begin(0, !IsGrounded());
+                if (Time.time <= _startBufferedUntil && TryStartStep())
+                    _startBufferedUntil = -1f;
                 return;
             }
 
-            var def = Current;
-            if (def == null) { End(); return; }
-
-            _time += dt;
-            float t = Mathf.Clamp01(_time / Mathf.Max(def.duration, 0.01f));
-
-            // Buffer the click; it is consumed when the window opens. Requiring
-            // the press to land inside the window would punish clicking early,
-            // which is exactly what players do.
-            if (pressed) _queued = true;
-
-            bool live = t >= def.activeStart && t <= def.activeEnd;
-            if (trail != null) trail.SetEmitting(live);
-            if (live) SweepForHits(def);
-            else ClearSweep();
-
-            if (_queued && t >= def.comboOpen && !_airborneAttack && _index + 1 < chain.Length)
+            var signal = _timeline.Advance(dt);
+            if ((signal & SwingSignal.BladeOn) != 0) BladeLiveChanged?.Invoke(true);
+            // A whole window crossed in one long frame still gets one sweep.
+            if (_timeline.IsBladeLive || (signal & SwingSignal.BladeOn) != 0) SweepForHits();
+            if ((signal & SwingSignal.BladeOff) != 0)
             {
-                Begin(_index + 1, false);
-                return;
+                _hasPrev = false;
+                BladeLiveChanged?.Invoke(false);
             }
-            if (t >= def.comboClose || t >= 1f) End();
+            if ((signal & SwingSignal.BurstDue) != 0) ReleaseBurst();
+
+            if (_queued && (_timeline.IsChainWindowOpen || (signal & SwingSignal.Finished) != 0))
+            {
+                _queued = false;
+                if (TryStartStep()) return;
+            }
+            if ((signal & SwingSignal.Finished) != 0) FinishChain();
         }
 
-        /// <summary>Fades the masked attack layer in for a swing and back out
-        /// afterwards. At zero weight the layer contributes nothing, which is
-        /// what keeps its empty default state from forcing the arms into the
-        /// bind pose the rest of the time.</summary>
-        void UpdateLayerWeight(float dt)
+        /// <summary>
+        /// Ground/air bookkeeping for the chain counters.
+        ///
+        /// Asymmetric on purpose. Leaving the ground only counts after a short
+        /// grace, so one-frame grounded flicker on a slope cannot drop a ground
+        /// chain. Touching the ground refills the air chain at once, with no
+        /// grace — otherwise an air step started during such a flicker would
+        /// leave the counter part-spent until the next real jump and landing.
+        /// </summary>
+        void TrackGround(float dt)
         {
-            int layer = AttackLayerIndex();
-            if (layer < 0) return;
-            float wanted = IsAttacking ? 1f : 0f;
-            if (Mathf.Approximately(_layerWeight, wanted)) return;
-            _layerWeight = Mathf.MoveTowards(_layerWeight, wanted, layerFadeSpeed * dt);
-            animator.SetLayerWeight(layer, _layerWeight);
+            bool grounded = IsGrounded;
+            _airborneFor = grounded ? 0f : _airborneFor + dt;
+            if (grounded && _progress.AirHits > 0) _progress.Land();
+
+            bool airborne = _airborneFor > airborneGraceSeconds;
+            if (airborne && !_airborne) _progress.LeaveGround();
+            _airborne = airborne;
         }
 
-        bool CanStart()
+        bool IsGrounded => _movement == null || _movement.IsGrounded;
+
+        /// <summary>Attacks refuse to start while another system owns the body
+        /// (tether, skateboard, dash) rather than fight it for control.</summary>
+        bool CanSwing => _movement == null || !_movement.IsBusy;
+
+        ComboContext BuildContext(ComboTrack track, int hits)
         {
-            if (locomotion != null && locomotion.IsBusy) return false;   // swinging, skating, dashing
+            bool hasTarget = lockOn != null && lockOn.IsLocked;
+            float distance = 0f;
+            if (hasTarget)
+            {
+                Vector3 to = lockOn.AimPoint - transform.position;
+                to.y = 0f;
+                distance = Mathf.Max(0f, to.magnitude - lockOn.TargetRadius);
+            }
+            return new ComboContext(track, hits, hasTarget, distance);
+        }
+
+        /// <summary>Resolve and start the next step in the current context.
+        /// False if the chain has nothing more to give, or the body is busy.</summary>
+        bool TryStartStep()
+        {
+            if (!CanSwing || moveset == null) return false;
+            var track = IsGrounded ? ComboTrack.Ground : ComboTrack.Air;
+            var placement = _resolver.Resolve(BuildContext(track, _progress.HitsIn(track)),
+                                              moveset, Learned);
+            if (!placement.IsValid) return false;
+            Begin(placement);
             return true;
         }
 
-        bool IsGrounded() => locomotion == null || locomotion.IsGrounded;
-
-        /// <summary>The orbit camera uses left click to re-capture the cursor
-        /// after Escape. Without this, that same click also swings the weapon.</summary>
-        bool CursorJustRelocked() => cameraRig != null && cameraRig.JustRelocked;
-
-        void Begin(int index, bool airborne)
+        void Begin(ResolvedStep placement)
         {
-            _index = airborne ? -1 : index;
-            _airborneAttack = airborne;
-            _time = 0f;
+            if (_timeline.IsRunning && (_timeline.Stop() & SwingSignal.BladeOff) != 0)
+                BladeLiveChanged?.Invoke(false);
+
+            var step = placement.Step;
+            _current = placement;
+            _progress.RecordStep(placement.Track);
+            _timeline.Start(step);
             _queued = false;
             _alreadyHit.Clear();
             _hasPrev = false;
 
-            var def = Current;
-            if (def == null) { End(); return; }
+            // An impulse, once — see ICombatImpulses for why never per frame.
+            if (step.LungeSpeed > 0f && _impulses != null)
+                _impulses.AddImpulse(Flat(transform.forward) * step.LungeSpeed);
 
-            int layer = AttackLayerIndex();
-            if (animator != null && layer >= 0)
-            {
-                animator.SetInteger(ComboHash, airborne ? 0 : index + 1);
-                // Crossfaded directly instead of triggered. This component
-                // already owns every window by its own timer, so the state
-                // machine only has to play what it is told:
-                //  - no trigger can be left latched by a click that landed while
-                //    the layer was mid-transition and fire a swing later;
-                //  - a fresh chain can start while the last swing is still
-                //    fading out, which trigger transitions out of None could not;
-                //  - swings never transition back to the empty None state.
-                //    Blending an Override layer toward an empty state at full
-                //    weight drags the arms toward the bind pose; instead the
-                //    swing holds its last frame while UpdateLayerWeight fades
-                //    the layer out from under it.
-                float blend = index == 0 || airborne ? firstSwingBlend : chainBlend;
-                animator.CrossFadeInFixedTime(def.trigger, blend, layer, 0f);
-            }
-            // Nothing is done to locomotion here, and that is the point: the
-            // swing adds no displacement of its own and takes none away, so you
-            // keep running, steering and jumping straight through a combo.
+            SwingStarted?.Invoke(placement);
         }
 
-        void End()
+        void FinishChain()
         {
-            _index = -1;
-            _airborneAttack = false;
+            var ended = _current;
+            if (_timeline.IsRunning && (_timeline.Stop() & SwingSignal.BladeOff) != 0)
+                BladeLiveChanged?.Invoke(false);
             _queued = false;
             _alreadyHit.Clear();
             _hasPrev = false;
-            if (trail != null) trail.SetEmitting(false);
-            if (animator != null) animator.SetInteger(ComboHash, 0);
+            _progress.DropChain();
+            ChainEnded?.Invoke(ended);
         }
 
-        void ClearSweep() => _hasPrev = false;
+        // ------------------------------------------------------------ blade
 
         /// <summary>
         /// Sweep the volume the blade covered since last frame.
@@ -306,64 +338,116 @@ namespace Pickleball.Sandbox
         /// overlapping it. Testing the capsule between last frame's blade and
         /// this frame's catches the whole arc.
         /// </summary>
-        void SweepForHits(Attack def)
+        void SweepForHits()
         {
             if (bladeBase == null || bladeTip == null) return;
             Vector3 b = bladeBase.position, tip = bladeTip.position;
 
             if (_hasPrev)
             {
-                // Two capsules: the blade now, and the ground it covered.
-                TestCapsule(b, tip, def);
-                TestCapsule(_prevTip, tip, def);
-                TestCapsule(_prevBase, b, def);
+                TestCapsule(b, tip);
+                TestCapsule(_prevTip, tip);
+                TestCapsule(_prevBase, b);
             }
             _prevBase = b;
             _prevTip = tip;
             _hasPrev = true;
         }
 
-        void TestCapsule(Vector3 a, Vector3 b, Attack def)
+        void TestCapsule(Vector3 a, Vector3 b)
         {
-            var hits = Physics.OverlapCapsule(a, b, bladeRadius, hittable,
-                                              QueryTriggerInteraction.Ignore);
-            foreach (var col in hits)
+            int count = Physics.OverlapCapsuleNonAlloc(a, b, bladeRadius, _overlap, hittable,
+                                                       QueryTriggerInteraction.Ignore);
+            var hit = _current.Step.Hit;
+            for (int i = 0; i < count; i++)
             {
-                if (col.transform.IsChildOf(transform)) continue;
-                var target = col.GetComponentInParent<IDamageable>();
-                if (target == null) continue;
-                var key = target as Object;
-                if (key != null && !_alreadyHit.Add(key)) continue;   // once per swing
+                var col = _overlap[i];
+                if (!TryGetTarget(col, _alreadyHit, out var target)) continue;   // once per swing
 
                 Vector3 point = col.ClosestPoint((a + b) * 0.5f);
-                Vector3 push = transform.forward * def.knockback;
-                if (def.launcher) push += Vector3.up * (def.knockback * 1.6f);
-
-                target.TakeHit(def.damage, point, push, def.launcher);
-                OnHitLanded(def, point);
+                Deal(target, col, point, hit, hit.PushAlong(transform.forward), _current, fromBurst: false);
             }
         }
 
-        void OnHitLanded(Attack def, Vector3 point)
+        bool TryGetTarget(Collider col, HashSet<Object> struck, out IDamageable target)
         {
-            _hitstopLeft = Mathf.Max(_hitstopLeft, def.hitstop);
-            if (impactEffect != null)
+            target = null;
+            if (col == null || col.transform.IsChildOf(transform)) return false;
+            target = col.GetComponentInParent<IDamageable>();
+            if (target == null) return false;
+            return !(target is Object key) || struck.Add(key);
+        }
+
+        void Deal(IDamageable target, Collider col, Vector3 point, HitSettings hit, Vector3 push,
+                  ResolvedStep placement, bool fromBurst)
+        {
+            target.TakeHit(hit.Damage, point, push, hit.IsLauncher);
+            // Max, not sum: a ring sweeping three targets in one frame is one impact.
+            _hitstopLeft = Mathf.Max(_hitstopLeft, hit.Hitstop);
+            HitLanded?.Invoke(new MeleeHitReport(target, col, point, hit.Damage, placement, fromBurst));
+        }
+
+        // ----------------------------------------------------------- bursts
+
+        void ReleaseBurst()
+        {
+            var burst = _current.Step.Burst;
+            if (!burst.Enabled) return;
+
+            ActiveBurst slot = null;
+            foreach (var b in _bursts) if (!b.Active) { slot = b; break; }
+            if (slot == null) return;    // four rings in flight already; drop the fifth
+
+            slot.Active = true;
+            slot.Placement = _current;
+            slot.Burst = burst;
+            slot.Centre = burst.CentreFor(transform.position, transform.forward);
+            slot.Elapsed = 0f;
+            slot.Struck.Clear();
+            BurstReleased?.Invoke(new BurstReport(_current, slot.Centre, burst));
+            StrikeWithin(slot, burst.RadiusAt(0f));
+        }
+
+        /// <summary>Grow each ring and strike whatever its edge has reached. A
+        /// ring outlives the swing that released it, so this runs whether or
+        /// not a swing is playing.</summary>
+        void TickBursts(float dt)
+        {
+            foreach (var slot in _bursts)
             {
-                impactEffect.transform.position = point;
-                impactEffect.Play();
+                if (!slot.Active) continue;
+                slot.Elapsed += dt;
+                StrikeWithin(slot, slot.Burst.RadiusAt(slot.Elapsed));
+                if (slot.Burst.IsFinished(slot.Elapsed)) slot.Active = false;
             }
-            if (cameraRig != null) cameraRig.Shake(def.launcher ? 0.25f : 0.15f, 0.18f);
         }
 
-        /// <summary>Editor hook: the setup script writes measured clip lengths in.</summary>
-        public void ConfigureDurations(float[] chainDurations, float airDuration)
+        void StrikeWithin(ActiveBurst slot, float radius)
         {
-            for (int i = 0; i < chain.Length && i < chainDurations.Length; i++)
-                if (chainDurations[i] > 0f) chain[i].duration = chainDurations[i];
-            if (airDuration > 0f) airAttack.duration = airDuration;
+            if (radius <= 0f) return;
+            var burst = slot.Burst;
+            // The query sphere has to contain the whole cylinder band.
+            float reach = Mathf.Sqrt(radius * radius + burst.HeightTolerance * burst.HeightTolerance);
+            int count = Physics.OverlapSphereNonAlloc(slot.Centre, reach, _overlap, hittable,
+                                                      QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                var col = _overlap[i];
+                if (col == null || col.transform.IsChildOf(transform)) continue;
+                Vector3 point = col.ClosestPoint(slot.Centre);
+                if (!burst.Reaches(slot.Centre, point, radius)) continue;
+                if (!TryGetTarget(col, slot.Struck, out var target)) continue;
+                // The ring is reported as the step that released it, even if the
+                // chain has moved on by the time its edge arrives.
+                Deal(target, col, point, burst.Hit, burst.Hit.PushAlong(point - slot.Centre),
+                     slot.Placement, fromBurst: true);
+            }
         }
 
-        public Attack[] Chain => chain;
-        public Attack Air => airAttack;
+        static Vector3 Flat(Vector3 v)
+        {
+            v.y = 0f;
+            return v.sqrMagnitude > 1e-6f ? v.normalized : Vector3.zero;
+        }
     }
 }

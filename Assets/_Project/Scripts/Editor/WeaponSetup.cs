@@ -128,8 +128,11 @@ public static class WeaponSetup
 
     /// <summary>
     /// Phase 2, scene only: hang the weapon off the right hand and wire up
-    /// MeleeCombat. Returns false if the player is not in a fit state for it.
+    /// MeleeCombat, then hand over to SwordAbilitySetup for the combo itself.
+    /// Returns false if the player is not in a fit state for it.
     /// </summary>
+    /// <param name="clips">Kept for ChibiSandboxSetup's call; no longer read here —
+    /// swing timing comes from the step assets' own clips.</param>
     public static bool AttachToPlayer(GameObject player,
                                       Dictionary<string, AnimationClip> clips)
     {
@@ -147,12 +150,17 @@ public static class WeaponSetup
             return false;
         }
 
-        var weapon = AttachWeapon(hand, out Transform bladeBase, out Transform bladeTip);
-        WireCombat(player, animator, weapon, bladeBase, bladeTip, clips);
+        AttachWeapon(hand, out Transform bladeBase, out Transform bladeTip);
+        WireCombat(player, bladeBase, bladeTip);
         // The Attack layer's mask drops the swings' hip turn; put it back.
         SwingTwistSetup.Bake(player);
         // The socket was just rebuilt, so its clearance pass has to be re-added.
         WeaponClearanceSetup.Attach(player);
+        // Last: the combo itself — moveset, abilities, levelling, animation and
+        // effects listeners, plus the Attack-layer states for every ability
+        // step (and their swing-twist bake). Without this a rebuilt player has
+        // a sword but no idea what to do with it.
+        if (!SwordAbilitySetup.AttachToPlayer(player)) return false;
         EditorUtility.SetDirty(player);
         return true;
     }
@@ -366,6 +374,9 @@ public static class WeaponSetup
             if (clip != null) clips[role] = clip;
         }
         WireController(clips);
+        // WireController rebuilt the Attack layer from AttackClips alone; put
+        // the sword-ability states back so a rebuilt animator keeps the combo.
+        SwordAbilitySetup.WireAttackStatesFromAssets();
     }
 
     static void WireController(Dictionary<string, AnimationClip> clips)
@@ -435,8 +446,9 @@ public static class WeaponSetup
             if (!clips.TryGetValue(role, out var clip)) break;
             var st = sm.AddState(AttackClips[i].trigger);
             st.motion = clip;
-            // MeleeCombat's windows are fractions of duration, and duration is
-            // written as clip length / this speed, so the two stay in step.
+            // Must match the base step asset's playbackSpeed (Step_Slash1-4):
+            // the step's duration is its clip length / that speed, and
+            // SwordAbilitySetup re-applies the asset's value after this runs.
             st.speed = AttackClips[i].speed;
             chain++;
         }
@@ -469,9 +481,15 @@ public static class WeaponSetup
 
     // ------------------------------------------------------------------ combat
 
-    static void WireCombat(GameObject player, Animator animator, GameObject weapon,
-                           Transform bladeBase, Transform bladeTip,
-                           Dictionary<string, AnimationClip> clips)
+    /// <summary>
+    /// The weapon's half of the combat wiring: the MeleeCombat component, its
+    /// blade ends, and a fresh BladeTrail. Everything else — moveset, swing
+    /// timing, animation and effects listeners — belongs to
+    /// SwordAbilitySetup.AttachToPlayer, which reads the step assets. Timing used
+    /// to be written in here from the clip lengths; each step asset now derives
+    /// its own duration from its clip, so there is nothing to keep in step.
+    /// </summary>
+    static void WireCombat(GameObject player, Transform bladeBase, Transform bladeTip)
     {
         var combat = player.GetComponent<MeleeCombat>() ?? player.AddComponent<MeleeCombat>();
 
@@ -486,6 +504,8 @@ public static class WeaponSetup
         trailGo.transform.SetParent(player.transform, false);
         trailGo.AddComponent<MeshFilter>();
         var mr = trailGo.AddComponent<MeshRenderer>();
+        // Placeholder until SwordAbilitySetup swaps in its vertex-colour
+        // material, which is what carries the per-step tint and the fade.
         mr.sharedMaterial = SandboxVfxBuilder.BuildGlowMaterial(
             VfxDir, "BladeTrail", new Color(0.8f, 0.95f, 1f, 0.9f));
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -496,48 +516,8 @@ public static class WeaponSetup
         tso.ApplyModifiedPropertiesWithoutUndo();
 
         var so = new SerializedObject(combat);
-        so.FindProperty("animator").objectReferenceValue = animator;
-        so.FindProperty("locomotion").objectReferenceValue = player.GetComponent<ChibiLocomotion>();
         so.FindProperty("bladeBase").objectReferenceValue = bladeBase;
         so.FindProperty("bladeTip").objectReferenceValue = bladeTip;
-        so.FindProperty("trail").objectReferenceValue = trail;
-        if (Camera.main != null)
-            so.FindProperty("cameraRig").objectReferenceValue =
-                Camera.main.GetComponent<SandboxOrbitCamera>();
-
-        // Write the measured clip length AND the per-attack windows, so timing
-        // is derived from the real clips rather than left at generic defaults.
-        // Length is divided by the state's playback speed: MeleeCombat's timer
-        // runs in real seconds, so it has to track the sped-up swing, not the
-        // authored one, or the blade would go live after the animation had
-        // already finished the strike.
-        var chainProp = so.FindProperty("chain");
-        for (int i = 0; i < chainProp.arraySize && i < 4; i++)
-        {
-            var def = AttackClips[i];
-            if (!clips.TryGetValue(def.role, out var clip)) continue;
-            var el = chainProp.GetArrayElementAtIndex(i);
-            el.FindPropertyRelative("trigger").stringValue = def.trigger;
-            el.FindPropertyRelative("duration").floatValue = clip.length / def.speed;
-            el.FindPropertyRelative("activeStart").floatValue = def.activeStart;
-            el.FindPropertyRelative("activeEnd").floatValue = def.activeEnd;
-            el.FindPropertyRelative("comboOpen").floatValue = def.comboOpen;
-            el.FindPropertyRelative("comboClose").floatValue = def.comboClose;
-            // The launcher is the last hit: the chain ends by popping the target
-            // up, which is what sets up juggling with the air attack.
-            el.FindPropertyRelative("launcher").boolValue = i == 3;
-        }
-
-        var airDef = AttackClips[^1];
-        if (clips.TryGetValue("airAttack", out var air))
-        {
-            var ap = so.FindProperty("airAttack");
-            ap.FindPropertyRelative("trigger").stringValue = airDef.trigger;
-            ap.FindPropertyRelative("duration").floatValue = air.length / airDef.speed;
-            ap.FindPropertyRelative("activeStart").floatValue = airDef.activeStart;
-            ap.FindPropertyRelative("activeEnd").floatValue = airDef.activeEnd;
-        }
-
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
