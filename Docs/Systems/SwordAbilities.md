@@ -237,7 +237,9 @@ A boss drop can grant an ability early; its level is the fallback.
 ## 5. Known limitations and open questions
 
 - **Not play-tested yet.**
-  - The slice compiles, and its pure logic is covered by EditMode tests.
+  - Verified on 2026-10-26 in a headless Unity 6000.3.5f2 on the branch's own worktree:
+    - Setup Sword Abilities ran clean, adding the 4 states and baking swing twist for all 9 swings.
+    - All 115 EditMode tests passed, 41 of them in `Tests/EditMode/Combat/`.
   - Nobody has watched the new swings in Play mode. The new states reuse clips that are already
     wired, at their own speeds: + C is Attack1's sweep at 3×, Phase Shift is the downstroke in the
     air, Unit Circle is the wide sweep, and Area Under the Curve is the launcher at 2×.
