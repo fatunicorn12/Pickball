@@ -177,6 +177,19 @@ public static class SwordAbilitySetup
                   "Curve (ground finisher). PlayerLevel ▸ ⋮ ▸ Debug: Gain One Level to skip ahead.");
     }
 
+    /// <summary>
+    /// Command-line entry point (-batchmode -executeMethod SwordAbilitySetup.Batch):
+    /// opens the sandbox, runs the full setup, and saves the ASSETS only. The
+    /// scene is left unsaved on purpose — scene wiring is redone by the menu in
+    /// whichever checkout owns the scene, so a batch run can never commit it.
+    /// </summary>
+    public static void Batch()
+    {
+        EditorSceneManager.OpenScene("Assets/_Project/Scenes/ChibiSandbox.unity", OpenSceneMode.Single);
+        Run();
+        AssetDatabase.SaveAssets();
+    }
+
     // ------------------------------------------------------------------- data
 
     /// <summary>Create any missing data asset from its seed. Existing assets are
