@@ -8,7 +8,8 @@ namespace Pickleball.Sandbox
     /// not in this project's manifest, and pulling it in just to look at a
     /// walk cycle would be a heavier dependency than the job needs.
     ///
-    /// Escape releases the cursor so you can get back to the Editor.
+    /// Escape releases the cursor so you can get back to the Editor. On a
+    /// gamepad the right stick orbits and d-pad up/down zooms.
     /// </summary>
     public class SandboxOrbitCamera : MonoBehaviour
     {
@@ -23,6 +24,21 @@ namespace Pickleball.Sandbox
         [SerializeField] private float minPitch = -25f;
         [SerializeField] private float maxPitch = 65f;
         [SerializeField] private float followSmoothTime = 0.06f;
+
+        [Header("Gamepad")]
+        [Tooltip("Right-stick turn rate at full tilt, in degrees per second.")]
+        [SerializeField] private float stickYawSpeed = 200f;
+        [Tooltip("Vertical turn rate. Slower than yaw, since pitch only has a " +
+                 "90 degree range to cover.")]
+        [SerializeField] private float stickPitchSpeed = 120f;
+        [Tooltip("Tilt below this is ignored, so a worn stick does not drift the camera.")]
+        [SerializeField, Range(0f, 0.5f)] private float stickDeadzone = 0.15f;
+        [Tooltip("Response curve past the deadzone. 1 is linear; higher gives finer " +
+                 "control near the centre and full speed only at the edge.")]
+        [SerializeField, Range(1f, 3f)] private float stickExponent = 1.6f;
+        [SerializeField] private bool invertStickY;
+        [Tooltip("D-pad up/down zoom rate, in metres per second.")]
+        [SerializeField] private float dpadZoomSpeed = 4f;
 
         [Header("Lock-on")]
         [Tooltip("Read for the locked target. Found on the follow target if empty.")]
@@ -62,7 +78,7 @@ namespace Pickleball.Sandbox
         public bool CursorCaptured => _locked;
 
         /// <summary>Swing round behind the player — what the lock-on button does
-        /// when there is nothing to lock. Any mouse look cancels it.</summary>
+        /// when there is nothing to lock. Any mouse or stick look cancels it.</summary>
         public void RecenterBehind(Vector3 forward)
         {
             forward.y = 0f;
@@ -169,6 +185,48 @@ namespace Pickleball.Sandbox
             }
         }
 
+        /// <summary>
+        /// Right stick orbits, d-pad up/down zooms. Like the mouse, the stick
+        /// only orbits while not locked on, because LockOnTargeting reads the
+        /// same stick for target flicks then. It does not wait for the cursor to
+        /// be captured: that is about who owns the mouse, and a pad never fights
+        /// the Editor for it. Unscaled time, so hitstop and slow-mo do not
+        /// freeze the camera; mouse look ignores timeScale too.
+        /// </summary>
+        void ReadGamepad()
+        {
+            var pad = Gamepad.current;
+            if (pad == null) return;
+            float dt = Time.unscaledDeltaTime;
+
+            if (!IsLockedOn)
+            {
+                Vector2 stick = ShapeStick(pad.rightStick.ReadUnprocessedValue());
+                if (stick != Vector2.zero)
+                {
+                    float rise = invertStickY ? -stick.y : stick.y;
+                    _yaw += stick.x * stickYawSpeed * dt;
+                    _pitch = Mathf.Clamp(_pitch - rise * stickPitchSpeed * dt, minPitch, maxPitch);
+                    _recenterYaw = null;
+                }
+            }
+
+            float zoom = pad.dpad.ReadValue().y;
+            if (zoom != 0f)
+                distance = Mathf.Clamp(distance - zoom * dpadZoomSpeed * dt, minDistance, maxDistance);
+        }
+
+        /// <summary>Radial deadzone, rescaled so tilt ramps up from zero at its
+        /// edge instead of jumping, then bent by the response curve. Fed the raw
+        /// stick, so this is the only deadzone in play.</summary>
+        Vector2 ShapeStick(Vector2 raw)
+        {
+            float mag = raw.magnitude;
+            if (mag <= stickDeadzone) return Vector2.zero;
+            float t = Mathf.Clamp01((mag - stickDeadzone) / (1f - stickDeadzone));
+            return raw / mag * Mathf.Pow(t, stickExponent);
+        }
+
         void LateUpdate()
         {
             UpdatePunch(Time.deltaTime);
@@ -199,6 +257,8 @@ namespace Pickleball.Sandbox
                 if (Mathf.Abs(scroll) > 0.01f)
                     distance = Mathf.Clamp(distance - scroll * 0.003f, minDistance, maxDistance);
             }
+
+            ReadGamepad();
 
             Vector3 focus = target.position + targetOffset;
             UpdateLockOn(focus, Time.deltaTime);
