@@ -1,0 +1,65 @@
+using UnityEngine;
+
+namespace Pickleball.Sandbox.Movement.States
+{
+    /// <summary>
+    /// Sliding on the belly after a dive lands. Sunshine's friction, ported as
+    /// exponential decay: neutral stick slides for about a second and a half,
+    /// holding forward glides much longer, holding back brakes.
+    ///
+    /// Recovery, as in Sunshine: Jump is a <see cref="JumpKind.Rollout"/> back
+    /// onto the feet keeping the slide's speed; crouch dives again; slowing to a
+    /// stop stands him up (or leaves him crouched under a low ceiling). Sliding
+    /// off a ledge carries on as a dive. The sprint ramp is frozen throughout,
+    /// so a rollout out of a sprint-dive lands sprinting.
+    /// </summary>
+    public sealed class BellySlideMove : MoveState
+    {
+        public override MoveKind Kind => MoveKind.BellySlide;
+        public override bool AllowsDash => false;
+
+        public override void Enter(MovementMotor m, MoveKind from) => m.Chain.Reset();
+
+        public override MoveKind Next(MovementMotor m)
+        {
+            var c = m.Config;
+            ref var i = ref m.Intent;
+            if (!m.IsGrounded) return MoveKind.Dive;
+            if (m.TimeInMove >= c.BellySlideMinTime)
+            {
+                if (m.JumpBuffered && m.CanStandTo(1f))
+                {
+                    m.PendingJump = JumpKind.Rollout;
+                    return MoveKind.Jump;
+                }
+                if (i.CrouchPressed) return MoveKind.Dive;
+                if (m.Speed <= c.BellySlideStopSpeed)
+                    return m.CanStandTo(1f) ? MoveKind.Ground : MoveKind.Crouch;
+            }
+            return MoveKind.BellySlide;
+        }
+
+        public override void Tick(MovementMotor m, float dt)
+        {
+            var c = m.Config;
+            ref var i = ref m.Intent;
+            m.RequestCapsule(c.BellySlideHeightFraction);
+
+            float decay = c.BellySlideDecay;
+            float along = 0f;
+            if (i.HasMove)
+            {
+                along = Vector3.Dot(i.MoveDirection, m.Travel) * i.MoveMagnitude;
+                decay = along >= 0f
+                    ? Mathf.Lerp(c.BellySlideDecay, c.BellySlideDecayForward, along)
+                    : Mathf.Lerp(c.BellySlideDecay, c.BellySlideDecayBack, -along);
+            }
+            m.Speed *= Mathf.Exp(-decay * dt);
+
+            // Steer only with a stick that is not pulling back: back is the brake,
+            // and must never spin him round on his belly.
+            if (along > -0.3f) m.SteerAtRate(c.BellySlideTurnRate, dt);
+            m.MoveStandard(dt, m.GroundVertical(dt));
+        }
+    }
+}

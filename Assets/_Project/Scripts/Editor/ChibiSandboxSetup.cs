@@ -74,15 +74,10 @@ public static class ChibiSandboxSetup
     /// <summary>Authored speed of Crouched Walking â€” much slower than the
     /// standing walk, so the crouch tree needs its own threshold.</summary>
     const float CrouchWalkSpeed = 0.39f;
-    /// <summary>Default travel speed: between walk and run so the blend tree
-    /// crossfades the two.</summary>
-    const float MoveSpeed = 2.8f;
-
-    /// <summary>Hand-tuned in the scene, kept here so re-running the setup does
-    /// not reset it. Large because the clips' root height is based on the
-    /// Center of Mass: humanoid playback pins the root at the body's COM, so
-    /// the model sinks by roughly its hip height and this lifts it back.</summary>
-    const float ModelYOffset = 0.64f;
+    // Travel speeds and the model's Y offset (0.64, the centre-of-mass lift)
+    // used to be constants here, written onto ChibiLocomotion on every run. They
+    // are tunables on the MovementConfig / MovementAnimationConfig assets now,
+    // which a re-run never overwrites.
 
     /// <summary>Ride speed. Far above the clips' authored 0.95 m/s, which is
     /// fine here and nowhere else: the feet stay planted on the deck, so there
@@ -1090,6 +1085,13 @@ public static class ChibiSandboxSetup
         // Crouch is off too: measured, its Foot IK goals float the crouched
         // soles ~28 cm (+0.277 m with IK against +0.063 m without).
         var noFootIK = new HashSet<AnimatorState> { jump, fall, flip, flipAir, dash, hang, skate, crouch };
+
+        // ---- Sunshine moves (Sandbox/Movement) --------------------------------
+        // Skid, jump-chain variants, spin, dive and belly slide, driven by the
+        // int Move / JumpKind parameters. All airborne or prone (the skid spins
+        // the body through 180° over planted feet), so foot IK is off for each.
+        noFootIK.UnionWith(MovementSetup.AddMovementStates(controller, clips, loco, fall, land, flipAir));
+
         foreach (var s in sm.states)
             s.state.iKOnFeet = !noFootIK.Contains(s.state);
 
@@ -1255,18 +1257,12 @@ public static class ChibiSandboxSetup
         cc.slopeLimit = 50f;
         cc.stepOffset = Mathf.Min(0.3f, height * 0.25f);
 
-        var loco = go.AddComponent<ChibiLocomotion>();
-        var so = new SerializedObject(loco);
-        so.FindProperty("animator").objectReferenceValue = animator;
-        so.FindProperty("modelRoot").objectReferenceValue = model.transform;
-        so.FindProperty("modelYOffset").floatValue = ModelYOffset;
-        so.FindProperty("moveSpeed").floatValue = MoveSpeed;
-        so.FindProperty("sprintSpeed").floatValue = RunSpeed;
-        so.FindProperty("crouchSpeed").floatValue = CrouchWalkSpeed;
-        // The strides BuildController measured: above them ChibiLocomotion
-        // speeds the cycle up rather than letting the feet skate.
-        so.FindProperty("runClipStride").floatValue = _runStride;
-        so.FindProperty("crouchClipStride").floatValue = _crouchStride;
+        // Movement components (motor, input, animator driver, effects) are added
+        // and wired by MovementSetup.WirePlayer once the effects they reference
+        // exist, below. Tunables live on the MovementConfig assets now, not here:
+        // speeds on MovementConfig, model offset and strides on
+        // MovementAnimationConfig (the measured strides are written to it).
+        go.AddComponent<ChibiLocomotion>();
 
         var cam = Camera.main;
         if (cam != null)
@@ -1278,10 +1274,7 @@ public static class ChibiSandboxSetup
             cso.FindProperty("target").objectReferenceValue = go.transform;
             cso.FindProperty("targetOffset").vector3Value = new Vector3(0f, height * 0.8f, 0f);
             cso.ApplyModifiedPropertiesWithoutUndo();
-
-            so.FindProperty("cameraTransform").objectReferenceValue = cam.transform;
         }
-        so.ApplyModifiedPropertiesWithoutUndo();
 
         // ---- abilities, board and VFX ---------------------------------------
         go.AddComponent<PlayerAbilities>();
@@ -1292,14 +1285,12 @@ public static class ChibiSandboxSetup
         if (puffPrefab != null)
         {
             var puff = (GameObject)PrefabUtility.InstantiatePrefab(puffPrefab.gameObject);
+            // Found by this name by MovementSetup.WirePlayer.
             puff.name = "DoubleJumpPuff";
             puff.transform.SetParent(go.transform, false);
-            so.FindProperty("doubleJumpEffect").objectReferenceValue =
-                puff.GetComponent<ParticleSystem>();
         }
 
         var board = BuildBoard(go, height);
-        so.FindProperty("skateRideHeight").floatValue = RideHeight;
 
         // ---- dash VFX --------------------------------------------------------
         var effects = go.AddComponent<DashEffects>();
@@ -1335,8 +1326,6 @@ public static class ChibiSandboxSetup
                 cam.GetComponent<SandboxOrbitCamera>();
         eso.ApplyModifiedPropertiesWithoutUndo();
 
-        so.FindProperty("dashEffects").objectReferenceValue = effects;
-
         // ---- tether ----------------------------------------------------------
         var tetherSys = go.AddComponent<TetherSystem>();
         var tso = new SerializedObject(tetherSys);
@@ -1364,8 +1353,11 @@ public static class ChibiSandboxSetup
         if (cam != null) tso.FindProperty("aimSource").objectReferenceValue = cam.transform;
         tso.ApplyModifiedPropertiesWithoutUndo();
 
-        so.FindProperty("tether").objectReferenceValue = tetherSys;
-        so.ApplyModifiedPropertiesWithoutUndo();
+        // ---- movement ----------------------------------------------------------
+        // Motor, input, animator driver and effects, wired to everything above.
+        MovementSetup.WirePlayer(go, cam != null ? cam.transform : null);
+        MovementSetup.EnsureConfigs(out _, out var animConfig);
+        MovementSetup.WriteMeasuredValues(animConfig, _runStride, _crouchStride, RideHeight);
 
         // Weapon and combo go on BEFORE the prefab is written, so they are part
         // of the prefab rather than a scene-only override.
@@ -1917,6 +1909,35 @@ public static class ChibiSandboxSetup
         WeaponSetup.RewireControllerFromImportedClips();
         AssetDatabase.SaveAssets();
         Debug.Log("Chibi animator rebuilt in place (GUID preserved).");
+    }
+
+    /// <summary>Run stride the last BuildController measured on the chibi, m/s.</summary>
+    public static float MeasuredRunStride => _runStride;
+    /// <summary>Crouch-walk stride the last BuildController measured, m/s.</summary>
+    public static float MeasuredCrouchStride => _crouchStride;
+
+    /// <summary>
+    /// Re-imports every clip in the role table (import settings are idempotent)
+    /// and rebuilds the chibi controller in place, weapon layer included —
+    /// without touching the scene. The movement setup uses this to pick up new
+    /// clip roles and states. Returns false if the base clips are missing.
+    /// </summary>
+    public static bool ImportClipsAndRebuildAnimator()
+    {
+        var clips = new Dictionary<string, AnimationClip>();
+        foreach (var group in ClipDefs.GroupBy(d => d.file))
+            foreach (var kv in SetupClips(group.Key, group.ToArray()))
+                clips[kv.Key] = kv.Value;
+        if (!clips.ContainsKey("walk") || !clips.ContainsKey("idle"))
+        {
+            Debug.LogError("Armed idle/walk produced no clips — cannot build locomotion. " +
+                           $"Is the sword-and-shield pack at {PackDir}?");
+            return false;
+        }
+        BuildController(clips);
+        WeaponSetup.RewireControllerFromImportedClips();
+        AssetDatabase.SaveAssets();
+        return true;
     }
 
     /// <summary>Command-line entry point (-executeMethod): rebuilds both
