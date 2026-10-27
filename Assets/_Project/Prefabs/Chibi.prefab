@@ -982,73 +982,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 61ea86ab395230b459e765aef7668333, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.MeleeCombat
-  chain:
-  - trigger: Attack1
-    duration: 0.54666674
-    activeStart: 0.32
-    activeEnd: 0.6
-    comboOpen: 0.46
-    comboClose: 0.9
-    damage: 10
-    knockback: 4
-    launcher: 0
-    hitstop: 0.05
-  - trigger: Attack2
-    duration: 0.6933334
-    activeStart: 0.35
-    activeEnd: 0.62
-    comboOpen: 0.5
-    comboClose: 0.92
-    damage: 12
-    knockback: 4
-    launcher: 0
-    hitstop: 0.05
-  - trigger: Attack3
-    duration: 0.625
-    activeStart: 0.34
-    activeEnd: 0.62
-    comboOpen: 0.5
-    comboClose: 0.92
-    damage: 14
-    knockback: 3
-    launcher: 0
-    hitstop: 0.07
-  - trigger: Attack4
-    duration: 0.71212125
-    activeStart: 0.34
-    activeEnd: 0.64
-    comboOpen: 0.55
-    comboClose: 0.95
-    damage: 20
-    knockback: 8
-    launcher: 1
-    hitstop: 0.1
-  airAttack:
-    trigger: AirAttack
-    duration: 0.45454544
-    activeStart: 0.25
-    activeEnd: 0.6
-    comboOpen: 0.35
-    comboClose: 0.95
-    damage: 12
-    knockback: 3
-    launcher: 0
-    hitstop: 0.05
+  moveset: {fileID: 0}
+  abilities: {fileID: 0}
   bladeBase: {fileID: 8407754353569633946}
   bladeTip: {fileID: 665472329270168565}
   bladeRadius: 0.18
   hittable:
     serializedVersion: 2
     m_Bits: 4294967295
-  animator: {fileID: 5583773803215574322}
-  locomotion: {fileID: 103616219906502034}
-  trail: {fileID: 8252130698690969419}
-  cameraRig: {fileID: 0}
-  impactEffect: {fileID: 0}
-  attackLayer: Attack
-  layerFadeSpeed: 12
-  firstSwingBlend: 0.06
-  chainBlend: 0.1
+  movementSource: {fileID: 0}
+  input: {fileID: 0}
+  lockOn: {fileID: 0}
+  pressBufferSeconds: 0.15
+  airborneGraceSeconds: 0.08
 --- !u!114 &6343529653583968329
 MonoBehaviour:
   m_ObjectHideFlags: 0
