@@ -170,22 +170,34 @@ public static class NewtonBossSetup
                 var take = defs[0];
                 // He never leaves the spot he is placed on — NewtonBoss only
                 // turns him — so travel is code-owned and root motion is off.
-                //   Loops (idle, walk): XZ and rotation NOT baked, so the
-                //     cycle plays in place and cannot drift or spin him.
-                //   One-shots (casts, hit, death): everything baked, so a
-                //     stagger, a lunge or a fall shows as authored instead of
-                //     being projected out and thrown away.
+                //   Walk: XZ and rotation NOT baked, so the cycle plays in
+                //     place and cannot drift or spin him.
+                //   Idle and one-shots (casts, hit, death): everything baked.
+                //     A stagger, a lunge or a fall shows as authored instead
+                //     of being projected out and thrown away; and the idle's
+                //     only root motion is its hips sway and a slow heading
+                //     drift, which stripped out leave the body held still
+                //     while the planted feet swim and twist under it (the
+                //     idle clip audit's meta fix, kept on a rebuild).
                 //   Height always baked, feet-based: with Y left as root
                 //     motion and root motion off, every crouch, flinch and
                 //     the death fall would be flattened to standing height
                 //     — dying in mid-air.
+                //
+                // Only these take fields are written. The skeleton (the
+                // reference pose in humanDescription, hand-fixed for the left
+                // leg on Idle.fbx and Walking.fbx) is left exactly as it is;
+                // and the copy above only runs when the file is MISSING, so
+                // an existing Newton clip and its meta are never replaced
+                // (a fresh copy carries the source meta's skeleton with it).
+                bool bakeAll = !loop || role == "idle";
                 take.name = role;
                 take.loopTime = loop;
                 take.loopPose = loop;
                 if (first >= 0) take.firstFrame = first;
                 if (last >= 0) take.lastFrame = last;
-                take.lockRootRotation = !loop;
-                take.lockRootPositionXZ = !loop;
+                take.lockRootRotation = bakeAll;
+                take.lockRootPositionXZ = bakeAll;
                 take.lockRootHeightY = true;
                 take.keepOriginalOrientation = true;
                 take.keepOriginalPositionXZ = true;
@@ -344,6 +356,15 @@ public static class NewtonBossSetup
         // pinning the feet of a falling body drags it.
         foreach (var s in sm.states)
             s.state.iKOnFeet = s.state.name != "Death";
+
+        // IK pass on the base layer, so ChibiFootIK (which NewtonBoss adds to
+        // the model at runtime) gets OnAnimatorIK: it plants his feet while he
+        // stands, steps them round as he turns to track the player, and turns
+        // his head toward the player. Without the pass it never runs, and
+        // NewtonBoss falls back to the old walk-blend turn shuffle.
+        var layers = controller.layers;
+        layers[0].iKPass = true;
+        controller.layers = layers;
 
         EditorUtility.SetDirty(controller);
         Debug.Log($"Newton controller: {ControllerPath} ({sm.states.Length} states: " +

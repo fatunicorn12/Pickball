@@ -192,6 +192,22 @@ public static class ChibiSandboxSetup
     /// ground: idle -0.3 cm, run -7 cm, stop -6 cm.</summary>
     static readonly HashSet<string> BakedHeightRoles = new() { "idle", "walk", "run", "stop" };
 
+    /// <summary>
+    /// Roles whose horizontal root motion is baked into the pose. The idle only:
+    /// its hips sway is otherwise stripped out as root motion (which is then
+    /// discarded), so the body is held still and the planted feet swim around
+    /// the floor by up to 4 cm over the loop. Baking it keeps the sway in the
+    /// hips and the feet where they were put. Walk and run must stay unbaked —
+    /// their forward travel would then drift the cycle off and snap it back.
+    /// Matches the idle clip audit's meta fix, so a rebuild keeps it.
+    /// </summary>
+    static readonly HashSet<string> BakedXZRoles = new() { "idle" };
+
+    /// <summary>Per-role root height offset (Animation ▸ Root Transform Position
+    /// (Y) ▸ Offset), from the idle clip audit: +2 cm on the idle settles both
+    /// soles at 0–1.8 cm with ModelYOffset left at 0.64.</summary>
+    static readonly Dictionary<string, float> HeightOffsets = new() { { "idle", 0.02f } };
+
     /// <summary>Roles imported with Loop Pose — the genuine cycles.</summary>
     static readonly HashSet<string> LoopPoseRoles = new() { "idle", "walk", "crouchWalk" };
 
@@ -651,7 +667,9 @@ public static class ChibiSandboxSetup
                 // baked into pose is discarded, and the CharacterController
                 // owns all travel:
                 //   XZ not baked -> cycles play in place instead of drifting
-                //                   forward and snapping back each loop.
+                //                   forward and snapping back each loop —
+                //                   except the idle (BakedXZRoles), whose
+                //                   only XZ motion is the hips sway.
                 //   Rotation BAKED (all roles) -> the clip's own heading drift
                 //                   stays in the pose instead of being thrown
                 //                   away and snapping at every loop seam.
@@ -661,7 +679,8 @@ public static class ChibiSandboxSetup
                 //                   comes from the controller alone.
                 lockRootRotation = true,
                 lockRootHeightY = BakedHeightRoles.Contains(d.role),
-                lockRootPositionXZ = false,
+                lockRootPositionXZ = BakedXZRoles.Contains(d.role),
+                heightOffset = HeightOffsets.TryGetValue(d.role, out float offset) ? offset : 0f,
                 // Based Upon: Y is the CENTER OF MASS (keepOriginalPositionY
                 // false, heightFromFeet false) — the root is pinned at the
                 // body's COM, so the model sinks by about its hip height.

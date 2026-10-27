@@ -56,6 +56,10 @@ namespace Pickleball.Sandbox
         [SerializeField] private float runJumpHeight = 0.56f;
         [SerializeField] private float gravity = -18f;
         [SerializeField] private float groundedStick = -2f;
+        [Tooltip("Fastest he can fall, m/s. Unbounded, a ground check that misses " +
+                 "for a while (seen on the bumpy scanned floor) banked -387 m/s " +
+                 "while he was standing, so the next real fall was instant.")]
+        [SerializeField] private float maxFallSpeed = 30f;
         [Tooltip("Grace period after leaving a ledge during which jump still works.")]
         [SerializeField] private float coyoteTime = 0.12f;
         [Tooltip("A jump pressed this long before landing still fires on landing.")]
@@ -200,6 +204,18 @@ namespace Pickleball.Sandbox
                  "(dash exit, tether release, landing) would otherwise pop the " +
                  "blend tree between clips in one frame.")]
         [SerializeField] private float speedDampTime = 0.08f;
+        [Tooltip("Once he has come to rest, a damped Speed below this snaps to " +
+                 "exactly 0. The damper only ever approaches its target: measured " +
+                 "after releasing a 2.8 m/s jog it still reads 0.009 at 0.6 s, " +
+                 "1e-4 at 1 s and 1e-9 at 2 s, decaying into denormals (1e-44 by " +
+                 "10 s). That trace holds the walk clip in the idle blend at a " +
+                 "sliver of weight and at a crawl of playback rate, and keeps the " +
+                 "foot plant's \"standing\" test at the mercy of a float tail. " +
+                 "0.01 is about 1% of walk at the ~1 m/s walk threshold.")]
+        [SerializeField] private float speedRestSnap = 0.01f;
+        [Tooltip("Turn the head toward the lock-on target while locked (ChibiFootIK " +
+                 "does the look-at in the IK pass; this only tells it where).")]
+        [SerializeField] private bool lookAtLockTarget = true;
         [Tooltip("A one-shot trigger (Jump, Stop, Flip, Dash) the Animator has not " +
                  "consumed within this long is withdrawn. Unity latches an " +
                  "unconsumed trigger forever, so one set while the current state " +
@@ -245,6 +261,7 @@ namespace Pickleball.Sandbox
 
         CharacterController _cc;
         MeleeCombat _combat;
+        ChibiFootIK _footIK;
         /// <summary>Travel direction while facing is held on the lock-on target,
         /// so turning to face it does not drag movement round with it.</summary>
         Vector3 _lockTravel;
@@ -394,6 +411,7 @@ namespace Pickleball.Sandbox
                 // (or swings through) that the bounds leave the frustum for a
                 // frame — the pose then freezes and pops on return.
                 animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                _footIK = animator.GetComponent<ChibiFootIK>();
             }
             if (cameraTransform == null && Camera.main != null)
                 cameraTransform = Camera.main.transform;
@@ -489,6 +507,7 @@ namespace Pickleball.Sandbox
             bool grounded = CheckGrounded();
             IsGrounded = grounded;
             if (grounded) _lastGroundedTime = Time.time;
+            UpdateLookTarget();
 
             // ---- force fields ------------------------------------------------
             // Take the frame's accumulated acceleration and clear the accumulator,
@@ -719,7 +738,7 @@ namespace Pickleball.Sandbox
             }
             else
             {
-                _verticalVelocity += gravity * dt;
+                _verticalVelocity = Mathf.Max(_verticalVelocity + gravity * dt, -maxFallSpeed);
             }
 
             IntegrateField(fieldAccel, dt);
@@ -771,6 +790,11 @@ namespace Pickleball.Sandbox
             // Read back the DAMPED value: the multiplier has to track what the
             // blend tree is actually showing, not where it is headed.
             float shown = animator.GetFloat(SpeedHash);
+            if (_currentSpeed <= 0f && shown > 0f && shown < speedRestSnap)
+            {
+                animator.SetFloat(SpeedHash, 0f);
+                shown = 0f;
+            }
             float topStride = _crouching ? crouchClipStride : runClipStride;
             float overspeed = topStride > 0.01f && !_skating
                 ? Mathf.Max(1f, shown / topStride) : 1f;
@@ -783,6 +807,16 @@ namespace Pickleball.Sandbox
             // threshold on its own, so only fresh input may cut it short.
             animator.SetBool(MovingHash, target > 0.01f);
             ExpireTriggers();
+        }
+
+        /// <summary>Points the head at the lock-on target while locked. Set at
+        /// the top of Update, ahead of the tether and dash early-outs, so it can
+        /// never be left pointing at a target that has since been released.</summary>
+        void UpdateLookTarget()
+        {
+            if (_footIK == null) return;
+            bool look = lookAtLockTarget && lockOn != null && lockOn.IsLocked && !_tethered;
+            _footIK.LookTarget = look ? lockOn.AimPoint : (Vector3?)null;
         }
 
         void SetTriggerBuffered(int hash)
@@ -1279,7 +1313,13 @@ namespace Pickleball.Sandbox
                 if (Vector3.Angle(h.normal, Vector3.up) > _cc.slopeLimit) continue;
                 return true;
             }
-            return false;
+            // The cast can miss while he is plainly standing: on the scanned
+            // floor it starts overlapping a bump (distance 0, skipped above) or
+            // clips past a crease, and he then loops Fall on flat ground. The
+            // controller's own last Move knows better, so trust its Below
+            // contact — but only while not rising, or a jump's take-off frame
+            // would count as landed.
+            return _verticalVelocity <= 0f && (_cc.collisionFlags & CollisionFlags.Below) != 0;
         }
 
         const float GroundProbe = 0.12f;

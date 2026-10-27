@@ -114,8 +114,29 @@ namespace Pickleball.Sandbox
                  "the player instead of rotating on frozen feet. Roughly the " +
                  "radius his feet travel on when pivoting.")]
         [SerializeField] private float turnShuffleRadius = 0.35f;
+        [Tooltip("Plant his feet and step them round when he turns, instead of the " +
+                 "walk shuffle above. Rotated on frozen feet, a 90°/s turn skates " +
+                 "them 5-8 mm every frame (measured); the shuffle only swaps that " +
+                 "for the FORWARD walk played in place, whose planted foot slides " +
+                 "backward under him instead. With this on, ChibiFootIK (added to his " +
+                 "model at runtime if the prefab lacks it) holds each foot still " +
+                 "and re-plants it with a short step every ~30° of turn; half the " +
+                 "frames of a turn each foot is dead still. Needs the IK pass that " +
+                 "Rebuild Newton Animator sets; until then the shuffle stays on.")]
+        [SerializeField] private bool plantedTurn = true;
+        [Tooltip("Turn his head toward the player. His body turns at a capped " +
+                 "rate, so the head leads it round and shows where he is looking.")]
+        [SerializeField] private bool lookAtPlayer = true;
+        [Tooltip("Height on the player he looks at, as a fraction of the player's " +
+                 "CharacterController height.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float lookAtPlayerHeight = 0.8f;
         [Tooltip("Damping on the Speed parameter, seconds.")]
         [SerializeField] private float speedDampTime = 0.15f;
+        [Tooltip("A damped Speed below this, with nothing asking for more, snaps to " +
+                 "exactly 0 rather than decaying forever (it reaches denormals " +
+                 "otherwise), so the walk fully leaves his idle.")]
+        [SerializeField] private float speedRestSnap = 0.01f;
         [Tooltip("Strength of the procedural tells (scale pulse, lean, recoil) " +
                  "once the controller has real clips. 1 = the full procedural " +
                  "stand-in, which on top of a cast clip reads as rubbery.")]
@@ -147,6 +168,8 @@ namespace Pickleball.Sandbox
         bool _barrageOn;
 
         ChibiLocomotion _player;
+        float _playerLookHeight = 1.5f;
+        ChibiFootIK _footIK;
         Vector3 _bodyBaseScale = Vector3.one;
         float _windUp, _recoil;
 
@@ -177,6 +200,14 @@ namespace Pickleball.Sandbox
                 animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
                 var rac = animator.runtimeAnimatorController;
                 if (rac != null && rac.animationClips.Length > 0) _tellScale = tellStrengthWithClips;
+
+                // Foot planting and the head look-at both live in ChibiFootIK,
+                // which has to sit on the Animator's own object to receive
+                // OnAnimatorIK. Added here rather than by the prefab builder so
+                // the fight wiring does not need a Setup Newton (Boss) rebuild.
+                _footIK = animator.GetComponent<ChibiFootIK>();
+                if (_footIK == null && (plantedTurn || lookAtPlayer))
+                    _footIK = animator.gameObject.AddComponent<ChibiFootIK>();
             }
 
             _bodyIsRoot = body == transform;
@@ -204,6 +235,8 @@ namespace Pickleball.Sandbox
         void Start()
         {
             _player = FindFirstObjectByType<ChibiLocomotion>();
+            if (_player != null && _player.TryGetComponent<CharacterController>(out var cc))
+                _playerLookHeight = cc.height * lookAtPlayerHeight;
             _wellTimer = 2f;                 // a beat before the first well
             _beamTimer = beamIntervalPhaseOne;
             _barrageTimer = barrageOffDuration;
@@ -444,9 +477,11 @@ namespace Pickleball.Sandbox
 
         /// <summary>
         /// Per-frame animator drive. Speed is what his feet should be doing:
-        /// he never travels, so it is the turn rate expressed as ground speed
-        /// (see <see cref="turnShuffleRadius"/>), damped so starting and
-        /// stopping a turn eases the walk in and out instead of popping it.
+        /// he never travels, so with planted turns it is simply zero — the feet
+        /// step themselves round (see <see cref="plantedTurn"/>). Without them
+        /// (or before the controller has its IK pass) it is the turn rate
+        /// expressed as ground speed (see <see cref="turnShuffleRadius"/>),
+        /// damped so starting and stopping a turn eases the walk in and out.
         /// Channeling holds the Beam cast for exactly as long as the beam is live.
         /// </summary>
         void UpdateAnimator(float dt)
@@ -455,9 +490,17 @@ namespace Pickleball.Sandbox
 
             float degrees = Quaternion.Angle(_lastFacing, _facing);
             _lastFacing = _facing;
-            float shuffle = degrees * Mathf.Deg2Rad / dt * turnShuffleRadius;
+            bool feetStep = plantedTurn && _footIK != null && _footIK.HandlesTurning;
+            float shuffle = feetStep ? 0f : degrees * Mathf.Deg2Rad / dt * turnShuffleRadius;
             animator.SetFloat(SpeedHash, shuffle, speedDampTime, dt);
+            if (shuffle <= 0f && animator.GetFloat(SpeedHash) < speedRestSnap)
+                animator.SetFloat(SpeedHash, 0f);
             animator.SetBool(ChannelingHash, beam != null && beam.IsActive);
+
+            if (_footIK != null)
+                _footIK.LookTarget = lookAtPlayer && _player != null
+                    ? _player.transform.position + Vector3.up * _playerLookHeight
+                    : (Vector3?)null;
 
             for (int i = 0; i < TriggerHashes.Length; i++)
             {
@@ -544,6 +587,13 @@ namespace Pickleball.Sandbox
                 animator.SetBool(DeadHash, true);
                 animator.SetBool(ChannelingHash, false);
                 foreach (var h in TriggerHashes) animator.ResetTrigger(h);
+            }
+            // The death clip owns his feet and head from here; the plant would
+            // otherwise hold his feet to the floor while the body falls.
+            if (_footIK != null)
+            {
+                _footIK.Suppressed = true;
+                _footIK.LookTarget = null;
             }
             // Update stops running once he is dead, so a tell caught mid-swell
             // would otherwise freeze him squashed and leaning for good.
