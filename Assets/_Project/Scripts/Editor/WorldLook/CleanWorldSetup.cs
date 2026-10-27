@@ -11,7 +11,7 @@ using Object = UnityEngine.Object;
 
 /// <summary>
 /// Tools ▸ Pickleball ▸ Clean World. Repairs the World Labs academy export,
-/// which is choppy in three separate ways:
+/// which is choppy in three separate ways, and splits it up to render cheaply:
 ///
 ///  * Black specks. Thousands of triangles map onto texels the bake never
 ///    painted (left pure black). Each one is re-pointed at the colour of its
@@ -27,11 +27,22 @@ using Object = UnityEngine.Object;
 ///    (The export's own _collider.glb is not used: near the spawn it sits a
 ///    median 23 cm above the visible grass, off by over 50 cm in 17% of spots,
 ///    and is no smoother.)
+///  * One giant renderer. The export is a single mesh, drawn whole every frame
+///    wherever the camera looks. It is split into a <see cref="ChunkGrid"/>²
+///    grid of renderers, each with its own collider, so frustum culling skips
+///    what is off screen. The export also gives every triangle its own three
+///    vertices; corners sharing a position and UV are merged, with normals
+///    smoothed by position, which more than halves the vertex count.
 ///
-/// The originals are never touched: the cleaned mesh and texture are written
-/// next to them and swapped into the open scene. The mesh is written as a .glb
-/// rather than a Mesh .asset so it lands in Git LFS instead of ~150 MB of YAML.
-/// Safe to re-run; after rebuilding the sandbox, run Setup World Look, then this.
+/// Decimating was measured and rejected: 93% of the triangles span over 16 px
+/// at 1080p from the nearest walkable spot, and 92.6% are directly visible
+/// from somewhere walkable, so there is little to remove without it showing.
+///
+/// The originals are never touched: the cleaned chunks and texture are written
+/// next to them and swapped into the open scene. The chunks are written as one
+/// .glb rather than Mesh .assets so they land in Git LFS instead of ~100 MB of
+/// YAML. Safe to re-run; after rebuilding the sandbox, run Setup World Look,
+/// then this.
 /// </summary>
 public static class CleanWorldSetup
 {
@@ -40,6 +51,7 @@ public static class CleanWorldSetup
     const string SourcePath = WorldDir + "/Ancient Greek Scholarly Academy_texture_mesh.glb";
     const string CleanMeshPath = WorldDir + "/AcademyWorld_Clean.glb";
     const string FilledTexturePath = WorldDir + "/AcademyWorld_Filled.png";
+    const string ChunksName = "Chunks";
 
     /// <summary>Detached pieces smaller than this are floaters. The real detached
     /// pieces in the academy (canopy chunks) are 60–250 tris and 2–5 m across;
@@ -51,6 +63,11 @@ public static class CleanWorldSetup
     /// triangles touch.</summary>
     const float WeldScale = 1000f;
 
+    /// <summary>Chunks per side of the ground-plane grid. From typical orbit-camera
+    /// views, 8×8 draws about half the map per frame (4×4: two thirds; 16×16:
+    /// 42% for three times the renderers).</summary>
+    const int ChunkGrid = 8;
+
     [MenuItem("Tools/Pickleball/Clean World")]
     public static void Run()
     {
@@ -60,8 +77,10 @@ public static class CleanWorldSetup
             Debug.LogError($"No '{WorldName}' in the open scene — run Setup Chibi Sandbox first.");
             return;
         }
-        var visual = world.GetComponentInChildren<MeshFilter>();
-        var material = visual != null ? visual.GetComponent<MeshRenderer>().sharedMaterial : null;
+        // The glTF mesh node itself, not one of the chunks from an earlier run.
+        var visual = world.GetComponentsInChildren<MeshRenderer>(true)
+            .FirstOrDefault(r => r.transform.parent == null || r.transform.parent.name != ChunksName);
+        var material = visual != null ? visual.sharedMaterial : null;
         if (material == null || !material.HasProperty("_BaseMap")
             || AssetDatabase.GetAssetPath(material).EndsWith(".glb"))
         {
@@ -79,11 +98,12 @@ public static class CleanWorldSetup
             var keep = FindKeptTriangles(source, out var weld, out int weldCount, out int droppedPieces);
             int droppedTris = keep.Count(k => !k);
 
-            Step("Re-colouring unpainted triangles", 0.3f);
+            Step("Re-colouring unpainted triangles", 0.25f);
             var colourFrom = ColourSources(source, keep, weld, weldCount, out int unpainted, out int recoloured);
 
-            Step("Writing the cleaned mesh", 0.4f);
-            WriteCleanGlb(source, keep, colourFrom);
+            Step("Splitting into chunks", 0.35f);
+            var chunks = BuildChunks(source, keep, colourFrom, weld, weldCount);
+            WriteCleanGlb(CleanMeshPath, source, chunks);
 
             Step("Filling the texture gutter", 0.5f);
             int filled = FillGutter(source.Pixels, source.Width, source.Height);
@@ -97,26 +117,25 @@ public static class CleanWorldSetup
             Step("Importing (the 8K texture compresses slowly)", 0.7f);
             var cleanTexture = ImportFilledTexture(source.Width);
             AssetDatabase.ImportAsset(CleanMeshPath, ImportAssetOptions.ForceUpdate);
-            var cleanMesh = AssetDatabase.LoadAllAssetsAtPath(CleanMeshPath).OfType<Mesh>().FirstOrDefault();
-            if (cleanMesh == null || cleanTexture == null)
+            var chunkMeshes = AssetDatabase.LoadAllAssetsAtPath(CleanMeshPath).OfType<Mesh>()
+                .OrderBy(m => m.name, StringComparer.Ordinal).ToArray();
+            if (chunkMeshes.Length != chunks.Count || cleanTexture == null)
             {
-                Debug.LogError($"Could not load {CleanMeshPath} or {FilledTexturePath} after import.");
+                Debug.LogError($"Expected {chunks.Count} meshes in {CleanMeshPath} and a texture at " +
+                               $"{FilledTexturePath}; found {chunkMeshes.Length} meshes.");
                 return;
             }
 
             Step("Swapping into the scene", 0.95f);
-            visual.sharedMesh = cleanMesh;
-            if (!visual.TryGetComponent<MeshCollider>(out var collider))
-                collider = visual.gameObject.AddComponent<MeshCollider>();
-            collider.sharedMesh = cleanMesh;
-            Physics.SyncTransforms();
             material.SetTexture("_BaseMap", cleanTexture);
             EditorUtility.SetDirty(material);
+            PlaceChunks(visual, chunkMeshes);
             EditorSceneManager.MarkSceneDirty(world.scene);
 
             Debug.Log($"World cleaned: dropped {droppedPieces:n0} floating pieces ({droppedTris:n0} of {triCount:n0} tris); " +
                       $"re-coloured {recoloured:n0} of {unpainted:n0} unpainted triangles from their neighbours; " +
-                      $"filled {filled:n0} gutter texels. Render and collision now use {CleanMeshPath}.");
+                      $"filled {filled:n0} gutter texels. Split into {chunks.Count} chunks with " +
+                      $"{chunks.Sum(c => c.VertexCount):n0} vertices (the export had {source.Positions.Length / 3:n0}).");
         }
         finally
         {
@@ -132,6 +151,7 @@ public static class CleanWorldSetup
     const uint JsonChunk = 0x4E4F534A;  // "JSON"
     const uint BinChunk = 0x004E4942;   // "BIN\0"
     const int FloatType = 5126, UIntType = 5125, UShortType = 5123, UByteType = 5121;
+    const int VertexTarget = 34962, IndexTarget = 34963;
 
     /// <summary>The export in glTF space (not Unity's): the cleaned copy is
     /// written back the same way, so glTFast converts both identically.</summary>
@@ -141,7 +161,9 @@ public static class CleanWorldSetup
         public int[] Indices;
         public Color32[] Pixels;                  // the baked texture, row 0 = bottom
         public int Width, Height;
-        public string Scene, Scenes, Nodes;       // raw JSON, copied over verbatim
+        public List<object> Nodes;                // the scene hierarchy, copied over
+        public object Scenes, Scene;
+        public int MeshNode;                      // the node that holds the mesh
     }
 
     static Source LoadSource(string path)
@@ -150,14 +172,17 @@ public static class CleanWorldSetup
         if (BitConverter.ToUInt32(bytes, 0) != GlbMagic || BitConverter.ToUInt32(bytes, 16) != JsonChunk)
             throw new InvalidDataException($"{path} is not a binary glTF.");
         int jsonLength = BitConverter.ToInt32(bytes, 12);
-        var gltf = ParseRoot(Encoding.UTF8.GetString(bytes, 20, jsonLength), out var raw);
+        int i = 0;
+        var gltf = ParseObject(Encoding.UTF8.GetString(bytes, 20, jsonLength), ref i);
         int bin = 20 + jsonLength + 8;   // past the BIN chunk's header
 
         var meshes = Arr(gltf["meshes"]);
         var primitives = Arr(Obj(meshes[0])["primitives"]);
         var images = gltf.TryGetValue("images", out var im) ? Arr(im) : null;
-        if (meshes.Count != 1 || primitives.Count != 1 || images is not { Count: 1 })
-            throw new InvalidDataException($"{path}: expected one mesh with one primitive and one baked texture.");
+        var nodes = Arr(gltf["nodes"]);
+        var meshNodes = Enumerable.Range(0, nodes.Count).Where(n => Obj(nodes[n]).ContainsKey("mesh")).ToList();
+        if (meshes.Count != 1 || primitives.Count != 1 || images is not { Count: 1 } || meshNodes.Count != 1)
+            throw new InvalidDataException($"{path}: expected one mesh, on one node, with one primitive and one baked texture.");
         var prim = Obj(primitives[0]);
         var attributes = Obj(prim["attributes"]);
 
@@ -177,9 +202,10 @@ public static class CleanWorldSetup
             Pixels = tex.GetPixels32(),
             Width = tex.width,
             Height = tex.height,
-            Scene = raw.TryGetValue("scene", out var scene) ? scene : null,
-            Scenes = raw["scenes"],
-            Nodes = raw["nodes"],
+            Nodes = nodes,
+            Scenes = gltf["scenes"],
+            Scene = gltf.TryGetValue("scene", out var scene) ? scene : null,
+            MeshNode = meshNodes[0],
         };
         Object.DestroyImmediate(tex);
         if (source.Normals.Length != source.Positions.Length || source.Uvs.Length / 2 != source.Positions.Length / 3)
@@ -238,18 +264,7 @@ public static class CleanWorldSetup
         return fallback ?? throw new InvalidDataException($"glTF is missing '{key}'.");
     }
 
-    /// <summary>Parses the root object, and keeps each top-level value's raw
-    /// text so parts of it can be copied over untouched.</summary>
-    static Dictionary<string, object> ParseRoot(string json, out Dictionary<string, string> raw)
-    {
-        var values = new Dictionary<string, string>();
-        int i = 0;
-        var root = ParseObject(json, ref i, (key, from, to) => values[key] = json.Substring(from, to - from));
-        raw = values;
-        return root;
-    }
-
-    static Dictionary<string, object> ParseObject(string json, ref int i, Action<string, int, int> onValue = null)
+    static Dictionary<string, object> ParseObject(string json, ref int i)
     {
         var obj = new Dictionary<string, object>();
         Expect(json, ref i, '{');
@@ -257,9 +272,7 @@ public static class CleanWorldSetup
         {
             string key = ParseString(json, ref i);
             Expect(json, ref i, ':');
-            int from = SkipSpace(json, ref i);
             obj[key] = ParseValue(json, ref i);
-            onValue?.Invoke(key, from, i);
             if (Peek(json, ref i) == ',') i++;
         }
         i++;
@@ -339,6 +352,52 @@ public static class CleanWorldSetup
         if (Peek(json, ref i) != c)
             throw new InvalidDataException($"glTF JSON: expected '{c}' at {i}.");
         i++;
+    }
+
+    static void WriteJson(StringBuilder sb, object value)
+    {
+        switch (value)
+        {
+            case null: sb.Append("null"); break;
+            case bool b: sb.Append(b ? "true" : "false"); break;
+            case int n: sb.Append(n.ToString(CultureInfo.InvariantCulture)); break;
+            case float f: sb.Append(f.ToString("R", CultureInfo.InvariantCulture)); break;
+            case double d: sb.Append(d.ToString("R", CultureInfo.InvariantCulture)); break;
+            case string s:
+                sb.Append('"');
+                foreach (char c in s)
+                {
+                    if (c == '"' || c == '\\') sb.Append('\\').Append(c);
+                    else if (c < ' ') sb.Append("\\u").Append(((int)c).ToString("x4"));
+                    else sb.Append(c);
+                }
+                sb.Append('"');
+                break;
+            case Dictionary<string, object> obj:
+                sb.Append('{');
+                bool firstKey = true;
+                foreach (var kv in obj)
+                {
+                    if (!firstKey) sb.Append(',');
+                    firstKey = false;
+                    WriteJson(sb, kv.Key);
+                    sb.Append(':');
+                    WriteJson(sb, kv.Value);
+                }
+                sb.Append('}');
+                break;
+            case List<object> list:
+                sb.Append('[');
+                for (int k = 0; k < list.Count; k++)
+                {
+                    if (k > 0) sb.Append(',');
+                    WriteJson(sb, list[k]);
+                }
+                sb.Append(']');
+                break;
+            default:
+                throw new ArgumentException($"Can't write {value.GetType()} as JSON.");
+        }
     }
 
     // ── Floating pieces ─────────────────────────────────────────────────────
@@ -466,65 +525,220 @@ public static class CleanWorldSetup
         return from;
     }
 
-    // ── Writing the cleaned mesh ────────────────────────────────────────────
+    // ── Chunks ──────────────────────────────────────────────────────────────
 
-    static void WriteCleanGlb(Source s, bool[] keep, int[] colourFrom)
+    class Chunk
     {
-        int n = keep.Count(k => k) * 3;   // every triangle keeps its own three vertices
-        var pos = new float[n * 3];
-        var nrm = new float[n * 3];
-        var uv = new float[n * 2];
-        var min = Vector3.positiveInfinity;
-        var max = Vector3.negativeInfinity;
-        int o = 0;
-        for (int t = 0; t < keep.Length; t++)
+        public string Name;
+        public float[] Positions, Normals, Uvs;
+        public int[] Indices;
+        public int VertexCount => Positions.Length / 3;
+    }
+
+    /// <summary>The kept triangles, grouped by where their centroid falls on a
+    /// ChunkGrid² grid over the ground plane. Within a chunk, corners that share
+    /// a position and UV become one vertex; normals are averaged over every
+    /// triangle meeting at a position, chunk borders included.</summary>
+    static List<Chunk> BuildChunks(Source s, bool[] keep, int[] colourFrom, int[] weld, int weldCount)
+    {
+        var smooth = new Vector3[weldCount];
+        for (int i = 0; i < weld.Length; i++)
+            if (keep[i / 3]) smooth[weld[i]] += NormalAt(s, s.Indices[i]);
+
+        // Ground-plane cell of every kept triangle, from its centroid in the
+        // glTF scene (Y up).
+        var toScene = MeshNodeMatrix(s);
+        int triCount = keep.Length;
+        var x = new float[triCount];
+        var z = new float[triCount];
+        float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+        for (int t = 0; t < triCount; t++)
         {
             if (!keep[t]) continue;
-            // An unpainted triangle samples a single point of its painted neighbour.
-            bool borrowed = colourFrom[t] >= 0 && colourFrom[t] != t;
-            var borrowedUv = borrowed ? CentroidUv(s, colourFrom[t]) : default;
-            for (int c = 0; c < 3; c++, o++)
+            var c = toScene.MultiplyPoint3x4((PositionAt(s, s.Indices[3 * t]) + PositionAt(s, s.Indices[3 * t + 1])
+                                              + PositionAt(s, s.Indices[3 * t + 2])) / 3f);
+            x[t] = c.x;
+            z[t] = c.z;
+            minX = Mathf.Min(minX, c.x); maxX = Mathf.Max(maxX, c.x);
+            minZ = Mathf.Min(minZ, c.z); maxZ = Mathf.Max(maxZ, c.z);
+        }
+        var cells = new List<int>[ChunkGrid * ChunkGrid];
+        for (int t = 0; t < triCount; t++)
+        {
+            if (!keep[t]) continue;
+            int cx = Mathf.Clamp((int)((x[t] - minX) / (maxX - minX) * ChunkGrid), 0, ChunkGrid - 1);
+            int cz = Mathf.Clamp((int)((z[t] - minZ) / (maxZ - minZ) * ChunkGrid), 0, ChunkGrid - 1);
+            (cells[cz * ChunkGrid + cx] ??= new List<int>()).Add(t);
+        }
+
+        var chunks = new List<Chunk>();
+        var merged = new Dictionary<(int, int, int, int, int), int>();
+        var pos = new List<float>();
+        var nrm = new List<float>();
+        var uv = new List<float>();
+        var idx = new List<int>();
+        for (int cell = 0; cell < cells.Length; cell++)
+        {
+            if (cells[cell] == null) continue;
+            merged.Clear(); pos.Clear(); nrm.Clear(); uv.Clear(); idx.Clear();
+            foreach (int t in cells[cell])
             {
-                int v = s.Indices[3 * t + c];
-                Array.Copy(s.Positions, 3 * v, pos, 3 * o, 3);
-                Array.Copy(s.Normals, 3 * v, nrm, 3 * o, 3);
-                if (borrowed) { uv[2 * o] = borrowedUv.x; uv[2 * o + 1] = borrowedUv.y; }
-                else Array.Copy(s.Uvs, 2 * v, uv, 2 * o, 2);
-                var p = new Vector3(pos[3 * o], pos[3 * o + 1], pos[3 * o + 2]);
+                // An unpainted triangle samples a single point of its painted neighbour.
+                bool borrowed = colourFrom[t] >= 0 && colourFrom[t] != t;
+                var borrowedUv = borrowed ? CentroidUv(s, colourFrom[t]) : default;
+                for (int c = 0; c < 3; c++)
+                {
+                    int v = s.Indices[3 * t + c];
+                    var p = PositionAt(s, v);
+                    var tc = borrowed ? borrowedUv : new Vector2(s.Uvs[2 * v], s.Uvs[2 * v + 1]);
+                    var key = (Bits(p.x), Bits(p.y), Bits(p.z), Bits(tc.x), Bits(tc.y));
+                    if (!merged.TryGetValue(key, out int o))
+                    {
+                        merged[key] = o = merged.Count;
+                        // Opposite faces at one spot can cancel out; keep the face's own normal then.
+                        var n = smooth[weld[3 * t + c]];
+                        n = n.sqrMagnitude > 1e-8f ? n.normalized : NormalAt(s, v);
+                        pos.Add(p.x); pos.Add(p.y); pos.Add(p.z);
+                        nrm.Add(n.x); nrm.Add(n.y); nrm.Add(n.z);
+                        uv.Add(tc.x); uv.Add(tc.y);
+                    }
+                    idx.Add(o);
+                }
+            }
+            chunks.Add(new Chunk
+            {
+                Name = $"chunk_{cell % ChunkGrid}_{cell / ChunkGrid}",
+                Positions = pos.ToArray(),
+                Normals = nrm.ToArray(),
+                Uvs = uv.ToArray(),
+                Indices = idx.ToArray(),
+            });
+        }
+        return chunks;
+    }
+
+    static Vector3 PositionAt(Source s, int v) => new(s.Positions[3 * v], s.Positions[3 * v + 1], s.Positions[3 * v + 2]);
+    static Vector3 NormalAt(Source s, int v) => new(s.Normals[3 * v], s.Normals[3 * v + 1], s.Normals[3 * v + 2]);
+    static int Bits(float f) => BitConverter.SingleToInt32Bits(f);
+
+    /// <summary>The mesh node's placement in the glTF scene (glTF space, Y up).</summary>
+    static Matrix4x4 MeshNodeMatrix(Source s)
+    {
+        var parent = new Dictionary<int, int>();
+        for (int n = 0; n < s.Nodes.Count; n++)
+            if (Obj(s.Nodes[n]).TryGetValue("children", out var children))
+                foreach (var child in Arr(children))
+                    parent[Convert.ToInt32(child)] = n;
+
+        var m = Matrix4x4.identity;
+        for (int n = s.MeshNode; ; n = parent[n])
+        {
+            m = LocalMatrix(Obj(s.Nodes[n])) * m;
+            if (!parent.ContainsKey(n)) return m;
+        }
+    }
+
+    static Matrix4x4 LocalMatrix(Dictionary<string, object> node)
+    {
+        float[] Floats(string key, params float[] fallback) =>
+            node.TryGetValue(key, out var v) ? Arr(v).Select(f => Convert.ToSingle(f)).ToArray() : fallback;
+        if (node.ContainsKey("matrix"))
+        {
+            var a = Floats("matrix");
+            var m = new Matrix4x4();
+            for (int i = 0; i < 16; i++) m[i] = a[i];   // both column-major
+            return m;
+        }
+        var t = Floats("translation", 0, 0, 0);
+        var r = Floats("rotation", 0, 0, 0, 1);
+        var sc = Floats("scale", 1, 1, 1);
+        return Matrix4x4.TRS(new Vector3(t[0], t[1], t[2]), new Quaternion(r[0], r[1], r[2], r[3]), new Vector3(sc[0], sc[1], sc[2]));
+    }
+
+    // ── Writing the cleaned mesh ────────────────────────────────────────────
+
+    /// <summary>One mesh per chunk, hung as child nodes under the export's mesh
+    /// node so the hierarchy, and with it the placement, is unchanged. No
+    /// material: the scene uses its own.</summary>
+    static void WriteCleanGlb(string path, Source s, List<Chunk> chunks)
+    {
+        var bin = new byte[chunks.Sum(c => (c.Positions.Length + c.Normals.Length + c.Uvs.Length + c.Indices.Length) * 4)];
+        var views = new List<object>();
+        var accessors = new List<object>();
+        var meshes = new List<object>();
+        int offset = 0;
+
+        int AddAccessor(Array data, int floatsOrInts, int componentType, int count, string type, int target)
+        {
+            int bytes = floatsOrInts * 4;
+            Buffer.BlockCopy(data, 0, bin, offset, bytes);
+            views.Add(new Dictionary<string, object>
+                { ["buffer"] = 0, ["byteOffset"] = offset, ["byteLength"] = bytes, ["target"] = target });
+            offset += bytes;
+            accessors.Add(new Dictionary<string, object>
+                { ["bufferView"] = views.Count - 1, ["componentType"] = componentType, ["count"] = count, ["type"] = type });
+            return accessors.Count - 1;
+        }
+
+        foreach (var c in chunks)
+        {
+            int n = c.VertexCount;
+            int position = AddAccessor(c.Positions, n * 3, FloatType, n, "VEC3", VertexTarget);
+            var min = Vector3.positiveInfinity;
+            var max = Vector3.negativeInfinity;
+            for (int v = 0; v < n; v++)
+            {
+                var p = new Vector3(c.Positions[3 * v], c.Positions[3 * v + 1], c.Positions[3 * v + 2]);
                 min = Vector3.Min(min, p);
                 max = Vector3.Max(max, p);
             }
+            var bounds = Obj(accessors[position]);
+            bounds["min"] = new List<object> { min.x, min.y, min.z };
+            bounds["max"] = new List<object> { max.x, max.y, max.z };
+
+            int normal = AddAccessor(c.Normals, n * 3, FloatType, n, "VEC3", VertexTarget);
+            int uv = AddAccessor(c.Uvs, n * 2, FloatType, n, "VEC2", VertexTarget);
+            int indices = AddAccessor(c.Indices, c.Indices.Length, UIntType, c.Indices.Length, "SCALAR", IndexTarget);
+            meshes.Add(new Dictionary<string, object>
+            {
+                ["name"] = c.Name,
+                ["primitives"] = new List<object>
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["attributes"] = new Dictionary<string, object>
+                            { ["POSITION"] = position, ["NORMAL"] = normal, ["TEXCOORD_0"] = uv },
+                        ["indices"] = indices,
+                    },
+                },
+            });
         }
-        var indices = new int[n];
-        for (int i = 0; i < n; i++) indices[i] = i;
 
-        int posBytes = n * 12, uvBytes = n * 8, indexBytes = n * 4;
-        var bin = new byte[posBytes * 2 + uvBytes + indexBytes];
-        Buffer.BlockCopy(pos, 0, bin, 0, posBytes);
-        Buffer.BlockCopy(nrm, 0, bin, posBytes, posBytes);
-        Buffer.BlockCopy(uv, 0, bin, posBytes * 2, uvBytes);
-        Buffer.BlockCopy(indices, 0, bin, posBytes * 2 + uvBytes, indexBytes);
+        var nodes = s.Nodes.Select(node => (object)new Dictionary<string, object>(Obj(node))).ToList();
+        var meshNode = Obj(nodes[s.MeshNode]);
+        meshNode.Remove("mesh");
+        var children = meshNode.TryGetValue("children", out var existing) ? new List<object>(Arr(existing)) : new List<object>();
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            children.Add(nodes.Count);
+            nodes.Add(new Dictionary<string, object> { ["name"] = chunks[i].Name, ["mesh"] = i });
+        }
+        meshNode["children"] = children;
 
-        // Same scene and node hierarchy as the export, so it imports at the same
-        // place; no material, since the scene uses its own.
-        var json = new StringBuilder("{\"asset\":{\"version\":\"2.0\",\"generator\":\"Pickball Clean World\"}");
-        if (s.Scene != null) json.Append(",\"scene\":").Append(s.Scene);
-        json.Append(",\"scenes\":").Append(s.Scenes);
-        json.Append(",\"nodes\":").Append(s.Nodes);
-        json.Append(",\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0,\"NORMAL\":1,\"TEXCOORD_0\":2},\"indices\":3}]}]");
-        string F(float f) => f.ToString("R", CultureInfo.InvariantCulture);
-        json.Append($",\"accessors\":[{{\"bufferView\":0,\"componentType\":{FloatType},\"count\":{n},\"type\":\"VEC3\",")
-            .Append($"\"min\":[{F(min.x)},{F(min.y)},{F(min.z)}],\"max\":[{F(max.x)},{F(max.y)},{F(max.z)}]}},")
-            .Append($"{{\"bufferView\":1,\"componentType\":{FloatType},\"count\":{n},\"type\":\"VEC3\"}},")
-            .Append($"{{\"bufferView\":2,\"componentType\":{FloatType},\"count\":{n},\"type\":\"VEC2\"}},")
-            .Append($"{{\"bufferView\":3,\"componentType\":{UIntType},\"count\":{n},\"type\":\"SCALAR\"}}]");
-        json.Append($",\"bufferViews\":[{{\"buffer\":0,\"byteOffset\":0,\"byteLength\":{posBytes},\"target\":34962}},")
-            .Append($"{{\"buffer\":0,\"byteOffset\":{posBytes},\"byteLength\":{posBytes},\"target\":34962}},")
-            .Append($"{{\"buffer\":0,\"byteOffset\":{posBytes * 2},\"byteLength\":{uvBytes},\"target\":34962}},")
-            .Append($"{{\"buffer\":0,\"byteOffset\":{posBytes * 2 + uvBytes},\"byteLength\":{indexBytes},\"target\":34963}}]");
-        json.Append($",\"buffers\":[{{\"byteLength\":{bin.Length}}}]}}");
-
-        WriteGlb(CleanMeshPath, json.ToString(), bin);
+        var root = new Dictionary<string, object>
+        {
+            ["asset"] = new Dictionary<string, object> { ["version"] = "2.0", ["generator"] = "Pickball Clean World" },
+            ["scenes"] = s.Scenes,
+            ["nodes"] = nodes,
+            ["meshes"] = meshes,
+            ["accessors"] = accessors,
+            ["bufferViews"] = views,
+            ["buffers"] = new List<object> { new Dictionary<string, object> { ["byteLength"] = bin.Length } },
+        };
+        if (s.Scene != null) root["scene"] = s.Scene;
+        var json = new StringBuilder();
+        WriteJson(json, root);
+        WriteGlb(path, json.ToString(), bin);
     }
 
     static void WriteGlb(string path, string json, byte[] bin)
@@ -642,5 +856,40 @@ public static class CleanWorldSetup
             importer.SaveAndReimport();
         }
         return AssetDatabase.LoadAssetAtPath<Texture2D>(FilledTexturePath);
+    }
+
+    // ── Scene ───────────────────────────────────────────────────────────────
+
+    /// <summary>Hangs a renderer and collider per chunk under the glTF mesh
+    /// node. The node keeps its transform (the chunks are in its space) but no
+    /// longer draws or collides itself.</summary>
+    static void PlaceChunks(MeshRenderer visual, Mesh[] meshes)
+    {
+        var node = visual.transform;
+        var old = node.Find(ChunksName);
+        if (old != null) Object.DestroyImmediate(old.gameObject);
+        if (visual.TryGetComponent<MeshCollider>(out var oldCollider)) Object.DestroyImmediate(oldCollider);
+        visual.GetComponent<MeshFilter>().sharedMesh = null;
+        visual.enabled = false;
+
+        var root = new GameObject(ChunksName);
+        root.transform.SetParent(node, false);
+        foreach (var mesh in meshes)
+        {
+            var go = new GameObject(mesh.name, typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider));
+            go.transform.SetParent(root.transform, false);
+            go.GetComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.GetComponent<MeshRenderer>();
+            r.sharedMaterial = visual.sharedMaterial;
+            r.shadowCastingMode = visual.shadowCastingMode;
+            r.receiveShadows = visual.receiveShadows;
+            go.GetComponent<MeshCollider>().sharedMesh = mesh;
+        }
+        foreach (var t in root.GetComponentsInChildren<Transform>())
+        {
+            t.gameObject.isStatic = visual.gameObject.isStatic;
+            t.gameObject.layer = visual.gameObject.layer;
+        }
+        Physics.SyncTransforms();
     }
 }
