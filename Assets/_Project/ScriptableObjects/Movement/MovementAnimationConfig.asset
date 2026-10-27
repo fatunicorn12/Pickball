@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 237f25bbc63c46cc898c6277d3e89a61, type: 3}
+  m_Name: MovementAnimationConfig
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Movement.Presentation.MovementAnimationConfig
+  modelYOffset: 0.64
+  skateRideHeight: 0.2225138
+  rideLiftRate: 1.2
+  strideScale: 1
+  runClipStride: 2.531627
+  sprintClipStride: 0
+  crouchClipStride: 0.69160336
+  speedDampTime: 0.08
+  speedRestSnap: 0.01
+  triggerLifetime: 0.2
+  airborneLatch: 0.15
+  flipAirborneSeconds: 1.2
+  flipSpeedRange: {x: 0.4, y: 2.5}
+  gestureSeconds: 0.87
+  gestureFadeRate: 6
+  proceduralPoses: 1
+  divePitch: 60
+  bellySlidePitch: 82
+  bellySlideOffset: {x: 0, y: -0.4, z: 0}
+  poseBlendRate: 14
+  spinYawSpeed: 1080
