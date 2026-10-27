@@ -266,17 +266,24 @@ namespace Pickleball.Sandbox
             if ((signal & SwingSignal.Finished) != 0) FinishChain();
         }
 
-        /// <summary>Ground/air bookkeeping for the chain counters, with a short
-        /// grace before "airborne" so slope flicker cannot drop a ground chain.</summary>
+        /// <summary>
+        /// Ground/air bookkeeping for the chain counters.
+        ///
+        /// Asymmetric on purpose. Leaving the ground only counts after a short
+        /// grace, so one-frame grounded flicker on a slope cannot drop a ground
+        /// chain. Touching the ground refills the air chain at once, with no
+        /// grace — otherwise an air step started during such a flicker would
+        /// leave the counter part-spent until the next real jump and landing.
+        /// </summary>
         void TrackGround(float dt)
         {
             bool grounded = IsGrounded;
             _airborneFor = grounded ? 0f : _airborneFor + dt;
+            if (grounded && _progress.AirHits > 0) _progress.Land();
+
             bool airborne = _airborneFor > airborneGraceSeconds;
-            if (airborne == _airborne) return;
+            if (airborne && !_airborne) _progress.LeaveGround();
             _airborne = airborne;
-            if (airborne) _progress.LeaveGround();
-            else _progress.Land();
         }
 
         bool IsGrounded => _movement == null || _movement.IsGrounded;

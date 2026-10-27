@@ -47,6 +47,17 @@ namespace Pickleball.Tests.Combat
         }
 
         [Test]
+        public void Landing_RefillsAirWithoutTouchingAGroundChain()
+        {
+            var p = new ComboProgress();
+            p.RecordStep(ComboTrack.Air);
+            p.RecordStep(ComboTrack.Ground);
+            p.Land();
+            Assert.That(p.HitsIn(ComboTrack.Air), Is.EqualTo(0));
+            Assert.That(p.HitsIn(ComboTrack.Ground), Is.EqualTo(1));
+        }
+
+        [Test]
         public void LeavingTheGround_DropsTheGroundChainOnly()
         {
             var p = new ComboProgress();

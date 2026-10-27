@@ -45,13 +45,10 @@ namespace Pickleball.Sandbox.Combat
         /// is dropped; the air chain is spent per airtime, not per press.</summary>
         public void DropChain() => GroundHits = 0;
 
-        /// <summary>The player touched down: the air chain refills, and any
-        /// ground chain from before the jump is long gone.</summary>
-        public void Land()
-        {
-            AirHits = 0;
-            GroundHits = 0;
-        }
+        /// <summary>The player touched down: the air chain refills. The ground
+        /// chain is not touched — any from before the jump was already dropped
+        /// by <see cref="LeaveGround"/> or by the air step itself.</summary>
+        public void Land() => AirHits = 0;
 
         /// <summary>The player left the ground. A ground chain cannot continue in
         /// the air — the next press starts the air chain.</summary>
