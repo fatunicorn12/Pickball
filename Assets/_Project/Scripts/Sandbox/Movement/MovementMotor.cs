@@ -339,6 +339,10 @@ namespace Pickleball.Sandbox.Movement
             SetBodyYaw(Mathf.Atan2(_travel.x, _travel.z) * Mathf.Rad2Deg);
         }
 
+        /// <summary>True while lock-on / attack facing holds the body on a target, so
+        /// moves must not snap the body round themselves.</summary>
+        internal bool HasFacingOverride => _facingHeld;
+
         /// <summary>Smoothly turns the body (not travel) to face <paramref name="dir"/>.</summary>
         internal void FaceTowards(Vector3 dir, float smoothTime)
         {
@@ -630,7 +634,12 @@ namespace Pickleball.Sandbox.Movement
             // Refuse to grow under a ceiling, or the capsule pops through it.
             if (wanted > _capsuleFraction && !CanStandTo(wanted)) return;
             _capsuleFraction = wanted;
-            float h = _standHeight * wanted;
+            // Never shorter than the capsule is wide. Below 2 × radius Unity treats
+            // it as a sphere centred at height/2, whose bottom then sits BELOW the
+            // feet: the controller shoves him up out of the floor (a 41 m/s spike
+            // in Velocity, which the Fluxion Beam bills, and a frame of Fall). The
+            // chibi's capsule is wide (radius 0.76 m), so this bites at ~60%.
+            float h = Mathf.Max(_standHeight * wanted, 2f * _standRadius + 0.02f);
             _cc.height = h;
             _cc.center = new Vector3(_standCenter.x, h * 0.5f, _standCenter.z);
         }
@@ -665,9 +674,17 @@ namespace Pickleball.Sandbox.Movement
         {
             if (VerticalVelocity > 0.01f) return false;
 
+            // The sphere starts just above the feet and sweeps GroundProbe below
+            // them, so its lowest point reaches exactly that far. (It used to
+            // start a full capsule radius up and sweep radius + probe, which put
+            // its bottom 0.9 × radius + probe below the feet — 0.8 m on this
+            // capsule. Any jump under 0.8 m was "grounded" from its apex on and
+            // sank at the ground hold-down speed; taller ones did it for their
+            // last 0.8 m. Play-testing the new jumps found it.)
             float radius = Mathf.Max(_cc.radius * 0.9f, 0.05f);
-            Vector3 origin = transform.position + Vector3.up * (_cc.radius + 0.05f);
-            float distance = _cc.radius + 0.05f + Config.GroundProbe;
+            const float lift = 0.05f;
+            Vector3 origin = transform.position + Vector3.up * (radius + lift);
+            float distance = lift + Config.GroundProbe;
 
             var hits = Physics.SphereCastAll(origin, radius, Vector3.down, distance, ~0,
                                              QueryTriggerInteraction.Ignore);

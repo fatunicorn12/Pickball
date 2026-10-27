@@ -34,7 +34,12 @@ namespace Pickleball.Sandbox.Movement.States
                 }
                 if (i.CrouchPressed) return MoveKind.Dive;
                 if (m.Speed <= c.BellySlideStopSpeed)
+                {
+                    // Slid to a halt: the sprint banked before the dive is spent.
+                    // (A rollout keeps it; standing up from rest does not.)
+                    m.Sprint.Reset();
                     return m.CanStandTo(1f) ? MoveKind.Ground : MoveKind.Crouch;
+                }
             }
             return MoveKind.BellySlide;
         }

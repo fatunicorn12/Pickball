@@ -30,9 +30,10 @@ namespace Pickleball.Sandbox.Movement.Logic
         public float Blend(float delay, float rampTime)
         {
             if (_runTime < delay) return 0f;
-            // Compared rather than divided, so ForceFull lands on exactly 1 and
-            // not a float hair under it.
-            if (rampTime <= 0f || _runTime >= delay + rampTime) return 1f;
+            // With a tolerance, so ForceFull lands on exactly 1 rather than a float
+            // hair under it. A plain >= is not enough: Mono may hold delay+rampTime
+            // at higher precision than the stored float it is compared with.
+            if (rampTime <= 0f || _runTime - delay >= rampTime - 1e-4f) return 1f;
             return Mathf.Clamp01((_runTime - delay) / rampTime);
         }
 

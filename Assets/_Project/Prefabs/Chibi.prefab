@@ -836,6 +836,10 @@ GameObject:
   - component: {fileID: 3083023943797974309}
   - component: {fileID: 5554434455909308880}
   - component: {fileID: 6343529653583968329}
+  - component: {fileID: 1973772463791280042}
+  - component: {fileID: 4089345312075761012}
+  - component: {fileID: 3182531376439884494}
+  - component: {fileID: 7633146315294285453}
   m_Layer: 0
   m_Name: Chibi
   m_TagString: Untagged
@@ -902,67 +906,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 229daa73a0a835d48b42d521fb7e6252, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.ChibiLocomotion
-  moveSpeed: 2.8
-  sprintSpeed: 4.84
-  crouchSpeed: 0.39
-  acceleration: 14
-  stopTriggerSpeed: 3
-  stopDeceleration: 5
-  turnSmoothTime: 0.09
-  jumpHeight: 0.35
-  runJumpHeight: 0.56
-  gravity: -18
-  groundedStick: -2
-  coyoteTime: 0.12
-  jumpBuffer: 0.12
-  doubleJumpHeight: 1.5
-  flipAirborneSeconds: 1.2
-  doubleJumpEffect: {fileID: 2352548474020067062}
-  dashSpeed: 14
-  dashDuration: 0.22
-  dashCooldown: 0.6
-  dashExitVerticalKeep: 0.35
-  dashExitHorizontalKeep: 0.7
-  dashEffects: {fileID: 4315188943103005508}
-  dashFieldBend: 2.5
-  anchorDuration: 2
-  anchorCooldown: 1.5
-  anchorRiseAcceleration: 9
-  anchorMaxRiseSpeed: 4.5
-  anchorHaltRate: 25
-  momentumAirDrag: 1.6
-  momentumGroundDrag: 11
-  fieldDamping: 2.5
-  maxFieldSpeed: 18
-  tetherMaxLength: 14
-  tetherMinLength: 4
-  swingGravity: -11
-  swingPumpAccel: 7
-  swingDamping: 0.12
-  maxSwingSpeed: 13
-  entrySpeedCap: 4.5
-  impactSpeedRetain: 0.25
-  impactMinLoss: 0.25
-  tetherReleaseJump: 4.2
-  tether: {fileID: 3083023943797974309}
-  gestureSeconds: 0.87
-  skateSpeed: 6.2
-  skateAcceleration: 5
-  skateTurnSmoothTime: 0.28
-  skateRideHeight: 0.2225138
-  crouchHeightFraction: 0.62
-  animator: {fileID: 5583773803215574322}
-  modelRoot: {fileID: 1989922962189717320}
-  modelYOffset: 0.64
-  strideScale: 1
-  runClipStride: 2.5673375
-  crouchClipStride: 0.69160336
-  speedDampTime: 0.08
-  triggerLifetime: 0.2
-  cameraTransform: {fileID: 0}
   lockOn: {fileID: 0}
-  lockFaceSpeed: 0.6
-  lockAttackTurnTime: 0.04
+  lookAtLockTarget: 1
 --- !u!114 &747224355396045902
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1370,6 +1315,68 @@ MonoBehaviour:
     - {x: -0.27969146, y: 0.74612474, z: 0.037794262, w: 0.6030275}
     - {x: -0.27965593, y: 0.74619305, z: 0.037853032, w: 0.6029558}
     - {x: -0.27963644, y: 0.74621075, z: 0.037871778, w: 0.6029419}
+--- !u!114 &1973772463791280042
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3883458126653099587}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22ae8e8fa72e420ea5587dcd515ab3cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Movement.MovementMotor
+  config: {fileID: 11400000, guid: 9bc8f64980fe3fe4cb102eabeed4376a, type: 2}
+  input: {fileID: 4089345312075761012}
+  abilities: {fileID: 747224355396045902}
+  tether: {fileID: 3083023943797974309}
+--- !u!114 &4089345312075761012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3883458126653099587}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c4f741684e77456da83afe822bc36881, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Movement.PlayerMovementInput
+  cameraTransform: {fileID: 0}
+--- !u!114 &3182531376439884494
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3883458126653099587}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a20ad7ffb3f4e0da12d33046b0b0623, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Movement.Presentation.MovementAnimatorDriver
+  motor: {fileID: 1973772463791280042}
+  config: {fileID: 11400000, guid: 0f2a0beedaed6874d87a19d1aa01aa0c, type: 2}
+  animator: {fileID: 5583773803215574322}
+  modelRoot: {fileID: 1989922962189717320}
+--- !u!114 &7633146315294285453
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3883458126653099587}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 57267e7b2f7242b7ab1b03e93ea5cb6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Movement.Presentation.MovementEffects
+  motor: {fileID: 1973772463791280042}
+  doubleJumpEffect: {fileID: 2352548474020067062}
+  dashEffects: {fileID: 4315188943103005508}
+  tether: {fileID: 3083023943797974309}
+  board: {fileID: 7620243840761736010}
 --- !u!1 &4320589020120300947
 GameObject:
   m_ObjectHideFlags: 0
@@ -3178,10 +3185,30 @@ MonoBehaviour:
   maxFloatCorrection: 0.6
   floatSettleRate: 6
   smoothing: 12
+  terrainFollowRate: 25
   groundMask:
     serializedVersion: 2
     m_Bits: 4294967295
   alignToSlope: 1
+  plantWhenStanding: 1
+  plantStates:
+  - Locomotion
+  - Beam
+  plantMaxSpeed: 0.12
+  plantBlendIn: 6
+  plantBlendOut: 14
+  stepDistance: 0.12
+  stepAngle: 30
+  stepSeconds: 0.2
+  stepHeight: 0.06
+  followThrough: 0.35
+  releaseDistance: 0.5
+  lookWeight: 0.8
+  lookBodyWeight: 0.15
+  lookHeadWeight: 0.9
+  lookClampWeight: 0.55
+  lookBlendSpeed: 2.5
+  lookFollowRate: 8
 --- !u!114 &2419991994959969147
 MonoBehaviour:
   m_ObjectHideFlags: 0

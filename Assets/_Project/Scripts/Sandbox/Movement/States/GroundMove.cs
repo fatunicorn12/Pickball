@@ -56,8 +56,20 @@ namespace Pickleball.Sandbox.Movement.States
             float top = c.GroundTopSpeed(m.SprintBlend);
             float target = locked ? 0f : c.StickDrive(i.MoveMagnitude) * top;
             float speed = m.Speed;
-            // Sunshine's start kick: from rest he is at walking pace on frame one.
-            if (target > 0.01f && speed < c.RunStartSpeed) speed = Mathf.Min(c.RunStartSpeed, target);
+            // Sunshine's start: from (near) rest Mario faces the stick outright
+            // and is at walking pace on frame one. Facing first matters as much
+            // as the kick — building speed along the OLD facing while the body
+            // turns read as a reversal at speed, and a standing turn-around
+            // came out as a skid.
+            if (target > 0.01f && speed < c.RunStartSpeed)
+            {
+                if (speed < 0.5f && !m.HasFacingOverride)
+                {
+                    m.Travel = i.MoveDirection;
+                    m.SetBodyYaw(Mathf.Atan2(i.MoveDirection.x, i.MoveDirection.z) * Mathf.Rad2Deg);
+                }
+                speed = Mathf.Min(c.RunStartSpeed, target);
+            }
             float accel = target < speed ? c.RunDeceleration
                         : speed >= c.RunSpeed - 0.01f ? c.SprintAcceleration
                         : c.RunAcceleration;

@@ -73,6 +73,37 @@ subagent's research note has the per-value sources and confidence:
 | Spin jump | 6.6 m, descent at 35% gravity | 4 m, descent 8 m/s² capped at 5 m/s |
 | Coyote / buffer | none (stays grounded over 1 m drops) | 0.12 s / 0.12 s |
 
+### Measured in Play mode (2026-10-26)
+
+Measured in a dedicated Editor on the branch, with scripted input on a flat test slab (the
+harness is described in §5):
+
+| Move | Measured |
+|---|---|
+| Sprint | Starts 1.0 s after W; tops out at 7.00 m/s; RunStop from 5.9 m/s comes to rest in 0.49 s |
+| Skid turn at 7 m/s | 0.149 s plant + turn; exits at 6.44 m/s (92%), still Sprint |
+| Single jump, held | 1.97 m apex (authored 2.0), 1.05 s airtime |
+| Single jump, tap | 0.69 m apex, 0.45 s (Sunshine's minimum tap: 0.70 m) |
+| Running single jump from sprint | 2.72 m, 1.21 s; lands still at 7 m/s and sprinting |
+| Chain jumps (re-jump on landing) | Single 2.73 m → Double 3.76 m → Triple 4.46 m; 1.07 / 1.20 / 1.49 s |
+| Side somersault out of the skid | 4.16 m, 1.45 s |
+| Dive from sprint | 10.0 m/s, 0.42 m hop; slide holding forward lasted 3.8 s |
+| Rollout from the slide | 1.25 m at 7.4 m/s; lands sprinting |
+| Spin jump | 3.95 m, 1.81 s |
+| Feather mid-air jump, dash, crouch, skateboard (6.2 m/s), Gravity Anchor rise (4.5 m/s), tether latch → swing → jump release | all work |
+| Lock-on facing via the facade | Locked and standing, he squares back up to Newton from 172° off within about 0.2 s |
+
+The Animator followed every move into its own state (SkidTurn, JumpDouble, TripleJump, SideFlip,
+Dive, BellySlide, Rollout, SpinJump) and left it cleanly.
+
+Bugs the play-test found and this branch fixes:
+- **Ground probe.** It reached 0.8 m below the feet, so jumps were "landed" 0.8 m up and sank the
+  rest of the way at 2 m/s. This was inherited from ChibiLocomotion.
+- **Capsule too short.** A capsule shorter than its own diameter made the controller pop him out
+  of the floor, giving a 41 m/s Velocity spike.
+- **Standing turn-around.** Turning round from a standstill came out as a skid.
+- **Slide stand-up.** Standing up from a stopped belly slide reported "Sprint".
+
 ## 2. Architecture
 
 ```
@@ -244,7 +275,19 @@ to its airborne length.
 ## 5. Known limitations and open questions
 
 - **Placeholder animation.** Dive, slide and spin are tilted or spun stock clips. The 14 Mixamo
-  clips are downloaded and awaiting import recipes (see the side-session notes).
+  clips are downloaded, and per-clip import and motion-matching recipes are in the side-session
+  notes. Importing them is the next step. It needs per-role exceptions in `SetupClips`: Body
+  orientation for the turning roles, a per-role Y bake for prone roles, and the canonical X Bot
+  skeleton. Once they're in, set `divePitch`, `bellySlidePitch` and `bellySlideOffset` to 0.
+- **The skid swing drags a planted foot** about 0.4 m. The body turns 180° in about 0.06 s over
+  planted feet. A dedicated turn clip and foot IK off (already off on SkidTurn) only hide part
+  of it.
+- **The capsule can't get very low.** It is wide (radius 0.76 m, sized from the renderer bounds),
+  so it never goes below its diameter, about 60% of standing height. The belly slide and crouch
+  therefore keep a tall capsule.
+- **Tether latch beside geometry.** Latching while the capsule overlaps the scanned ground can
+  depenetrate him about 0.8 m and fling him at the maximum swing speed. It also shows as a
+  one-frame Velocity spike. This is pre-existing: the swing code is a verbatim port.
 - **No slope physics.** The belly slide does not accelerate downhill, and running uphill is not
   slower. Sunshine does both.
 - **Combat facing still reads `MeleeCombat.IsAttacking`.** `ChibiLocomotion` does this as glue.
@@ -258,3 +301,8 @@ to its airborne length.
   small drops (Sunshine keeps Mario grounded over 1 m; here a step down is a short Fall).
 - **Gamepad conflict, pre-existing:** buttonWest is both skateboard Mount and MeleeCombat's
   attack.
+- **Play-testing in an unfocused Editor.**
+  - Set `Application.runInBackground = true` at runtime, or Play mode stops ticking.
+  - With `editorInputBehaviorInPlayMode = AllDeviceInputAlwaysGoesToGameView`, the real
+    keyboard leaks into the game even while you type elsewhere. Scripted tests should send keys
+    to a virtual keyboard and disable the real keyboard and mouse, then restore them afterwards.
