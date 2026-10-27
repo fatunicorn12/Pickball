@@ -12,8 +12,13 @@ namespace Pickleball.Sandbox.Combat
     /// swap the implementation, or extend it with the extra state a dive-slash
     /// needs, without the sword noticing. Implemented by
     /// <see cref="ChibiMovementAdapter"/>.
+    ///
+    /// Deliberately not named IMovementState: that is the movement system's own
+    /// read-out (Pickleball.Sandbox.Movement, on the sunshine-movement branch),
+    /// which the adapter is expected to wrap for its MoveKind (Dive, SpinJump…)
+    /// once the two branches meet. This is combat's narrower view of it.
     /// </summary>
-    public interface IMovementState
+    public interface ICombatMovement
     {
         /// <summary>Standing on something this frame. Decides ground vs air chain.</summary>
         bool IsGrounded { get; }

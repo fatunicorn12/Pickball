@@ -20,7 +20,7 @@ namespace Pickleball.Sandbox
     /// calls <see cref="QueueAttack"/>), plays no animation and spawns no
     /// effects: it raises <see cref="SwingStarted"/>, <see cref="HitLanded"/>,
     /// <see cref="BurstReleased"/> and friends, and SwordAnimatorDriver and
-    /// SwordEffects listen. Movement is read through <see cref="IMovementState"/>
+    /// SwordEffects listen. Movement is read through <see cref="ICombatMovement"/>
     /// only.
     ///
     /// Two rules carried over from the original combo, because breaking either
@@ -55,7 +55,7 @@ namespace Pickleball.Sandbox
         [SerializeField] private LayerMask hittable = ~0;
 
         [Header("Wiring")]
-        [Tooltip("Component implementing IMovementState (and IMovementImpulses " +
+        [Tooltip("Component implementing ICombatMovement (and ICombatImpulses " +
                  "for lunges) — normally ChibiMovementAdapter. Found on this " +
                  "object if left empty.")]
         [SerializeField] private MonoBehaviour movementSource;
@@ -109,8 +109,8 @@ namespace Pickleball.Sandbox
         const int OverlapCapacity = 16;
         const int BurstCapacity = 4;
 
-        IMovementState _movement;
-        IMovementImpulses _impulses;
+        ICombatMovement _movement;
+        ICombatImpulses _impulses;
 
         // Runtime-built state is (re)created in OnEnable, never in readonly
         // initializers, so a script reload in Play mode rebuilds it cleanly.
@@ -152,8 +152,8 @@ namespace Pickleball.Sandbox
 
         void ResolveMovement()
         {
-            _movement = movementSource as IMovementState ?? GetComponent<IMovementState>();
-            _impulses = movementSource as IMovementImpulses ?? GetComponent<IMovementImpulses>();
+            _movement = movementSource as ICombatMovement ?? GetComponent<ICombatMovement>();
+            _impulses = movementSource as ICombatImpulses ?? GetComponent<ICombatImpulses>();
         }
 
         void OnEnable()
@@ -309,7 +309,7 @@ namespace Pickleball.Sandbox
             _alreadyHit.Clear();
             _hasPrev = false;
 
-            // An impulse, once — see IMovementImpulses for why never per frame.
+            // An impulse, once — see ICombatImpulses for why never per frame.
             if (step.LungeSpeed > 0f && _impulses != null)
                 _impulses.AddImpulse(Flat(transform.forward) * step.LungeSpeed);
 

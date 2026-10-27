@@ -42,7 +42,7 @@ so the whole slice unlocks inside one Newton fight (600 HP), with a +250 defeat 
 ## 2. Architecture
 
 ```
-SwordInput ──AttackPressed──▶ MeleeCombat ◀── IMovementState / IMovementImpulses ── ChibiMovementAdapter ── ChibiLocomotion
+SwordInput ──AttackPressed──▶ MeleeCombat ◀── ICombatMovement / ICombatImpulses ── ChibiMovementAdapter ── ChibiLocomotion
                                    │  asks ComboResolver(context, SwordMoveset, SwordAbilities.All)
                                    │  owns SwingTimeline (clock) + ComboProgress (chain counters)
                                    │  sweeps the blade, runs AreaBurst rings, deals damage via IDamageable
@@ -61,8 +61,8 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
   progression or presentation.
 - **Progression** (`CombatXpSource`, `PlayerLevel`, `LevelUnlocks`) listens to gameplay.
 - **Presentation** (`SwordAnimatorDriver`, `SwordEffects`, `ProgressionToast`) listens to both.
-- **Movement** is read only through `IMovementState`, and pushed only through
-  `IMovementImpulses`, which offers a single impulse and a brief move-lock. `ChibiMovementAdapter` is
+- **Movement** is read only through `ICombatMovement`, and pushed only through
+  `ICombatImpulses`, which offers a single impulse and a brief move-lock. `ChibiMovementAdapter` is
   the one file that touches `ChibiLocomotion`.
 - **One leftover in the other direction:** `ChibiLocomotion` reads `MeleeCombat.IsAttacking` to
   square up to a lock-on target. It predates this work and is kept as-is, because combat must not
@@ -75,7 +75,7 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
 | `SwordInput` | Reads Attack (left mouse / gamepad West) and raises `AttackPressed`. Ignores the click the camera uses to re-capture the cursor. | input |
 | `MeleeCombat` | Resolves the next step, runs its timeline and hitstop, sweeps the blade, runs bursts, deals damage, raises events. Keeps `IsAttacking`. | gameplay |
 | `SwordAbilities` | The learned set (`Grant` / `Has` / `Revoke` / `Unlocked` event). The sword's counterpart to `PlayerAbilities`. | gameplay |
-| `ChibiMovementAdapter` | Implements `IMovementState` and `IMovementImpulses` over ChibiLocomotion's public API. | adapter |
+| `ChibiMovementAdapter` | Implements `ICombatMovement` and `ICombatImpulses` over ChibiLocomotion's public API. | adapter |
 | `PlayerLevel` | Converts Lemmas into levels. Raises `XpGained` and, once per level gained, `LeveledUp(new, previous)`. | progression |
 | `CombatXpSource` | Turns `HitLanded` into Lemmas, plus a defeat bonus when a `Health` dies on that hit. | progression |
 | `LevelUnlocks` | Grants the abilities listed in the level table as levels are reached. | progression |
@@ -192,7 +192,7 @@ That needs no code. New *behaviour* is small and contained:
 - **A new effect glyph** ("!" for Factorial, "∴" for Corollary): build a prefab with a `PopFlashEffect`,
   or a new `PooledEffect` subclass, and drop it in the step's `presentation.hitEffect`.
 - **A movement-coupled slash** (dive slash, spin slash, plunge, air hang time): add what you need
-  to `IMovementState` or `IMovementImpulses` and one line to `ChibiMovementAdapter`, once the
+  to `ICombatMovement` or `ICombatImpulses` and one line to `ChibiMovementAdapter`, once the
   movement rework exposes it. See open questions.
 
 **Using a clip from the pack that isn't wired yet:** 44 of the 49 Mixamo sword clips are still
@@ -258,12 +258,24 @@ A boss drop can grant an ability early; its level is the fallback.
   air chain per airtime (KH-faithful): one hit at level 1, two at level 3. If that feels stingy,
   give the base air chain a second hit, or refill it on double jump. Don't remove the rule:
   without it Air Combo Plus is meaningless.
+- **Gamepad binding clash:** the attack (`SwordInput`) and ChibiLocomotion's skateboard Mount are
+  both on Gamepad `buttonWest`, so on a pad one press both swings and mounts.
+  - Attack is left on West, the usual light-attack face button.
+  - The likely fix is to move Mount, a rare action, which movement owns.
+  - If the attack moves instead, the agent manager checks the new button against movement's
+    sprint / dive / spin bindings first.
 - **No hang time or plunge yet:**
   - The adapter can only add *horizontal* momentum, because ChibiLocomotion drops the y of
     `AddMomentum` and gravity outgrows any field acceleration.
   - KH's air-combo hang time ("Stationary Point") and plunges ("Vertical Asymptote") need a vertical
-    hook from the movement rework, for example `IMovementImpulses.SetVerticalVelocity` or a hover
-    request.
+    hook. The movement rework adds one, on `claude/sunshine-movement-b03f04`:
+    `ChibiLocomotion.SetVerticalVelocity(m/s)` and `SuspendGravity(seconds)`.
+  - Once both branches are merged: add them to `ICombatImpulses` and `ChibiMovementAdapter`, add a
+    per-step "hang" / "vertical speed" field, and wrap `Movement.IMovementState` (MoveKind Dive,
+    SpinJump…) in `ICombatMovement` for dive- and spin-slashes.
+- **Lock-on attack facing:** `ChibiLocomotion` still reads `MeleeCombat.IsAttacking`. Movement
+  offers an `IFacingSource` hook, so after both merges combat can push its facing request and
+  locomotion can drop the reference.
 - **Two unlock sets:**
   - `SwordAbilities` (assets) sits alongside `PlayerAbilities` (the fixed `AbilityKind` enum
     locomotion switches on). They share the Grant / Has / Unlocked contract, and the toast listens

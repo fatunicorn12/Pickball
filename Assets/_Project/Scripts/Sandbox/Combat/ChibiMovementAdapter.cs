@@ -4,14 +4,14 @@ namespace Pickleball.Sandbox.Combat
 {
     /// <summary>
     /// Presents <see cref="ChibiLocomotion"/> to combat as
-    /// <see cref="IMovementState"/> + <see cref="IMovementImpulses"/>, using only
+    /// <see cref="ICombatMovement"/> + <see cref="ICombatImpulses"/>, using only
     /// its existing public API.
     ///
     /// This is the single file that has to change when the movement rework
     /// lands: dive- or spin-specific slashes add a property to the interface and
     /// one line here, and the combo never references a movement class.
     /// </summary>
-    public class ChibiMovementAdapter : MonoBehaviour, IMovementState, IMovementImpulses
+    public class ChibiMovementAdapter : MonoBehaviour, ICombatMovement, ICombatImpulses
     {
         [Tooltip("The locomotion being adapted. Found on this object if left empty.")]
         [SerializeField] private ChibiLocomotion locomotion;
