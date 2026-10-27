@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Pickleball.Sandbox
@@ -6,35 +5,53 @@ namespace Pickleball.Sandbox
     /// <summary>
     /// Records where this object has been, so the 4D view can show its
     /// worldline. Add it to anything that moves: platforms, balls, apples,
-    /// bosses. It needs no references and talks to nothing. It writes its
-    /// history, and <see cref="SpacetimeView"/> reads every live recorder (and
-    /// every ended one) when the player flips into 4D.
+    /// bosses. It writes its history into the <see cref="SpacetimeSettings"/>
+    /// it is wired to, and <see cref="SpacetimeView"/> reads every recorder on
+    /// that asset when the player flips into 4D. The two never reference each
+    /// other.
+    ///
+    /// <b>Inert while the feature is off.</b> With no settings asset, or with
+    /// the asset's switch off, it records nothing and holds no history.
     ///
     /// <b>A recorder's history outlives it.</b> When the object is destroyed or
-    /// disabled, or teleports, the history so far is moved to <see cref="Ended"/>
-    /// and keeps ageing out on its own. That matters most for short-lived
-    /// things. Nearly every apple from a barrage has already splatted by the time
-    /// you flip, and the frozen apple-rain is the whole point.
+    /// disabled, or teleports, the history so far is handed to
+    /// <see cref="SpacetimeSettings.Ended"/> and keeps ageing out on its own.
+    /// That matters most for short-lived things. Nearly every apple from a
+    /// barrage has already splatted by the time you flip, and the frozen
+    /// apple-rain is the whole point.
     /// </summary>
     public class WorldlineRecorder : MonoBehaviour
     {
-        [Tooltip("How many seconds of the past the worldline shows.")]
+        [Tooltip("The Spacetime Settings asset. Empty, or switched off, means this " +
+                 "records nothing.")]
+        [SerializeField] private SpacetimeSettings settings;
+
+        [Tooltip("How many seconds of the past the worldline shows, s.")]
+        [Min(0.1f)]
         [SerializeField] private float historySeconds = 4f;
-        [Tooltip("Movement that forces a new sample, in metres.")]
+        [Tooltip("Movement that forces a new sample, m. Smaller is smoother and " +
+                 "costs more points.")]
+        [Min(0f)]
         [SerializeField] private float sampleSpacing = 0.15f;
-        [Tooltip("Time that forces a new sample even when standing still. Keeps " +
+        [Tooltip("Time that forces a new sample even when standing still, s. Keeps " +
                  "a stationary object's worldline from ageing away to nothing.")]
+        [Min(0.01f)]
         [SerializeField] private float sampleInterval = 0.1f;
         [Tooltip("A jump larger than this between frames is a teleport, not " +
-                 "motion. The line breaks there instead of stretching a beam " +
+                 "motion, m. The line breaks there instead of stretching a beam " +
                  "across the gap.")]
+        [Min(0.1f)]
         [SerializeField] private float teleportDistance = 4f;
-        [Tooltip("World-space offset from the pivot to the point that is traced. " +
+        [Tooltip("World-space offset from the pivot to the point that is traced, m. " +
                  "Use it to trace the top of a platform instead of its middle.")]
         [SerializeField] private Vector3 traceOffset = Vector3.zero;
 
-        [Header("Shape (0 = use the SpacetimeView default)")]
+        [Header("Shape (0 = use the settings default)")]
+        [Tooltip("Beam width for this object, m.")]
+        [Min(0f)]
         [SerializeField] private float width = 0f;
+        [Tooltip("Beam thickness for this object, m.")]
+        [Min(0f)]
         [SerializeField] private float thickness = 0f;
 
         [Tooltip("Hide this object's renderers and colliders while in 4D, so " +
@@ -42,95 +59,104 @@ namespace Pickleball.Sandbox
                  "at the tip of its own line is what explains the line.")]
         [SerializeField] private bool hideWhileIn4D = false;
 
-        /// <summary>A history whose owner is gone, plus the shape it should be
-        /// drawn with.</summary>
-        public struct EndedLine
-        {
-            public WorldlineHistory History;
-            public float Width, Thickness;
-            public string Name;
-        }
-
-        /// <summary>Every recorder currently writing.</summary>
-        public static readonly List<WorldlineRecorder> Live = new();
-
-        /// <summary>Histories of objects that died, were disabled or teleported.
-        /// <see cref="SpacetimeView"/> prunes these as they age out.</summary>
-        public static readonly List<EndedLine> Ended = new();
-
-        /// <summary>Hard cap on <see cref="Ended"/>. A full apple barrage ends a
-        /// lot of lines in a few seconds, and nothing else bounds the list if no
-        /// SpacetimeView is in the scene to prune it.</summary>
-        const int MaxEnded = 256;
-
+        /// <summary>The history being written, or null while inert.</summary>
         public WorldlineHistory History => _history;
         public float Width => width;
         public float Thickness => thickness;
 
+        /// <summary>Whether this recorder is wired to a switched-on settings asset.</summary>
+        public bool Active => settings != null && settings.Enabled;
+
         WorldlineHistory _history;
+        SpacetimeSettings _registeredWith;
         Renderer[] _hiddenRenderers;
         Collider[] _hiddenColliders;
 
-        /// <summary>Statics survive Play mode restarts when domain reload is off.
-        /// Clear them so a new session does not inherit ghosts from the last.</summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics()
+        /// <summary>Wires a recorder added at runtime, which has no serialized
+        /// reference (the view attaches these to apples).</summary>
+        public void Bind(SpacetimeSettings spacetime)
         {
-            Live.Clear();
-            Ended.Clear();
+            if (settings == spacetime) return;
+            bool wasEnabled = isActiveAndEnabled;
+            if (wasEnabled) Unregister();
+            settings = spacetime;
+            if (wasEnabled) Register();
         }
 
-        void OnEnable()
-        {
-            // Built here rather than in Awake or a field initialiser, so a script
-            // reload in Play mode (which drops non-serialised fields) comes back
-            // with a working recorder instead of a null one.
-            _history = NewHistory();
-            Live.Add(this);
-            SpacetimeView.Changed += OnSpacetimeChanged;
-            if (SpacetimeView.In4D) OnSpacetimeChanged(true);
-        }
+        void OnEnable() => Register();
 
-        void OnDisable()
-        {
-            SpacetimeView.Changed -= OnSpacetimeChanged;
-            Live.Remove(this);
-            RetireHistory();
-            if (_hiddenRenderers != null) OnSpacetimeChanged(false);
-        }
+        void OnDisable() => Unregister();
 
-        void LateUpdate()
-        {
-            Vector3 point = transform.position + traceOffset;
-            float now = Time.time;
+        void LateUpdate() => Sample(transform.position + traceOffset, Time.time);
 
-            if (_history.Count > 0 &&
-                (point - _history.NewestPosition).sqrMagnitude > teleportDistance * teleportDistance)
+        /// <summary>
+        /// Records one position. The per-frame body, public so EditMode tests can
+        /// drive it without a game loop. Returns whether a sample was kept, which
+        /// is always false while the feature is off: a switched-off recorder
+        /// throws its history away, so turning the feature back on starts clean
+        /// instead of drawing a stale line.
+        /// </summary>
+        public bool Sample(Vector3 point, float now)
+        {
+            if (!Active)
+            {
+                _history = null;
+                return false;
+            }
+
+            if (_history == null)
+            {
+                _history = NewHistory();
+            }
+            else if (_history.Count > 0 &&
+                     (point - _history.NewestPosition).sqrMagnitude > teleportDistance * teleportDistance)
             {
                 RetireHistory();
                 _history = NewHistory();
             }
 
-            _history.Record(point, now);
+            bool kept = _history.Record(point, now);
             _history.Prune(now);
+            return kept;
+        }
+
+        void Register()
+        {
+            if (settings == null) return;
+            _registeredWith = settings;
+            settings.Live.Add(this);
+            settings.Changed += OnSpacetimeChanged;
+            if (settings.In4D) OnSpacetimeChanged(true);
+        }
+
+        void Unregister()
+        {
+            if (_registeredWith == null) return;
+            _registeredWith.Changed -= OnSpacetimeChanged;
+            _registeredWith.Live.Remove(this);
+            RetireHistory();
+            if (_hiddenRenderers != null) OnSpacetimeChanged(false);
+            _registeredWith = null;
         }
 
         WorldlineHistory NewHistory() =>
             new(historySeconds, sampleSpacing, sampleInterval);
 
-        /// <summary>Moves the current history to <see cref="Ended"/>, if it has
-        /// enough in it to draw.</summary>
+        /// <summary>Hands the current history to the settings' ended list, if it
+        /// has enough in it to draw and the feature is on.</summary>
         void RetireHistory()
         {
-            if (_history == null || _history.Count < 2) return;
-            if (Ended.Count >= MaxEnded) Ended.RemoveAt(0);
-            Ended.Add(new EndedLine
+            var target = _registeredWith != null ? _registeredWith : settings;
+            if (_history != null && _history.Count >= 2 && target != null && target.Enabled)
             {
-                History = _history,
-                Width = width,
-                Thickness = thickness,
-                Name = name,
-            });
+                target.AddEnded(new SpacetimeSettings.EndedLine
+                {
+                    History = _history,
+                    Width = width,
+                    Thickness = thickness,
+                    Name = name,
+                });
+            }
             _history = null;
         }
 

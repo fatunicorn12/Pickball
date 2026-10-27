@@ -15,6 +15,11 @@ namespace Pickleball.Sandbox
     /// platform leaves a walkway, and the apple barrage becomes a forest of
     /// pillars. In 3D you change things. In 4D you walk on the results.
     ///
+    /// <b>Inert while the feature is off.</b> Everything is gated on
+    /// <see cref="SpacetimeSettings.Enabled"/>. Off, no input binding exists, so
+    /// T and d-pad left do nothing, and the view never flips. Switching it off
+    /// mid-play leaves 4D and removes the binding on the next frame.
+    ///
     /// <b>The beams are a snapshot.</b> They are built once, from the histories
     /// as they stand at the moment of the flip, and stay put while the world
     /// carries on moving. Nothing else in the game has to know 4D exists, and
@@ -31,47 +36,16 @@ namespace Pickleball.Sandbox
     ///
     /// <b>4D is on a meter.</b> Time in 4D drains it and time in 3D refills it,
     /// so a beam is a crossing you have to commit to, not a floor you can live
-    /// on. Set <see cref="maxDuration"/> to 0 to turn the limit off while
-    /// building levels.
+    /// on. All the numbers are on <see cref="SpacetimeSettings"/>.
     /// </summary>
     public class SpacetimeView : MonoBehaviour
     {
-        [Header("Worldline shape")]
-        [SerializeField] private float width = 1.1f;
-        [SerializeField] private float thickness = 0.2f;
+        [Tooltip("The Spacetime Settings asset: the on/off switch and every tunable. " +
+                 "Empty, or switched off, means this view does nothing.")]
+        [SerializeField] private SpacetimeSettings settings;
 
-        [Tooltip("The spacetime-diagram projection, in metres per second of age. " +
-                 "Each moment of an object's past is drawn this far from where " +
-                 "it actually was, so time becomes a direction in space. Upward " +
-                 "turns a swinging platform into a zigzag ramp, an orbiting one " +
-                 "into a spiral staircase, and a still one into a pillar. Zero " +
-                 "draws the plain path through space.")]
-        [SerializeField] private Vector3 timeAxis = new(0f, 0.5f, 0f);
-
-        [Tooltip("Longer histories are thinned to this many points per line. " +
-                 "Bounds the cost of a flip, which builds every line at once.")]
-        [SerializeField] private int maxPointsPerLine = 96;
-
-        [Tooltip("Assign one for builds, so its shader is guaranteed to ship. Left " +
-                 "empty, a vertex-coloured unlit material is made at runtime.")]
-        [SerializeField] private Material worldlineMaterial;
-        [SerializeField] private Color pastColor = new(0.35f, 0.2f, 0.85f, 1f);
-        [SerializeField] private Color presentColor = new(0.55f, 0.95f, 1f, 1f);
-
-        [Header("Budget")]
-        [Tooltip("Seconds you can stay in 4D on a full meter. 0 = unlimited.")]
-        [SerializeField] private float maxDuration = 6f;
-        [Tooltip("Seconds of 4D regained per second spent in 3D.")]
-        [SerializeField] private float rechargeRate = 1f;
-        [Tooltip("Minimum meter needed to flip in, so an empty meter cannot be " +
-                 "used to flicker in and out for a frame at a time.")]
-        [SerializeField] private float minChargeToEnter = 0.5f;
-        [SerializeField] private float flipCooldown = 0.25f;
-
-        [Header("Player")]
-        [Tooltip("Optional. Left empty, the chibi's controller is found on the " +
-                 "first flip. Used to keep beams that appear through the player " +
-                 "intangible until they step clear.")]
+        [Tooltip("The player's controller. Beams that appear through it stay " +
+                 "intangible until the player steps clear. Wired by the setup menu.")]
         [SerializeField] private CharacterController player;
 
         [Header("Scene dressing")]
@@ -80,27 +54,30 @@ namespace Pickleball.Sandbox
         [Tooltip("Shown only in 3D.")]
         [SerializeField] private GameObject[] onlyIn3D = Array.Empty<GameObject>();
 
-        /// <summary>Whether the world is currently in 4D.</summary>
-        public static bool In4D { get; private set; }
+        /// <summary>Whether this view is wired to a switched-on settings asset.</summary>
+        public bool Active => settings != null && settings.Enabled;
 
-        /// <summary>Raised on every flip, with the new state.</summary>
-        public static event Action<bool> Changed;
+        /// <summary>Whether the world is in 4D, as far as this view's channel says.</summary>
+        public bool In4D => settings != null && settings.In4D;
+
+        /// <summary>Whether the T / d-pad left binding currently exists. False
+        /// whenever the feature is off: a switched-off view claims no input.</summary>
+        public bool InputRegistered => _toggle != null;
+
+        /// <summary>How many beams are standing, for tests and debugging.</summary>
+        public int BeamCount => _beams.Count;
 
         /// <summary>Remaining 4D time as 0–1, for a HUD meter. Always 1 when the
         /// meter is off.</summary>
-        public float Charge01 => maxDuration > 0f ? _charge / maxDuration : 1f;
+        public float Charge01 =>
+            settings != null && settings.MaxDuration > 0f ? _charge / settings.MaxDuration : 1f;
 
         /// <summary>
-        /// Longest frame the meter will charge for. Building every beam makes the
-        /// frame after a flip long, and without this cap that one frame would
+        /// Longest frame the meter will charge for, s. Building every beam makes
+        /// the frame after a flip long, and without this cap that one frame would
         /// drain a third of a second of 4D before the player can do anything.
         /// </summary>
         const float MaxMeterStep = 0.1f;
-
-        /// <summary>The one view that owns the flip. <see cref="In4D"/> is global,
-        /// so two views each toggling it would leave one's beams orphaned with the
-        /// state saying 3D.</summary>
-        static SpacetimeView _active;
 
         /// <summary>One built worldline.</summary>
         class Beam
@@ -123,147 +100,189 @@ namespace Pickleball.Sandbox
         readonly Collider[] _overlaps = new Collider[64];
         Material _runtimeMaterial;
         bool _warnedNoShader;
-        float _charge;
+        bool _warnedDuplicate;
+        float _charge = -1f;
         float _lastFlip = float.NegativeInfinity;
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics()
-        {
-            In4D = false;
-            Changed = null;
-            _active = null;
-        }
-
-        void Awake()
-        {
-            _charge = maxDuration;
-            ApplyDressing(false);
-        }
 
         void OnEnable()
         {
-            if (_active != null && _active != this)
-            {
-                Debug.LogWarning($"{name}: a SpacetimeView is already active on " +
-                                 $"{_active.name}. Only one may run; disabling this one.", this);
-                enabled = false;
-                return;
-            }
-            _active = this;
-
-            _toggle = new InputAction("Spacetime", InputActionType.Button);
-            _toggle.AddBinding("<Keyboard>/t");
-            _toggle.AddBinding("<Gamepad>/dpad/up");
-            _toggle.Enable();
+            ApplyDressing(false);
+            RefreshInput();
         }
 
         void OnDisable()
         {
-            // A rejected duplicate never set anything up, and must not tear down
-            // the active view's state.
-            if (_active != this) return;
-
-            _toggle?.Disable();
-            _toggle?.Dispose();
-            _toggle = null;
+            DisposeInput();
             // Do not leave the world stuck in 4D, with its beams, if the view
             // goes away (scene unload, script reload, someone disabling it).
-            if (In4D) Exit();
-            _active = null;
+            Exit();
+            if (settings != null) settings.Release(this);
         }
 
         void OnDestroy()
         {
-            if (_runtimeMaterial != null) Destroy(_runtimeMaterial);
+            if (_runtimeMaterial != null) Dispose(_runtimeMaterial);
         }
 
-        void Update()
+        void Update() =>
+            Tick(_toggle != null && _toggle.WasPressedThisFrame(), Time.time, Time.deltaTime);
+
+        /// <summary>
+        /// One frame of the view: the switch, the flip, the meter and the
+        /// bookkeeping. Public so EditMode tests can drive it without a game loop
+        /// or a real key press.
+        /// </summary>
+        public void Tick(bool togglePressed, float now, float deltaTime)
         {
-            if (_toggle != null && _toggle.WasPressedThisFrame() &&
-                Time.time - _lastFlip >= flipCooldown)
+            RefreshInput();
+            if (!Active)
             {
-                if (In4D) Exit();
-                else if (maxDuration <= 0f || _charge >= minChargeToEnter) Enter();
+                Exit();
+                return;
+            }
+            if (!settings.TryClaim(this))
+            {
+                if (!_warnedDuplicate)
+                    Debug.LogWarning($"{name}: another SpacetimeView ({settings.Owner.name}) " +
+                                     "already drives this settings asset. Only one may run.", this);
+                _warnedDuplicate = true;
+                return;
             }
 
-            if (maxDuration > 0f)
+            if (_charge < 0f) _charge = settings.MaxDuration;
+
+            if (togglePressed && now - _lastFlip >= settings.FlipCooldown)
             {
-                float dt = Mathf.Min(Time.deltaTime, MaxMeterStep);
+                if (In4D) Exit(now);
+                else if (settings.MaxDuration <= 0f || _charge >= settings.MinChargeToEnter) Enter(now);
+            }
+
+            if (settings.MaxDuration > 0f)
+            {
+                float dt = Mathf.Min(deltaTime, MaxMeterStep);
                 if (In4D)
                 {
                     _charge -= dt;
-                    if (_charge <= 0f) { _charge = 0f; Exit(); }
+                    if (_charge <= 0f) { _charge = 0f; Exit(now); }
                 }
                 else
                 {
-                    _charge = Mathf.Min(maxDuration, _charge + rechargeRate * dt);
+                    _charge = Mathf.Min(settings.MaxDuration, _charge + settings.RechargeRate * dt);
                 }
             }
 
             if (In4D) SolidifyClearedBeams();
+            if (settings.RecordApples) RecordApples();
 
             // Age out the histories of things that no longer exist. Live
             // recorders prune their own.
-            var ended = WorldlineRecorder.Ended;
+            var ended = settings.Ended;
             for (int i = ended.Count - 1; i >= 0; i--)
             {
-                ended[i].History.Prune(Time.time);
+                ended[i].History.Prune(now);
                 if (ended[i].History.Count < 2) ended.RemoveAt(i);
             }
         }
 
-        /// <summary>Flips into 4D. Public so a trigger, cutscene or test can force it.</summary>
-        public void Enter()
+        /// <summary>Flips into 4D. Public so a trigger, cutscene or test can force
+        /// it. Does nothing while the feature is off.</summary>
+        public void Enter() => Enter(Time.time);
+
+        void Enter(float now)
         {
-            if (In4D || _active != this) return;
+            if (!Active || In4D || !settings.TryClaim(this)) return;
             // Without a material there is nothing to see, and invisible floors
             // are worse than none.
             if (Material == null) return;
-            _lastFlip = Time.time;
+            _lastFlip = now;
 
-            float now = Time.time;
-            foreach (var recorder in WorldlineRecorder.Live)
+            foreach (var recorder in settings.Live)
                 if (recorder != null && recorder.History != null)
                     AddBeam(recorder.History, recorder.Width, recorder.Thickness,
                             recorder.name, now, recorder.GetComponentsInChildren<Collider>());
-            foreach (var line in WorldlineRecorder.Ended)
+            foreach (var line in settings.Ended)
                 AddBeam(line.History, line.Width, line.Thickness, line.Name, now, null);
             AddColliders();
 
-            In4D = true;
             ApplyDressing(true);
-            Changed?.Invoke(true);
+            settings.SetIn4D(true);
         }
 
         /// <summary>Flips back to 3D and removes every beam.</summary>
-        public void Exit()
+        public void Exit() => Exit(Time.time);
+
+        void Exit(float now)
         {
-            if (!In4D || _active != this) return;
-            _lastFlip = Time.time;
+            bool wasIn4D = In4D && settings.Owner == this;
+            if (!wasIn4D && _beams.Count == 0) return;
+            _lastFlip = now;
 
             foreach (var beam in _beams)
             {
-                if (beam.Object != null) Destroy(beam.Object);
-                if (beam.Mesh != null) Destroy(beam.Mesh);
+                if (beam.Object != null) Dispose(beam.Object);
+                if (beam.Mesh != null) Dispose(beam.Mesh);
             }
             _beams.Clear();
 
-            In4D = false;
             ApplyDressing(false);
-            Changed?.Invoke(false);
+            if (wasIn4D) settings.SetIn4D(false);
+        }
+
+        /// <summary>Creates the T / d-pad left binding while the feature is on,
+        /// and removes it while it is off.</summary>
+        void RefreshInput()
+        {
+            // Only reached from OnEnable and Tick, so the component is enabled;
+            // OnDisable removes the binding on the way out.
+            if (Active)
+            {
+                if (_toggle != null) return;
+                _toggle = new InputAction("Spacetime", InputActionType.Button);
+                _toggle.AddBinding("<Keyboard>/t");
+                // D-pad left: up/down is camera zoom and right is the skateboard.
+                _toggle.AddBinding("<Gamepad>/dpad/left");
+                _toggle.Enable();
+            }
+            else
+            {
+                DisposeInput();
+            }
+        }
+
+        void DisposeInput()
+        {
+            if (_toggle == null) return;
+            _toggle.Disable();
+            _toggle.Dispose();
+            _toggle = null;
+        }
+
+        /// <summary>Gives every apple in flight a recorder bound to this view's
+        /// settings, so the barrage leaves its frozen rain. Apples are spawned at
+        /// runtime from a prefab this feature does not own, so they are recorded
+        /// from here rather than by editing that prefab.</summary>
+        void RecordApples()
+        {
+            var airborne = Apple.Airborne;
+            for (int i = 0; i < airborne.Count; i++)
+            {
+                var apple = airborne[i];
+                if (apple == null || apple.TryGetComponent<WorldlineRecorder>(out _)) continue;
+                apple.gameObject.AddComponent<WorldlineRecorder>().Bind(settings);
+            }
         }
 
         void AddBeam(WorldlineHistory history, float lineWidth, float lineThickness,
                      string label, float now, Collider[] owner)
         {
-            history.Project(now, timeAxis, maxPointsPerLine, _path);
+            history.Project(now, settings.TimeAxis, settings.MaxPointsPerLine, _path);
 
             var mesh = new Mesh { name = $"Worldline ({label})" };
             bool built = WorldlineMesh.Build(_path,
-                                             lineWidth > 0f ? lineWidth : width,
-                                             lineThickness > 0f ? lineThickness : thickness,
-                                             pastColor, presentColor, mesh);
-            if (!built) { Destroy(mesh); return; }
+                                             lineWidth > 0f ? lineWidth : settings.Width,
+                                             lineThickness > 0f ? lineThickness : settings.Thickness,
+                                             settings.PastColor, settings.PresentColor, mesh);
+            if (!built) { Dispose(mesh); return; }
 
             // A root object at the origin, because the vertices are already in
             // world space. Not parented to the recorder: the beam is the object's
@@ -271,6 +290,9 @@ namespace Pickleball.Sandbox
             // Not parented to this view either, so moving or scaling the view's
             // object cannot drag the beams off the paths they trace.
             var go = new GameObject(mesh.name);
+            // Outside Play mode (the EditMode tests) a beam must never be saved
+            // into whatever scene is open. In play it is an ordinary object.
+            if (!Application.isPlaying) go.hideFlags = HideFlags.DontSave;
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             go.AddComponent<MeshRenderer>().sharedMaterial = Material;
             _beams.Add(new Beam { Object = go, Mesh = mesh, Owner = owner });
@@ -304,7 +326,6 @@ namespace Pickleball.Sandbox
                 IgnoreOwner(beam);
             }
 
-            ResolvePlayer();
             if (player == null) return;
             Physics.SyncTransforms();
             foreach (var beam in _beams)
@@ -354,13 +375,6 @@ namespace Pickleball.Sandbox
                 if (c != null) Physics.IgnoreCollision(beam.Collider, c, true);
         }
 
-        void ResolvePlayer()
-        {
-            if (player != null) return;
-            var chibi = FindFirstObjectByType<ChibiLocomotion>();
-            if (chibi != null) player = chibi.GetComponent<CharacterController>();
-        }
-
         /// <summary>
         /// Whether <paramref name="beam"/> cuts into the player above step height.
         /// The test capsule is the controller's own, with its bottom raised by the
@@ -391,7 +405,7 @@ namespace Pickleball.Sandbox
         {
             get
             {
-                if (worldlineMaterial != null) return worldlineMaterial;
+                if (settings != null && settings.WorldlineMaterial != null) return settings.WorldlineMaterial;
                 if (_runtimeMaterial != null) return _runtimeMaterial;
                 // URP's particle shader, because it multiplies in vertex colour
                 // and the past-to-present gradient lives in the vertex colours.
@@ -403,7 +417,7 @@ namespace Pickleball.Sandbox
                     // Stripped from a build. Say so once, not on every press.
                     if (!_warnedNoShader)
                         Debug.LogError($"{name}: no worldline shader in this build. " +
-                                       "Assign worldlineMaterial so it ships.", this);
+                                       "Assign a material on the Spacetime Settings asset.", this);
                     _warnedNoShader = true;
                     return null;
                 }
@@ -417,6 +431,14 @@ namespace Pickleball.Sandbox
         {
             foreach (var go in onlyIn4D) if (go != null) go.SetActive(in4D);
             foreach (var go in onlyIn3D) if (go != null) go.SetActive(!in4D);
+        }
+
+        /// <summary>Destroy that also works outside Play mode, where the EditMode
+        /// tests drive this view.</summary>
+        static void Dispose(UnityEngine.Object o)
+        {
+            if (Application.isPlaying) Destroy(o);
+            else DestroyImmediate(o);
         }
     }
 }

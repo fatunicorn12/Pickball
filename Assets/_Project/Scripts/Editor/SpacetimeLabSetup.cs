@@ -1,5 +1,6 @@
 using Pickleball;
 using Pickleball.Sandbox;
+using Pickleball.Sandbox.Movement;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -68,17 +69,12 @@ public static class SpacetimeLabSetup
         chibi.transform.SetPositionAndRotation(new Vector3(0f, 0f, -6f), Quaternion.identity);
         WireCamera(chibi);
 
+        // The shared settings asset carries the on/off switch and the beam
+        // material, so the lab obeys the same switch as every other scene.
+        var settings = SpacetimeSettingsMenu.LoadOrCreateSettings();
         var view = new GameObject("Spacetime").AddComponent<SpacetimeView>();
-        // A material saved with the scene, so the shader it uses is referenced
-        // and ships in a build of this scene. Left to the runtime fallback, the
-        // shader could be stripped.
-        var particleUnlit = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-        if (particleUnlit != null)
-        {
-            var beamMaterial = new Material(particleUnlit) { name = "Worldline" };
-            beamMaterial.SetColor("_BaseColor", Color.white);
-            Set(view, "worldlineMaterial", beamMaterial);
-        }
+        Set(view, "settings", settings);
+        Set(view, "player", chibi.GetComponent<CharacterController>());
 
         var violet = new Color(0.55f, 0.45f, 0.95f);
         var teal = new Color(0.35f, 0.8f, 0.75f);
@@ -93,20 +89,20 @@ public static class SpacetimeLabSetup
         // gives a hairpin. Timing the flip is part of the puzzle.
         var swing = Mover("Swinging Platform", PrimitiveType.Cube,
                           new Vector3(0f, 2f, 0f), new Vector3(2f, 0.3f, 2f), violet,
-                          SpacetimeDemoMover.Mode.Oscillate);
+                          SpacetimeDemoMover.Mode.Oscillate, settings);
         Set(swing.GetComponent<SpacetimeDemoMover>(), "period", 8f);
         Set(swing.GetComponent<WorldlineRecorder>(), "traceOffset", new Vector3(0f, 0.15f, 0f));
 
         // A platform circling a point. Its worldline is a spiral staircase.
         var orbit = Mover("Orbiting Platform", PrimitiveType.Cube,
                           new Vector3(-8f, 2.5f, 6f), new Vector3(1.6f, 0.3f, 1.6f), teal,
-                          SpacetimeDemoMover.Mode.Orbit);
+                          SpacetimeDemoMover.Mode.Orbit, settings);
         Set(orbit.GetComponent<SpacetimeDemoMover>(), "period", 5f);
 
         // A ball lobbed over and over. Each throw leaves an arched bridge.
         var lob = Mover("Lobbed Ball", PrimitiveType.Sphere,
                         new Vector3(6f, 0.5f, -2f), Vector3.one * 0.5f, amber,
-                        SpacetimeDemoMover.Mode.Lob);
+                        SpacetimeDemoMover.Mode.Lob, settings);
         // The ball's own collider would shove the player around in 3D and is
         // not what this demonstrates.
         Object.DestroyImmediate(lob.GetComponent<Collider>());
@@ -114,8 +110,9 @@ public static class SpacetimeLabSetup
 
         EditorSceneManager.SaveScene(scene, ScenePath);
         Debug.Log($"Spacetime lab saved to {ScenePath}. Enter Play mode, let the " +
-                  "movers run for a few seconds, then press T (or d-pad up) to flip " +
-                  "into 4D.");
+                  "movers run for a few seconds, then press T (or d-pad left) to flip " +
+                  "into 4D." + (settings.Enabled ? "" : " Spacetime is OFF, so nothing " +
+                  "will happen until Tools ▸ Pickleball ▸ Spacetime ▸ Enable."));
     }
 
     /// <summary>Puts the orbit camera on the scene's Main Camera and points the
@@ -136,12 +133,15 @@ public static class SpacetimeLabSetup
         Set(orbit, "target", chibi.transform);
         Set(orbit, "targetOffset", new Vector3(0f, height * 0.8f, 0f));
 
-        var loco = chibi.GetComponent<ChibiLocomotion>();
-        if (loco != null) Set(loco, "cameraTransform", cam.transform);
+        // Movement reads the camera from its input component, so stick input is
+        // relative to the view.
+        var input = chibi.GetComponent<PlayerMovementInput>();
+        if (input != null) Set(input, "cameraTransform", cam.transform);
     }
 
     static GameObject Mover(string name, PrimitiveType shape, Vector3 position,
-                            Vector3 scale, Color color, SpacetimeDemoMover.Mode mode)
+                            Vector3 scale, Color color, SpacetimeDemoMover.Mode mode,
+                            SpacetimeSettings settings)
     {
         var go = GameObject.CreatePrimitive(shape);
         go.name = name;
@@ -153,7 +153,7 @@ public static class SpacetimeLabSetup
 
         var mover = go.AddComponent<SpacetimeDemoMover>();
         Set(mover, "mode", mode);
-        go.AddComponent<WorldlineRecorder>();
+        Set(go.AddComponent<WorldlineRecorder>(), "settings", settings);
         return go;
     }
 
