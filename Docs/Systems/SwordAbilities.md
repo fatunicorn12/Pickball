@@ -258,12 +258,11 @@ A boss drop can grant an ability early; its level is the fallback.
   air chain per airtime (KH-faithful): one hit at level 1, two at level 3. If that feels stingy,
   give the base air chain a second hit, or refill it on double jump. Don't remove the rule:
   without it Air Combo Plus is meaningless.
-- **Gamepad binding clash:** the attack (`SwordInput`) and ChibiLocomotion's skateboard Mount are
-  both on Gamepad `buttonWest`, so on a pad one press both swings and mounts.
-  - Attack is left on West, the usual light-attack face button.
-  - The likely fix is to move Mount, a rare action, which movement owns.
-  - If the attack moves instead, the agent manager checks the new button against movement's
-    sprint / dive / spin bindings first.
+- **Gamepad binding clash (resolved on merge):** the sword attack (`SwordInput`) uses Gamepad
+  `buttonWest`, which on this branch is also ChibiLocomotion's skateboard Mount.
+  - The movement rework moves Mount to D-pad Right (the user's call; `claude/sunshine-movement-b03f04`
+    @ ddb5c9d), so West stays the attack.
+  - Until that merges, a pad press on West both swings and mounts.
 - **No hang time or plunge yet:**
   - The adapter can only add *horizontal* momentum, because ChibiLocomotion drops the y of
     `AddMomentum` and gravity outgrows any field acceleration.
@@ -273,9 +272,14 @@ A boss drop can grant an ability early; its level is the fallback.
   - Once both branches are merged: add them to `ICombatImpulses` and `ChibiMovementAdapter`, add a
     per-step "hang" / "vertical speed" field, and wrap `Movement.IMovementState` (MoveKind Dive,
     SpinJump…) in `ICombatMovement` for dive- and spin-slashes.
-- **Lock-on attack facing:** `ChibiLocomotion` still reads `MeleeCombat.IsAttacking`. Movement
-  offers an `IFacingSource` hook, so after both merges combat can push its facing request and
-  locomotion can drop the reference.
+- **Lock-on attack facing:** `ChibiLocomotion` still reads `MeleeCombat.IsAttacking`. The movement
+  rework adds `ChibiLocomotion.SetCombatFacingSource(IFacingSource)`: a source's
+  `TryGetFacingTarget(out point, out urgent)` beats the lock-on square-up, and urgent uses the fast
+  attack turn.
+  - After both merges: add a small combat facing source (the lock-on aim point while
+    `IsAttacking`, urgent) and register it from the setup menu.
+  - Locomotion keeps the `IsAttacking` read as a fallback until a source is registered, then can
+    drop it.
 - **Two unlock sets:**
   - `SwordAbilities` (assets) sits alongside `PlayerAbilities` (the fixed `AbilityKind` enum
     locomotion switches on). They share the Grant / Has / Unlocked contract, and the toast listens
