@@ -29,10 +29,10 @@ using UnityEngine.UI;
 ///     components on the player, the HUD toast, and re-bakes SwingTwist so the
 ///     new swings get their hip turn back.
 ///
-/// Run order: after Setup Chibi Sandbox / Setup Weapon / Rebuild Chibi Animator,
-/// each of which rebuilds the Attack layer from scratch and drops these states.
-/// (Once WeaponSetup calls <see cref="WireAttackStatesFromAssets"/> itself, that
-/// ordering stops mattering — see Docs/Systems/SwordAbilities.md.)
+/// Setup Weapon (and so Setup Chibi Sandbox) calls <see cref="AttachToPlayer"/>,
+/// and Rebuild Chibi Animator calls <see cref="WireAttackStatesFromAssets"/>, so
+/// rebuilding the Attack layer from scratch no longer loses these states. The
+/// menu is for re-applying after editing the assets.
 ///
 /// The vertical slice deliberately uses only the five sword clips that are
 /// already imported as Humanoid, each in its own state at its own speed: the
@@ -153,28 +153,42 @@ public static class SwordAbilitySetup
             return;
         }
 
-        BuildData(out var moveset, out var leveling);
-        WireAttackStatesFromAssets();
-
         var player = Object.FindFirstObjectByType<ChibiLocomotion>();
         if (player == null)
         {
+            BuildData(out _, out _);
+            WireAttackStatesFromAssets();
+            AssetDatabase.SaveAssets();
             Debug.LogWarning("Sword ability assets built, but there is no ChibiLocomotion in the " +
                              "open scene to wire. Open ChibiSandbox and run this again.");
-            AssetDatabase.SaveAssets();
             return;
         }
-        if (!WirePlayer(player.gameObject, moveset, leveling)) return;
+        if (!AttachToPlayer(player.gameObject)) return;
 
-        // New Attack-layer states need their hip turn baked, or they swat flies.
-        SwingTwistSetup.Bake(player.gameObject);
-
-        EditorUtility.SetDirty(player.gameObject);
         EditorSceneManager.MarkSceneDirty(player.gameObject.scene);
         AssetDatabase.SaveAssets();
         Debug.Log("Sword abilities set up. Land sword hits to earn Lemmas: Lv2 + C (5-hit chain), " +
                   "Lv3 Phase Shift (2nd air hit), Lv4 Unit Circle (air finisher), Lv5 Area Under the " +
                   "Curve (ground finisher). PlayerLevel ▸ ⋮ ▸ Debug: Gain One Level to skip ahead.");
+    }
+
+    /// <summary>
+    /// Everything the menu does for one player: data assets (seeded if
+    /// missing), Attack-layer states, the component wiring and HUD, and a fresh
+    /// SwingTwist bake so the new states get their hip turn. Called last by
+    /// WeaponSetup.AttachToPlayer — after its own SwingTwist bake and weapon
+    /// clearance — so Setup Weapon and Setup Chibi Sandbox rebuild the combo
+    /// too. Saves nothing; the caller does.
+    /// </summary>
+    public static bool AttachToPlayer(GameObject player)
+    {
+        BuildData(out var moveset, out var leveling);
+        WireAttackStatesFromAssets();
+        if (!WirePlayer(player, moveset, leveling)) return false;
+        // New Attack-layer states need their hip turn baked, or they swat flies.
+        SwingTwistSetup.Bake(player);
+        EditorUtility.SetDirty(player);
+        return true;
     }
 
     /// <summary>

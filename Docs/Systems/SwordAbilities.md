@@ -133,6 +133,8 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
   speed, foot IK off). It never removes states.
 - The five base step assets mirror `WeaponSetup.AttackClips` exactly (`Attack1–4`, `AirAttack`),
   so the two scripts agree on those states.
+- `WeaponSetup` calls back into `SwordAbilitySetup`, so every rebuild of the Attack layer restores
+  the ability states (see §5).
 - New states get their hip turn baked by `SwingTwistSetup.Bake`, which the setup menu calls.
   Without the bake they would bring back the "swatting flies" pose.
 
@@ -241,14 +243,15 @@ A boss drop can grant an ability early; its level is the fallback.
     air, Unit Circle is the wide sweep, and Area Under the Curve is the launcher at 2×.
   - Expect a tuning pass on windows and speeds, and a decision on swapping in the dedicated clips
     above.
-- **Run order:** Setup Chibi Sandbox, Setup Weapon and Rebuild Chibi Animator all rebuild the
-  Attack layer from scratch, so run **Setup Sword Abilities after them**. The fix is for
-  `WeaponSetup.WireController` / `AttachToPlayer` to call `SwordAbilitySetup.WireAttackStatesFromAssets()`
-  and stop writing MeleeCombat's old fields. That waits for WeaponSetup.cs to be released to this
-  branch.
-- **Legacy fields:** until that change, MeleeCombat keeps hidden, unused serialized fields
-  (`animator`, `locomotion`, `trail`, `cameraRig`, `chain`, `airAttack`). They exist only because
-  WeaponSetup writes them by name with no null checks.
+- **Rebuilds keep the combo:**
+  - `WeaponSetup.AttachToPlayer` calls `SwordAbilitySetup.AttachToPlayer` last, after its SwingTwist
+    bake and weapon clearance. That covers Setup Weapon and Setup Chibi Sandbox.
+  - `WeaponSetup.RewireControllerFromImportedClips` calls `WireAttackStatesFromAssets`, which covers
+    Rebuild Chibi Animator.
+  - Run the menu by hand only after editing the step assets.
+- **Two sources for the base states:** `WeaponSetup.AttackClips` still builds the `Attack1–4` and
+  `AirAttack` states, and the base step assets re-apply their own clip and speed straight after. A
+  later cleanup could build the layer from the step assets alone.
 - **Behaviour change at level 1:** the air attack used to be repeatable while falling. It is now one
   air chain per airtime (KH-faithful): one hit at level 1, two at level 3. If that feels stingy,
   give the base air chain a second hit, or refill it on double jump. Don't remove the rule:

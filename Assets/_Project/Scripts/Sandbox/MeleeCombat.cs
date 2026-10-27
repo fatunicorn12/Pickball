@@ -75,28 +75,6 @@ namespace Pickleball.Sandbox
                  "slopes, which would otherwise reset a ground chain mid-combo.")]
         [Range(0f, 0.3f)] [SerializeField] private float airborneGraceSeconds = 0.08f;
 
-#pragma warning disable 0169, 0414, 0649
-        // ---- Legacy wiring --------------------------------------------------
-        // Tools ▸ Pickleball ▸ Setup Weapon still writes these by name (with no
-        // null checks), so they must keep existing until WeaponSetup is moved
-        // onto the step assets. Nothing reads them at runtime; animation, the
-        // trail and the camera now belong to SwordAnimatorDriver/SwordEffects.
-        [Serializable]
-        public class LegacyAttack
-        {
-            public string trigger;
-            public float duration;
-            public float activeStart, activeEnd, comboOpen, comboClose;
-            public bool launcher;
-        }
-        [HideInInspector] [SerializeField] private Animator animator;
-        [HideInInspector] [SerializeField] private ChibiLocomotion locomotion;
-        [HideInInspector] [SerializeField] private BladeTrail trail;
-        [HideInInspector] [SerializeField] private SandboxOrbitCamera cameraRig;
-        [HideInInspector] [SerializeField] private LegacyAttack[] chain = new LegacyAttack[4];
-        [HideInInspector] [SerializeField] private LegacyAttack airAttack = new();
-#pragma warning restore 0169, 0414, 0649
-
         /// <summary>A step has started. Raised for every step, chained or not.</summary>
         public event Action<ResolvedStep> SwingStarted;
 
