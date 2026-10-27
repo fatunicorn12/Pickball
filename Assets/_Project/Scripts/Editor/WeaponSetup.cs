@@ -151,6 +151,8 @@ public static class WeaponSetup
         WireCombat(player, animator, weapon, bladeBase, bladeTip, clips);
         // The Attack layer's mask drops the swings' hip turn; put it back.
         SwingTwistSetup.Bake(player);
+        // The socket was just rebuilt, so its clearance pass has to be re-added.
+        WeaponClearanceSetup.Attach(player);
         EditorUtility.SetDirty(player);
         return true;
     }
