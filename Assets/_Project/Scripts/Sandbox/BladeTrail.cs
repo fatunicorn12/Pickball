@@ -10,35 +10,45 @@ namespace Pickleball.Sandbox
     /// single point and produces a thin wire, whereas a slash needs the whole
     /// width of the blade smeared across its arc. Sampling both ends each frame
     /// and stitching quads between successive samples gives that.
+    ///
+    /// Colour — the per-step tint and the fade with age — goes out as vertex
+    /// colour, so the material must be one that multiplies it in (URP
+    /// Particles/Unlit; Setup Sword Abilities assigns one). Plain URP/Unlit
+    /// ignores vertex colour, which is why the ribbon used to end in a hard edge.
     /// </summary>
     [RequireComponent(typeof(MeshRenderer), typeof(MeshFilter))]
     public class BladeTrail : MonoBehaviour
     {
         [SerializeField] private Transform bladeBase;
         [SerializeField] private Transform bladeTip;
-        [Tooltip("How long each sample stays before fading out.")]
-        [SerializeField] private float lifetime = 0.18f;
+        [Tooltip("Seconds each sample stays before fading out. Longer smears " +
+                 "more of the arc; past ~0.25 s the ribbon lags the blade.")]
+        [Min(0.01f)] [SerializeField] private float lifetime = 0.18f;
         [Tooltip("Cap on samples. The arc of one swing rarely needs more.")]
-        [SerializeField] private int maxSamples = 24;
-        [Tooltip("Skip samples closer together than this, so a slow swing does " +
-                 "not pile up degenerate slivers.")]
-        [SerializeField] private float minSampleDistance = 0.02f;
+        [Min(2)] [SerializeField] private int maxSamples = 24;
+        [Tooltip("Skip samples closer together than this, in metres, so a slow " +
+                 "swing does not pile up degenerate slivers.")]
+        [Min(0f)] [SerializeField] private float minSampleDistance = 0.02f;
 
         struct Sample
         {
             public Vector3 A, B;
             public float Born;
+            public Color Tint;
         }
 
-        readonly List<Sample> _samples = new();
+        // Buffers are (re)built in OnEnable, not readonly initializers: OnEnable
+        // runs again after a script reload in Play mode, Awake does not.
+        List<Sample> _samples;
         Mesh _mesh;
         MeshRenderer _renderer;
         bool _emitting;
+        Color _tint = Color.white;
 
-        readonly List<Vector3> _verts = new();
-        readonly List<Vector2> _uvs = new();
-        readonly List<Color> _colors = new();
-        readonly List<int> _tris = new();
+        List<Vector3> _verts;
+        List<Vector2> _uvs;
+        List<Color> _colors;
+        List<int> _tris;
 
         void Awake()
         {
@@ -53,10 +63,25 @@ namespace Pickleball.Sandbox
             _renderer.enabled = false;
         }
 
+        void OnEnable()
+        {
+            _samples ??= new List<Sample>();
+            _verts ??= new List<Vector3>();
+            _uvs ??= new List<Vector2>();
+            _colors ??= new List<Color>();
+            _tris ??= new List<int>();
+        }
+
         public void SetEmitting(bool on) => _emitting = on;
+
+        /// <summary>Colour for samples laid from now on. Samples already in the
+        /// ribbon keep theirs, so a chain's hits stay visibly different as they
+        /// overlap.</summary>
+        public void SetTint(Color tint) => _tint = tint;
 
         void LateUpdate()
         {
+            if (_mesh == null || _samples == null) return;
             if (_emitting && bladeBase != null && bladeTip != null)
             {
                 bool far = _samples.Count == 0 ||
@@ -68,6 +93,7 @@ namespace Pickleball.Sandbox
                         A = bladeBase.position,
                         B = bladeTip.position,
                         Born = Time.time,
+                        Tint = _tint,
                     });
                     if (_samples.Count > maxSamples) _samples.RemoveAt(0);
                 }
@@ -99,7 +125,8 @@ namespace Pickleball.Sandbox
                 // Fade with age, and taper along the ribbon so the oldest end
                 // thins out instead of ending in a hard edge.
                 float alpha = (1f - age) * (i / (float)(_samples.Count - 1) * 0.6f + 0.4f);
-                var c = new Color(1f, 1f, 1f, alpha);
+                var c = s.Tint;
+                c.a *= alpha;
 
                 _verts.Add(s.A); _verts.Add(s.B);
                 float u = i / (float)(_samples.Count - 1);
@@ -110,9 +137,13 @@ namespace Pickleball.Sandbox
             for (int i = 0; i < _samples.Count - 1; i++)
             {
                 int a = i * 2;
-                _tris.AddRange(new[] { a, a + 1, a + 3, a, a + 3, a + 2 });
-                // Back faces too — a slash gets seen from both sides.
-                _tris.AddRange(new[] { a, a + 3, a + 1, a, a + 2, a + 3 });
+                // Front faces, then back faces — a slash gets seen from both
+                // sides. Added one by one: AddRange(new[] {…}) allocated two
+                // arrays per segment per frame.
+                _tris.Add(a); _tris.Add(a + 1); _tris.Add(a + 3);
+                _tris.Add(a); _tris.Add(a + 3); _tris.Add(a + 2);
+                _tris.Add(a); _tris.Add(a + 3); _tris.Add(a + 1);
+                _tris.Add(a); _tris.Add(a + 2); _tris.Add(a + 3);
             }
 
             _mesh.Clear();
