@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87c60d1db83e442cb02323c572fdf585, type: 3}
+  m_Name: Step_AreaUnderCurve
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Combat.ComboStepDefinition
+  displayName: Area Under the Curve
+  animatorState: AreaUnderCurve
+  clip: {fileID: -203655887218126122, guid: b86d6820fd822f543a08b6c6a3017184, type: 3}
+  playbackSpeed: 2
+  fallbackDuration: 0.6
+  blendIn: 0.1
+  windows:
+    activeStart: 0.34
+    activeEnd: 0.64
+    comboOpen: 0.58
+    comboClose: 0.95
+  hit:
+    damage: 20
+    knockback: 8
+    launchSpeed: 12.8
+    hitstop: 0.1
+  lungeSpeed: 2.5
+  burst:
+    enabled: 1
+    triggerAt: 0.62
+    radius: 3
+    expandSeconds: 0.35
+    forwardOffset: 0.8
+    heightTolerance: 0.6
+    hit:
+      damage: 12
+      knockback: 6
+      launchSpeed: 2
+      hitstop: 0.08
+  presentation:
+    trailColor: {r: 0.55, g: 1, b: 0.45, a: 0.95}
+    shakeAmount: 0.3
+    shakeSeconds: 0.22
+    fovPunch: 4
+    hitEffect: {fileID: 0}
+    burstEffect: {fileID: 4018111682404839535, guid: 8b4ff69600c290449bcda3e5eccae3e2, type: 3}
