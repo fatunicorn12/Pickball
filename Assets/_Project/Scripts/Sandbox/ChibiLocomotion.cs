@@ -106,6 +106,20 @@ namespace Pickleball.Sandbox
         /// <summary>True while the Gravity Anchor is holding his own gravity off.</summary>
         public bool IsAnchored => Motor != null && Motor.IsAnchored;
 
+        /// <summary>Sets vertical speed outright, once (an attack's hop, a plunge).
+        /// See <see cref="MovementMotor.SetVerticalVelocity"/>.</summary>
+        public void SetVerticalVelocity(float metresPerSecond)
+        {
+            if (Motor != null) Motor.SetVerticalVelocity(metresPerSecond);
+        }
+
+        /// <summary>Holds his gravity off for a moment (an attack's air hang).
+        /// Refreshed, not accumulated. See <see cref="MovementMotor.SuspendGravity"/>.</summary>
+        public void SuspendGravity(float seconds)
+        {
+            if (Motor != null) Motor.SuspendGravity(seconds);
+        }
+
         void Awake()
         {
             _combat = GetComponent<MeleeCombat>();

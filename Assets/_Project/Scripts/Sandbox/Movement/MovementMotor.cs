@@ -55,7 +55,7 @@ namespace Pickleball.Sandbox.Movement
         bool _facingHeld;
         Vector3 _travel = Vector3.forward;
         Vector3 _externalAccel, _frameFieldAccel;
-        float _moveLockLeft;
+        float _moveLockLeft, _hoverLeft;
         float _anchorLeft, _anchorReadyAt;
         float _jumpPressedAt = -99f;
         float _standHeight, _standRadius;
@@ -141,6 +141,29 @@ namespace Pickleball.Sandbox.Movement
 
         /// <summary>True while the Gravity Anchor holds his own gravity off.</summary>
         public bool IsAnchored => _anchorLeft > 0f;
+
+        /// <summary>
+        /// Sets his vertical speed outright, once — an attack's hop, a downward
+        /// plunge. The vertical counterpart of <see cref="AddMomentum"/> (whose y is
+        /// dropped on purpose: the vertical channel belongs to the moves). Upward
+        /// speed lifts him off the ground at once. Call per event, not per frame.
+        /// </summary>
+        public void SetVerticalVelocity(float metresPerSecond)
+        {
+            VerticalVelocity = metresPerSecond;
+            if (metresPerSecond > 0.01f) MarkAirborne();
+        }
+
+        /// <summary>
+        /// Holds his own gravity off for a moment — an attack's hang in the air.
+        /// Vertical speed eases to rest at the anchor's halt rate while it lasts.
+        /// Refreshed, not accumulated, like <see cref="LockMovement"/>: call it every
+        /// frame of the hang, or once with the hang's length.
+        /// </summary>
+        public void SuspendGravity(float seconds) => _hoverLeft = Mathf.Max(_hoverLeft, seconds);
+
+        /// <summary>True while <see cref="SuspendGravity"/> is holding him up.</summary>
+        public bool IsGravitySuspended => _hoverLeft > 0f;
 
         // ----------------------------------------- presentation-facing data
         /// <summary>Airtime (s) of the jump just launched, for time-scaling flips.</summary>
@@ -398,6 +421,11 @@ namespace Pickleball.Sandbox.Movement
                     : Mathf.MoveTowards(VerticalVelocity, 0f, c.AnchorHaltRate * dt);
                 return VerticalVelocity * dt;
             }
+            if (_hoverLeft > 0f)
+            {
+                VerticalVelocity = Mathf.MoveTowards(VerticalVelocity, 0f, Config.AnchorHaltRate * dt);
+                return VerticalVelocity * dt;
+            }
             float vy = VerticalVelocity;
             float dy = JumpMath.Step(ref vy, held, profile, dt);
             VerticalVelocity = vy;
@@ -511,6 +539,7 @@ namespace Pickleball.Sandbox.Movement
             // Ticked up here so a lock or anchor applied just before a dash or a
             // latch still expires.
             if (_moveLockLeft > 0f) _moveLockLeft -= dt;
+            if (_hoverLeft > 0f) _hoverLeft -= dt;
             TickAnchor(dt);
             _spin.Tick(_intent.RawStick, c.SpinStickMin, dt);
 

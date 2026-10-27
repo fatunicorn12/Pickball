@@ -143,6 +143,10 @@ All of these keep their exact contracts:
 - `AddAcceleration` and `LockMovement` (GravityWell)
 - `IsMovementLocked`, `IsAnchored`
 
+Two vertical levers were added for combat (sword abilities):
+- `SetVerticalVelocity(m/s)`: set once per event. Upward speed lifts him off the ground.
+- `SuspendGravity(seconds)`: an air hang, refreshed rather than accumulated.
+
 The serialized field `lockOn` keeps its name, because `LockOnSetup` writes it by string. New code
 should hold an `IMovementState` (`ChibiLocomotion.Movement`) instead.
 
