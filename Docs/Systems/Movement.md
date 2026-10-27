@@ -39,39 +39,133 @@ little and scaled to a 1.7 m character:
   - lock-on facing
   - `PlayerAbilities` gating
 
+### Controls
+
+Bound in `PlayerMovementInput`. Moves marked * are gated by `PlayerAbilities`.
+
+| Action | Keyboard / mouse | Gamepad |
+|---|---|---|
+| Move | WASD / arrows | Left stick |
+| Jump (chain, side flip, rollout; spin jump after rotating the stick) | Space | A (South) |
+| Sprint now (skips the 1 s build-up) | Left Shift | LT |
+| Crouch; dive at speed or in the air | Ctrl | B (East) |
+| Front-flip trick | F | Y (North) |
+| Skateboard mount / dismount * | R | **D-pad Right** (moved off X/West, which is the sword attack) |
+| Dash * | E | RB |
+| Tether * | Q / right mouse | LB |
+| Gravity Anchor * | G | R3 |
+| *Not movement's:* sword attack | left mouse | X (West) |
+| *Not movement's:* lock-on | Tab / middle mouse | RT, plus a right-stick flick to switch |
+| *Not movement's:* camera | mouse | right stick; d-pad Up/Down zoom |
+
+D-pad Left and View are still free.
+
 ### Where the numbers come from
 
-They come from the doldecomp `sms` decompilation plus the shipped `params.szs` values. A
-subagent's research note has the per-value sources and confidence:
-`side-session-notes/…/sunshine-movement-research.md`. Mario's 160 game units are mapped to our
-1.7 m. Two deliberate departures, both asked for:
+The primary source is the **doldecomp/sms** decompilation, read at commit `912aea9` (main on
+2026-10-26). Paths below are relative to that repo. It gives two kinds of value:
 
-1. Time runs about 1.46× slower than Sunshine. Floatier: a standing jump is about 1.05 s of
-   airtime against Sunshine's 0.7 s.
-2. Heights are about 0.8× Sunshine's, so the scanned, human-scale academy still reads. Sunshine's
-   triple jump is 5 body heights.
+- **Formulas and literals** in Mario's move code (`src/Player/Mario*.cpp`).
+- **Code defaults** for every tunable, as `PARAM_INIT` entries in `src/Player/MarioInit.cpp`.
 
-| Move | Sunshine (at 1.7 m scale) | Default here |
-|---|---|---|
-| Top run | 10.2 m/s, no sprint (≈7.0 at our time scale) | run 4.2, sprint 7.0 after 1 s |
-| Start | instant kick to 2.55 m/s | kick to 1.5 m/s |
-| Stick response | quadratic, full at 62% tilt | exponent 1.6, full at 75% |
-| Turn rate | 989°/s (678 at our time scale), any speed | 900°/s at run → 680°/s at sprint |
-| Skid trigger | stick > 100° off facing above 3.2 m/s | > 120° above 2.6 m/s |
-| Skid | brake ~0.07 s, exit at walking pace | 0.14 s total, exits at 92% of entry speed |
-| Single jump | 2.40 m standing, 3.39 m at top speed | 2.0 m → 2.76 m at sprint |
-| Double jump | 3.6 m standing, 4.86 m at top speed | 2.8 m → 3.86 m at sprint |
-| Triple jump | 8.56 m, needs 78% of top speed | 4.5 m, needs 5 m/s |
-| Chain window | 0.133 s | 0.2 s |
-| Variable height | release: vy decays to ≤ 6.4 m/s | release: vy capped to 5 m/s |
-| Gravity | 38.25 m/s², one value | rise 18 / apex 10 / fall 26 m/s² |
-| Terminal fall | 23.9 m/s (16.4 at our time scale) | 18 m/s |
-| Side somersault | 6.5 m | 4.2 m |
-| Dive (ground) | speed + 4.8, cap 15.3 m/s, vy 6.4 | speed + 3.3, cap 10, vy 4.4 |
-| Belly slide | ×0.97/tick neutral, 0.99 forward, 0.95 back | e^(−2.5t) / e^(−0.8t) / e^(−4.2t) |
-| Spin input | 4 quadrants within 0.33 s | 270° within 0.5 s |
-| Spin jump | 6.6 m, descent at 35% gravity | 4 m, descent 8 m/s² capped at 5 m/s |
-| Coyote / buffer | none (stays grounded over 1 m drops) | 0.12 s / 0.12 s |
+**The shipped game overrides those defaults.** Each parameter block ends with
+`TParams::load("/Mario/Jump.prm")`, or `Run.prm`, `Mario.prm` and so on, which reads them from
+the disc's parameter archive. Where a shipped value differs from the code default, the "Shipped"
+column below gives the value from ProjectShine's decode of that archive
+(github.com/JasonAbsolute/ProjectShine, `assets/Sms/SmsPhysics.cs`). That is one source, **not
+yet verified against a real disc**. Those cells are marked †, and the user's own copy can confirm
+them. Only numbers are read from it; no game files go in the repo.
+
+#### Unit conversion
+
+Mario is 160 units tall, mapped to our 1.7 m (k = 0.010625 m per unit). Sunshine renders at 30 fps
+but simulates four 120 Hz ticks per frame (`src/System/MarDirectorDirect.cpp`). So:
+
+- velocities are units per 30 fps frame: × 0.31875 → m/s;
+- per-tick accelerations: × 38.25 → m/s²;
+- angles are 16-bit BAM per tick: × 0.659 → °/s.
+
+"At 1.7 m" is Sunshine at true speed on our character.
+
+#### Two deliberate departures, both asked for
+
+- **Time runs ×1/1.458** (gravity 38.25 → 18 m/s²): floatier and more hang. So speeds are ÷1.458,
+  accelerations ÷2.125, durations ×1.458.
+- **Heights are tempered to about 0.8×** so the scanned, human-scale academy still reads.
+
+#### Fidelity key
+
+- **exact**: same rule and value.
+- **time-scaled**: the Sunshine value at our time scale.
+- **tempered**: deliberately lower.
+- **changed**: a different rule, on purpose.
+
+#### Run
+
+| Value | doldecomp/sms source | Code default | Shipped | Sunshine at 1.7 m | Ours (`MovementConfig`) | Fidelity |
+|---|---|---|---|---|---|---|
+| Top speed | `TRunParams::mMaxSpeed`, MarioInit.cpp:595; clamp MarioRun.cpp:471–473 | 32 u/f | 32 | 10.2 m/s | `sprintSpeed` 7.0 (`runSpeed` 4.2 before the sprint) | time-scaled; the auto-sprint is ours |
+| Acceleration | `+= AddBase − v·AddVelDiv` per tick, MarioRun.cpp:481–482; AddBase 1.1 MarioInit.cpp:597, AddVelDiv 1/43 MarioInit.cpp:598 | 1.1, 1/43 | same | 42 − 2.79·v m/s² (0 → top in 0.40 s) | `runAcceleration` 18, `sprintAcceleration` 12 (constant) | approximated |
+| Start kick | `fwd = min(mag, 8)`, MarioMove.cpp:685–689 | 8 u/f | — | 2.55 m/s | `runStartSpeed` 1.5 | time-scaled (1.75), rounded down |
+| Start-to-walk tilt | `mStartToWalkLevel`, MarioInit.cpp:751, used MarioWait.cpp:103 | 15 (≈48% tilt) | unknown | — | none; moves at any tilt | changed |
+| Stick curve | `mag = 32·(dist/64)²` after `LengthMult^LengthMultTimes`, MarioMove.cpp:1380–1385; MarioInit.cpp:753–754 | 0.935^10 | 0.78² † | quadratic, full at 62% tilt | `stickExponent` 1.6, `stickFullTilt` 0.75 | approximated |
+| Stop on release | `FConverge(v, 0, 1, 1)` per tick, MarioRun.cpp:1009 | 1 u/f/tick | — | 38.25 m/s² (0.27 s) | `stopDeceleration` 12, `runDeceleration` 22 | time-scaled is 18; stop softened for the Run To Stop clip |
+| Turn rate | `rotSp = Min + v/32·(Max − Min)` BAM/tick, MarioRun.cpp:494–502; `mRunningRotSpMin/Max` MarioInit.cpp:471–472 | 0x200 / 0x400 | 1500 / 1500 † | 989°/s at any speed | `runTurnRate` 900 → `sprintTurnRate` 680 °/s | time-scaled at sprint |
+
+#### Skid turn
+
+| Value | doldecomp/sms source | Code default | Shipped | Sunshine at 1.7 m | Ours (`MovementConfig`) | Fidelity |
+|---|---|---|---|---|---|---|
+| Skid angle | `abs(yawDiff) > 0x471C`, MarioRun.cpp:94 | 100° | — | 100° | `skidMinAngle` 120° | changed (diagonals steer) |
+| Skid minimum speed | `fwd >= mTurnNeedSp`, MarioRun.cpp:682; MarioInit.cpp:614 | 10 u/f | — | 3.19 m/s | `skidMinSpeed` 2.6 | time-scaled is 2.19 |
+| Skid brake | `FConverge(v, 0, 4, 4)` per tick, MarioRun.cpp:818 | 4 u/f/tick | — | 0.067 s from top speed | `skidDuration` 0.14 s, 40% planted | time-scaled is 0.10 s |
+| Skid exit speed | `setPlayerVelocity(8)`, MarioRun.cpp:826 | 8 u/f (25% of top) | — | 2.55 m/s | `skidSpeedKeep` 0.92 × entry | **changed** (keeps momentum, as asked) |
+| Side somersault | `TurnJumpForce`, launched MarioMove.cpp:529–531 (fwd = 8, new facing); MarioInit.cpp:549 | 62 | 70 † | 22.3 m/s, 6.5 m apex | `sideFlipHeight` 4.2 m, `sideFlipSpeed` 2.5 m/s | speed exact; height tempered |
+
+#### Jumps
+
+| Value | doldecomp/sms source | Code default | Shipped | Sunshine at 1.7 m | Ours (`MovementConfig`) | Fidelity |
+|---|---|---|---|---|---|---|
+| Single jump | `setPlayerJumpSpeed(0.25, 42)`, MarioMove.cpp:442 | 42 + 0.25·v | — | 13.4 m/s: 2.34 m standing, 3.32 m at top speed | `singleJumpHeight` 2.0 m (+38% at sprint) | tempered (0.85×) |
+| Single jump: takeoff speed | `mForwardVel *= 0.8`, MarioMove.cpp:443 | 0.8 | — | 0.8 | `jumpTakeoffSpeedKeep` 0.8 | exact |
+| Double jump | `SecJumpForce` / `SecJumpSpeedMult` / `SecJumpXZMult`, MarioMove.cpp:470–472; MarioInit.cpp:570–572 | 52, 0, 0.8 | 52, 0.25 † | 3.59 m standing, 4.78 m at top speed | `doubleJumpHeight` 2.8 m (+38% at sprint) | tempered (0.8×) |
+| Triple jump | `UltraJumpForce` / `UltraJumpSpeedMult` / `UltraJumpXZMult`, MarioMove.cpp:477–479; MarioInit.cpp:574–576 | 70, 0.25, 0.8 | 75, 0.15, 1.0 † | 25.4 m/s: 8.46 m (5 body heights), keeps 100% of speed | `tripleJumpHeight` 4.5 m, keeps 100% | tempered (0.53×); speed keep exact |
+| Double jump minimum speed | `mSecJumpEnableSp`, MarioInit.cpp:569 | 20 u/f | 0 † | any speed | any speed | exact |
+| Triple jump minimum speed | `mTriJumpEnableSp`, MarioInit.cpp:573 | 20 u/f | 25 † | 7.97 m/s (78% of top) | `tripleMinSpeed` 5.0 m/s (71% of sprint) | time-scaled (5.47), rounded |
+| Chain window | landing-state timer `mMaxTimer`, checked MarioRun.cpp:1541 | 16 ticks | — | 0.133 s | `chainWindow` 0.2 s | time-scaled (0.194) |
+| Gravity | `mVel.y −= mGravity` per tick, MarioPhysics.cpp:478; `TJumpParams::mGravity` MarioInit.cpp:543 | 0.8 | 1.0 † | 38.25 m/s², one value | `riseGravity` 18, `apexGravity` 10, `fallGravity` 26 | time-scaled (18), plus an asked-for apex hang and heavier fall |
+| Terminal fall speed | clamp at −75, MarioPhysics.cpp:468–469, 484–485 | 75 u/f | — | 23.9 m/s | `maxFallSpeed` 18 | time-scaled is 16.4 |
+| Variable height | `if (!A && vy > 20) vy *= 0.75` instead of gravity, MarioPhysics.cpp:458, 472 | 20 u/f, ×0.75 | — | cut to ≤ 6.4 m/s; minimum tap 0.70 m | `jumpReleaseSpeed` 5 (instant cap) | time-scaled (4.4); tap measured 0.69 m |
+| Air acceleration | `fwd += mag·cos(Δ)·JumpAccelControl`, MarioJump.cpp:107; MarioInit.cpp:547 | 0.5 | 0.008 † | 9.8 m/s² forward/back | `airAcceleration` 6 (vector) | ≈ time-scaled (4.6) + strafe |
+| Air strafe | `side = mag·sin(Δ)·JumpSlideControl`, MarioJump.cpp:108; MarioInit.cpp:548 | 0.5 | 0.3 † | ≤ 3.06 m/s that tick | folded into the vector steer | changed |
+| Air drag / caps | `×JumpSpeedBrake` MarioJump.cpp:81 (0.999, MarioInit.cpp:546); >32 −0.2, <−16 +0.4 MarioJump.cpp:112–115 | — | — | τ 8.3 s; soft cap 10.2 m/s | `airDrag` 1 m/s²; cap at takeoff speed | changed |
+
+#### Dive and belly slide
+
+| Value | doldecomp/sms source | Code default | Shipped | Sunshine at 1.7 m | Ours (`MovementConfig`) | Fidelity |
+|---|---|---|---|---|---|---|
+| Ground dive minimum speed | `fwd > mDoJumpCatchSp`, MarioRun.cpp:38; MarioInit.cpp:613 | 15 u/f | — | 4.78 m/s | `diveMinSpeed` 3.2 | time-scaled (3.28) |
+| Ground dive hop | `mVel.y = 20`, MarioRun.cpp:40 | 20 u/f | — | 6.38 m/s, 0.53 m | `diveHopSpeed` 4.4 | time-scaled (4.37) |
+| Dive speed | `min(15 + v, 48)`, MarioMove.cpp:554–556 | +15, cap 48 | — | +4.8, cap 15.3 m/s | `diveSpeedBoost` 3.3, `diveMaxSpeed` 10 | time-scaled (3.28 / 10.5) |
+| Air dive speed | `setPlayerVelocity(JumpJumpCatchSp)`, MarioJump.cpp:298 (then capped at 48); MarioInit.cpp:586 | 50 | 80 † | 15.3 m/s, vertical speed kept | `diveAirSpeed` 9, vertical speed kept | time-scaled (10.5), rounded |
+| Slide friction | `fwd ×= SlipFriction + 0.02·(mag/32)·cos` per tick, MarioRun.cpp:410; MarioInit.cpp:858 | 0.9 | 0.97 † | e^(−3.66t) neutral / e^(−1.21t) forward / e^(−6.16t) back | `bellySlideDecay*` 2.5 / 0.8 / 4.2 | time-scaled |
+| Slide stop | `mSlideStopCatch`, MarioInit.cpp:864 | 15 u/f | 1 † | 0.32 m/s | `bellySlideStopSpeed` 0.3 | exact (shipped) |
+| Rollout trigger | A with `fwd > ClashSpeed`, MarioRun.cpp:1192; `TDeParams::mClashSpeed` MarioInit.cpp:507 | 50 u/f | 40 † | > 12.75 m/s; slower gives a small hop-up | any speed | changed |
+| Rollout launch | `RotBroadJumpForce` / `ForceY`, MarioMove.cpp:574–575; MarioInit.cpp:566–567 | 60, 20 | 55, 38 † | 17.5 m/s forward, 1.92 m | `rolloutHeight` 1.3 m, `rolloutSpeedKeep` 1.0 | tempered |
+
+#### Spin jump
+
+| Value | doldecomp/sms source | Code default | Shipped | Sunshine at 1.7 m | Ours (`MovementConfig`) | Fidelity |
+|---|---|---|---|---|---|---|
+| Spin input | yaw history of `mStickRotateTime` ticks, all 4 quadrants, MarioMove.cpp:1512–1595 (buffer 1567); MarioInit.cpp:752 | 24 ticks | 40 † | 4 quadrants within 0.333 s | `spinRequiredDegrees` 270 within `spinWindow` 0.5 s | time-scaled (0.49 s) |
+| Spin launch | `setPlayerJumpSpeed(0.25, RotateJumpForceY)`, fwd ×0.8, MarioMove.cpp:490–491; MarioInit.cpp:556 | 62 | 70 † | 22.3 m/s, 6.5 m | `spinJumpHeight` 4.0 m, `spinHorizontalKeep` 0.6 | tempered |
+| Spin descent | `vy −= SpinJumpGravity` while falling, MarioPhysics.cpp:476; MarioInit.cpp:544 | 0.6 | 0.35 † | 13.4 m/s² (35% of gravity) | `spinFallGravity` 8, `spinFallSpeed` 5 | time-scaled (6.3) plus a cap |
+| Spin from the air | `considerJumpRotate`, MarioJump.cpp:273–289 | — | — | converts a jump into the spin descent, no lift | `spinInAir` | exact |
+
+#### Not in Sunshine at all
+
+These are ours: coyote time and the jump buffer (Sunshine instead keeps Mario grounded over drops
+of up to 100 units), the automatic sprint, the apex hang, and the skid keeping its momentum.
 
 ### Measured in Play mode (2026-10-26)
 
@@ -173,6 +267,10 @@ All of these keep their exact contracts:
 - `AddMomentum` (Apple knockback)
 - `AddAcceleration` and `LockMovement` (GravityWell)
 - `IsMovementLocked`, `IsAnchored`
+
+`SetCombatFacingSource(IFacingSource)` lets combat supply where a swing must face; it takes
+priority over the lock-on square-up. Until combat registers one, the facade falls back to reading
+`MeleeCombat.IsAttacking`.
 
 Two vertical levers were added for combat (sword abilities):
 - `SetVerticalVelocity(m/s)`: set once per event. Upward speed lifts him off the ground.

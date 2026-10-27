@@ -43,8 +43,18 @@ namespace Pickleball.Sandbox
 
         MovementMotor _motor;
         MeleeCombat _combat;
+        IFacingSource _combatFacing;
         ChibiFootIK _footIK;
         bool _warnedMissingMotor;
+
+        /// <summary>
+        /// Lets combat supply its own facing request (where a swing must land),
+        /// taking priority over the lock-on square-up. Pass null to hand back.
+        /// Until combat registers one, an attack in progress is detected by reading
+        /// <see cref="MeleeCombat.IsAttacking"/> — the one leftover movement→combat
+        /// read, which this hook exists to retire.
+        /// </summary>
+        public void SetCombatFacingSource(IFacingSource source) => _combatFacing = source;
 
         /// <summary>The movement simulation this facade forwards to.</summary>
         public MovementMotor Motor
@@ -152,6 +162,7 @@ namespace Pickleball.Sandbox
         /// is starting (it has to land on the target), otherwise only once stopped.</summary>
         bool IFacingSource.TryGetFacingTarget(out Vector3 point, out bool urgent)
         {
+            if (_combatFacing != null && _combatFacing.TryGetFacingTarget(out point, out urgent)) return true;
             point = default;
             urgent = false;
             if (lockOn == null || !lockOn.IsLocked) return false;

@@ -15,8 +15,9 @@ namespace Pickleball.Sandbox.Movement
     /// rather than leaving disposed actions behind.
     ///
     /// Bindings: WASD/arrows/left stick move; Space/A jump; Shift/LT sprint;
-    /// Ctrl/B crouch and dive; F/Y front-flip trick; R/X skateboard; E/RB dash;
-    /// Q/RMB/LB tether; G/R3 gravity anchor.
+    /// Ctrl/B crouch and dive; F/Y front-flip trick; R/D-pad right skateboard;
+    /// E/RB dash; Q/RMB/LB tether; G/R3 gravity anchor. (Not ours: X / LMB is the
+    /// sword attack, RT / Tab lock-on, d-pad up/down camera zoom.)
     /// </summary>
     public class PlayerMovementInput : MonoBehaviour
     {
@@ -50,7 +51,9 @@ namespace Pickleball.Sandbox.Movement
             _jump = Button("Jump", "<Keyboard>/space", "<Gamepad>/buttonSouth");
             _crouch = Button("Crouch", "<Keyboard>/leftCtrl", "<Keyboard>/rightCtrl", "<Gamepad>/buttonEast");
             _trick = Button("Flip", "<Keyboard>/f", "<Gamepad>/buttonNorth");
-            _mount = Button("Mount", "<Keyboard>/r", "<Gamepad>/buttonWest");
+            // D-pad right, not buttonWest: West is the sword attack (user's call),
+            // and d-pad up/down are the camera zoom.
+            _mount = Button("Mount", "<Keyboard>/r", "<Gamepad>/dpad/right");
             _dash = Button("Dash", "<Keyboard>/e", "<Gamepad>/rightShoulder");
             _tether = Button("Tether", "<Keyboard>/q", "<Mouse>/rightButton", "<Gamepad>/leftShoulder");
             _anchor = Button("GravityAnchor", "<Keyboard>/g", "<Gamepad>/rightStickPress");
