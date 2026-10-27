@@ -70,11 +70,16 @@ The primary source is the **doldecomp/sms** decompilation, read at commit `912ae
 
 **The shipped game overrides those defaults.** Each parameter block ends with
 `TParams::load("/Mario/Jump.prm")`, or `Run.prm`, `Mario.prm` and so on, which reads them from
-the disc's parameter archive. Where a shipped value differs from the code default, the "Shipped"
-column below gives the value from ProjectShine's decode of that archive
-(github.com/JasonAbsolute/ProjectShine, `assets/Sms/SmsPhysics.cs`). That is one source, **not
-yet verified against a real disc**. Those cells are marked †, and the user's own copy can confirm
-them. Only numbers are read from it; no game files go in the repo.
+the disc's parameter archive. The "Shipped" column is that archive.
+
+**Verified against a real disc (2026-10-27).** The shipped values were read from the user's own
+NTSC-U copy (game ID GMSE01): `/data/params.szs` → `/params/mario/*.prm` (`jump`, `run`, `mario`,
+`controller`, `slipparamnormal`), read in memory from the disc image. Only numbers were taken,
+and no game file was copied anywhere.
+
+Cells marked † are where the shipped value differs from the code default. Every † value matches
+the earlier community decode (ProjectShine, `assets/Sms/SmsPhysics.cs`) exactly. The disc also
+settled the one value that had been unknown: `mStartToWalkLevel` = 1.
 
 #### Unit conversion
 
@@ -107,7 +112,7 @@ but simulates four 120 Hz ticks per frame (`src/System/MarDirectorDirect.cpp`). 
 | Top speed | `TRunParams::mMaxSpeed`, MarioInit.cpp:595; clamp MarioRun.cpp:471–473 | 32 u/f | 32 | 10.2 m/s | `sprintSpeed` 7.0 (`runSpeed` 4.2 before the sprint) | time-scaled; the auto-sprint is ours |
 | Acceleration | `+= AddBase − v·AddVelDiv` per tick, MarioRun.cpp:481–482; AddBase 1.1 MarioInit.cpp:597, AddVelDiv 1/43 MarioInit.cpp:598 | 1.1, 1/43 | same | 42 − 2.79·v m/s² (0 → top in 0.40 s) | `runAcceleration` 18, `sprintAcceleration` 12 (constant) | approximated |
 | Start kick | `fwd = min(mag, 8)`, MarioMove.cpp:685–689 | 8 u/f | — | 2.55 m/s | `runStartSpeed` 1.5 | time-scaled (1.75), rounded down |
-| Start-to-walk tilt | `mStartToWalkLevel`, MarioInit.cpp:751, used MarioWait.cpp:103 | 15 (≈48% tilt) | unknown | — | none; moves at any tilt | changed |
+| Start-to-walk tilt | `mStartToWalkLevel`, MarioInit.cpp:751, used MarioWait.cpp:103 | 15 (≈48% tilt) | 1 † | starts walking at almost any tilt | no threshold; moves at any tilt | exact in effect |
 | Stick curve | `mag = 32·(dist/64)²` after `LengthMult^LengthMultTimes`, MarioMove.cpp:1380–1385; MarioInit.cpp:753–754 | 0.935^10 | 0.78² † | quadratic, full at 62% tilt | `stickExponent` 1.6, `stickFullTilt` 0.75 | approximated |
 | Stop on release | `FConverge(v, 0, 1, 1)` per tick, MarioRun.cpp:1009 | 1 u/f/tick | — | 38.25 m/s² (0.27 s) | `stopDeceleration` 12, `runDeceleration` 22 | time-scaled is 18; stop softened for the Run To Stop clip |
 | Turn rate | `rotSp = Min + v/32·(Max − Min)` BAM/tick, MarioRun.cpp:494–502; `mRunningRotSpMin/Max` MarioInit.cpp:471–472 | 0x200 / 0x400 | 1500 / 1500 † | 989°/s at any speed | `runTurnRate` 900 → `sprintTurnRate` 680 °/s | time-scaled at sprint |
