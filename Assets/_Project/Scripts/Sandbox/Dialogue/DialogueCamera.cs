@@ -15,11 +15,29 @@ namespace Pickleball.Sandbox.Dialogue
     /// the camera's pose and field of view. The shot comes from
     /// <see cref="DialogueFraming.Solve"/>; during the blend-in it is re-solved
     /// each frame from the player's position, because the player is still
-    /// settling to a stop, and it is frozen once the blend completes. The NPC's
+    /// settling to a stop, and it holds once the blend completes. The NPC's
     /// focus point is read once: the NPC keeps animating in unscaled time, and
     /// following its head bone would make the camera bob. A sphere sweep from the
     /// player's shoulder pulls the camera in when a wall or prop is in the way
-    /// (the player and the NPC are ignored).
+    /// (the player and the NPC are ignored). The shoulder is chosen once per talk:
+    /// the configured one, unless from there scenery on the obstruction layers
+    /// blocks the sightlines to the NPC's head, middle or feet, or pulls the
+    /// camera in hard (into the player's back), and the other shoulder does
+    /// better. Scenery without a collider is invisible to this, as to every
+    /// camera cast.
+    ///
+    /// <b>Looking around.</b> Once the shot has settled, the mouse (while the
+    /// cursor is captured) and the right stick orbit the camera round the NPC's
+    /// head (<see cref="DialogueOrbit"/>, read by <see cref="DialogueLookInput"/>),
+    /// with the world still stopped: everything runs on unscaled time. The camera
+    /// keeps its distance from the NPC's head and is re-aimed each frame by
+    /// <see cref="DialogueFraming.Compose"/>, so the NPC stays where the shot put
+    /// it on screen. A sphere sweep from the NPC's head pulls it in front of walls
+    /// and terrain (the player and the NPC are ignored), and it slides round the
+    /// player's body rather than through it. It does not fight the player: if
+    /// his body hides the NPC from where he steered, so be it. Advancing lines
+    /// leaves the view alone. Input during the blend-in is dropped, so the shot
+    /// always starts as composed.
     ///
     /// <b>The blend path</b> swings around the player/NPC midpoint
     /// (<see cref="DialogueFraming.OrbitBlend"/>) rather than cutting straight
@@ -27,7 +45,8 @@ namespace Pickleball.Sandbox.Dialogue
     /// through him or the NPC on the way to the shot behind him, or back.
     ///
     /// <b>End</b> (<see cref="DialogueDirector.ConversationEnding"/>): blends back
-    /// to the recorded pose over <see cref="DialogueConfig.CloseSeconds"/>, the
+    /// from wherever the camera is, looked-around or not, to the recorded pose over
+    /// <see cref="DialogueConfig.CloseSeconds"/>, the
     /// same time the director keeps the world stopped. On
     /// <see cref="DialogueDirector.ConversationEnded"/> it puts the recorded pose
     /// and field of view back exactly, then re-enables the orbit camera on the
@@ -37,7 +56,8 @@ namespace Pickleball.Sandbox.Dialogue
     ///
     /// <b>Why disabling the orbit camera is enough.</b> It is off for the whole
     /// time the input gate is blocked, so its mouse and stick look, its Escape
-    /// cursor release and its lock-on swing never run during a talk. Mouse delta
+    /// cursor release, its click to re-capture the cursor and its lock-on swing
+    /// never run during a talk; this component reads look input itself. Mouse delta
     /// is per-frame in the Input System and does not build up while it is off,
     /// and the orbit camera clears its follow velocity in its own OnEnable.
     ///
@@ -78,6 +98,10 @@ namespace Pickleball.Sandbox.Dialogue
         Transform _playerHead;
         Vector3 _blendCenter;
         RaycastHit[] _hits;
+        DialogueOrbit _look;
+        bool _canLook;
+        Vector2 _pendingLook;
+        float _shoulder = -1f;      // −1 over the left shoulder, +1 the right; chosen per talk
 
         Camera Cam
         {
@@ -109,17 +133,39 @@ namespace Pickleball.Sandbox.Dialogue
             EnableOrbit();
         }
 
-        void LateUpdate() => Tick(Time.deltaTime, Time.unscaledDeltaTime);
+        void LateUpdate()
+        {
+            if (_canLook && config != null && config.LookEnabled)
+                _pendingLook += DialogueLookInput.Read(config.Look, MouseCaptured(), Time.unscaledDeltaTime);
+            Tick(Time.deltaTime, Time.unscaledDeltaTime);
+        }
+
+        /// <summary>
+        /// Adds look input for the next <see cref="Tick"/>, in degrees: x turns the
+        /// view (right positive), y raises the camera (positive looks down). Used
+        /// only once the shot has settled; dropped during the blends. The
+        /// component's own mouse and stick read comes through here, and so can
+        /// another input source (touch) or a test.
+        /// </summary>
+        public void Look(Vector2 degrees) => _pendingLook += degrees;
 
         /// <summary>
         /// One frame: hands the orbit camera back once <paramref name="deltaTime"/>
-        /// (scaled) is above zero, and advances any blend by
-        /// <paramref name="unscaledDeltaTime"/>.
+        /// (scaled) is above zero, advances any blend by
+        /// <paramref name="unscaledDeltaTime"/>, and once the shot has settled
+        /// orbits by the look input gathered since the last tick.
         /// </summary>
         public void Tick(float deltaTime, float unscaledDeltaTime)
         {
             if (_orbitPending && deltaTime > 0f) EnableOrbit();
-            if (_mode is Mode.Idle or Mode.Hold) return;
+            Vector2 look = _pendingLook;
+            _pendingLook = Vector2.zero;
+            if (_mode == Mode.Hold)
+            {
+                if (_canLook) LookAround(look, unscaledDeltaTime);
+                return;
+            }
+            if (_mode == Mode.Idle) return;
             var cam = Cam;
             if (cam == null) return;
 
@@ -131,7 +177,9 @@ namespace Pickleball.Sandbox.Dialogue
             var pose = DialogueFraming.OrbitBlend(_blendCenter, _from, _to, s);
             cam.transform.SetPositionAndRotation(pose.position, pose.rotation);
             cam.fieldOfView = Mathf.Lerp(_fromFov, _toFov, s);
-            if (k >= 1f) _mode = Mode.Hold;
+            if (k < 1f) return;
+            if (_mode == Mode.BlendIn) BeginLook();
+            _mode = Mode.Hold;
         }
 
         void OnConversationStarting(Talkable talkable)
@@ -154,6 +202,7 @@ namespace Pickleball.Sandbox.Dialogue
                 _capturedFov = cam.fieldOfView;
             }
             _orbitPending = false;
+            _canLook = false;
             if (config == null || talkable == null) return;   // stays put; handed back at the end
 
             _talkable = talkable;
@@ -174,6 +223,7 @@ namespace Pickleball.Sandbox.Dialogue
             _time = 0f;
             _duration = config.BlendInSeconds;
             _mode = Mode.BlendIn;
+            _shoulder = ChooseShoulder();
             Solve();
             _blendCenter = (PlayerHead() + _npcFocus) * 0.5f;
         }
@@ -181,7 +231,9 @@ namespace Pickleball.Sandbox.Dialogue
         void OnConversationEnding(Talkable _)
         {
             var cam = Cam;
+            _canLook = false;
             if (_mode == Mode.Idle || cam == null || config == null) return;
+            // From wherever the camera is now, the player's own view included.
             _from = new Pose(cam.transform.position, cam.transform.rotation);
             _fromFov = cam.fieldOfView;
             _to = _captured;
@@ -200,6 +252,7 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>Puts the recorded pose and field of view back exactly.</summary>
         void RestorePose()
         {
+            _canLook = false;
             if (_mode == Mode.Idle) return;
             _mode = Mode.Idle;
             _talkable = null;
@@ -243,19 +296,98 @@ namespace Pickleball.Sandbox.Dialogue
         /// way, and re-composed for wherever it ended up.</summary>
         void Solve()
         {
-            Transform partner = director != null ? director.Partner : null;
-            Vector3 forward = partner != null ? partner.forward : _captured.forward;
+            var shot = ShotOver(_shoulder);
+            _to = new Pose(shot.Position, shot.Rotation);
+            _toFov = shot.FieldOfView;
+        }
+
+        /// <summary>The framing for this talk over <paramref name="shoulder"/> (−1
+        /// left, +1 right): the configured side offset's size on that side, and the
+        /// body sizes read at the start.</summary>
+        DialogueFramingSettings FramingOver(float shoulder)
+        {
             var framing = config.Framing;
+            framing.SideOffset = shoulder * Mathf.Max(Mathf.Abs(framing.SideOffset), 1e-4f);
             framing.PlayerClearance = _playerRadius + config.PlayerClearanceMargin;
             framing.NpcHalfWidth = _npcHalfWidth;
+            return framing;
+        }
+
+        /// <summary>The shot over <paramref name="shoulder"/> from where the player
+        /// stands now, pulled in front of anything in the way and re-composed.</summary>
+        DialogueShot ShotOver(float shoulder) => ShotOver(shoulder, out _);
+
+        /// <inheritdoc cref="ShotOver(float)"/>
+        /// <param name="pulledIn">Share of the pivot-to-camera distance lost to the
+        /// pull-in, 0 (nothing in the way) to 1.</param>
+        DialogueShot ShotOver(float shoulder, out float pulledIn)
+        {
+            Transform partner = director != null ? director.Partner : null;
+            Vector3 forward = partner != null ? partner.forward : _captured.forward;
+            var framing = FramingOver(shoulder);
             float aspect = Cam != null ? Cam.aspect : 16f / 9f;
             Vector3 axis = partner != null ? partner.position : PlayerHead();
             var shot = DialogueFraming.Solve(PlayerHead(), axis, forward, _npcFocus, _npcFeet, aspect, framing);
             Vector3 clear = KeepClear(shot, partner, _talkable != null ? _talkable.transform : null);
+            float wanted = Vector3.Distance(shot.Pivot, shot.Position);
+            pulledIn = wanted > 1e-4f ? 1f - Vector3.Distance(shot.Pivot, clear) / wanted : 0f;
             if (clear != shot.Position)
                 shot = DialogueFraming.Compose(shot.Pivot, clear, _npcFocus, _npcFeet, aspect, framing);
-            _to = new Pose(shot.Position, shot.Rotation);
-            _toFov = shot.FieldOfView;
+            return shot;
+        }
+
+        /// <summary>
+        /// The configured shoulder, unless its shot is spoiled (scenery cuts a
+        /// sightline to the NPC, or a pull-in crowds the camera against the
+        /// player) and the other shoulder's shot is better: fewer cut sightlines,
+        /// or as few and a much smaller pull-in. Decided once, at the talk press,
+        /// so the blend never jumps sides.
+        /// </summary>
+        float ChooseShoulder()
+        {
+            float preferred = config.Framing.SideOffset < 0f ? -1f : 1f;
+            int blocked = BlockedSightlines(ShotOver(preferred, out float pulled).Position);
+            float crowded = config.ShoulderSwapPullIn;
+            if (blocked == 0 && pulled <= crowded) return preferred;
+            int otherBlocked = BlockedSightlines(ShotOver(-preferred, out float otherPulled).Position);
+            bool better = otherBlocked < blocked
+                          || (otherBlocked == blocked && otherPulled + crowded < pulled);
+            return better ? -preferred : preferred;
+        }
+
+        /// <summary>How many of the sightlines from <paramref name="camera"/> to the
+        /// NPC's head, middle and feet are cut by something on the obstruction
+        /// layers that is neither the player nor the NPC.</summary>
+        int BlockedSightlines(Vector3 camera)
+        {
+            float height = Mathf.Max(0f, _npcFocus.y - _npcFeet.y);
+            int blocked = 0;
+            if (SightlineBlocked(camera, _npcFocus)) blocked++;
+            if (SightlineBlocked(camera, _npcFeet + Vector3.up * (height * 0.5f))) blocked++;
+            if (SightlineBlocked(camera, _npcFeet + Vector3.up * Mathf.Min(0.2f, height * 0.25f))) blocked++;
+            return blocked;
+        }
+
+        bool SightlineBlocked(Vector3 from, Vector3 to)
+        {
+            Vector3 line = to - from;
+            float distance = line.magnitude;
+            if (distance < 1e-3f) return false;
+            Transform player = director != null ? director.Partner : null;
+            Transform npc = _talkable != null ? _talkable.transform : null;
+            _hits ??= new RaycastHit[HitBufferSize];
+            int count = Physics.RaycastNonAlloc(from, line / distance, _hits, distance, config.CameraObstructionMask,
+                                                QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                var hit = _hits[i];
+                if (hit.collider == null) continue;
+                Transform t = hit.transform;
+                if (player != null && t.IsChildOf(player)) continue;
+                if (npc != null && t.IsChildOf(npc)) continue;
+                return true;
+            }
+            return false;
         }
 
         /// <summary>Sweeps from the shoulder pivot to the camera and returns where
@@ -266,19 +398,28 @@ namespace Pickleball.Sandbox.Dialogue
             Vector3 offset = shot.Position - shot.Pivot;
             float distance = offset.magnitude;
             if (distance < 1e-4f) return shot.Position;
+            float clear = ClearDistance(shot.Pivot, offset / distance, distance, player, npc);
+            return DialogueFraming.PullIn(shot.Pivot, shot.Position, clear, config.MinCameraDistance);
+        }
 
+        /// <summary>How far a camera-sized sphere travels from
+        /// <paramref name="origin"/> along <paramref name="direction"/> (up to
+        /// <paramref name="distance"/>) before it meets something on the
+        /// obstruction layers that is neither the player nor the NPC.</summary>
+        float ClearDistance(Vector3 origin, Vector3 direction, float distance, Transform player, Transform npc)
+        {
             // autoSyncTransforms is off, and with time stopped no physics step
             // syncs moved transforms for us.
             Physics.SyncTransforms();
             _hits ??= new RaycastHit[HitBufferSize];
-            int count = Physics.SphereCastNonAlloc(shot.Pivot, config.CameraCollisionRadius, offset / distance,
+            int count = Physics.SphereCastNonAlloc(origin, config.CameraCollisionRadius, direction,
                                                    _hits, distance, config.CameraObstructionMask,
                                                    QueryTriggerInteraction.Ignore);
             float clear = distance;
             for (int i = 0; i < count; i++)
             {
                 var hit = _hits[i];
-                // Distance 0 is a collider the sweep started inside: the pivot
+                // Distance 0 is a collider the sweep started inside: the origin
                 // is in it, so it cannot be "in the way" of the camera.
                 if (hit.collider == null || hit.distance <= 0f) continue;
                 Transform t = hit.transform;
@@ -286,7 +427,54 @@ namespace Pickleball.Sandbox.Dialogue
                 if (npc != null && t.IsChildOf(npc)) continue;
                 if (hit.distance < clear) clear = hit.distance;
             }
-            return DialogueFraming.PullIn(shot.Pivot, shot.Position, clear, config.MinCameraDistance);
+            return clear;
+        }
+
+        /// <summary>Mouse look only while the cursor is captured, as the orbit
+        /// camera does: never while it is free over the Editor or a menu.</summary>
+        bool MouseCaptured()
+            => Cursor.lockState == CursorLockMode.Locked && (orbitCamera == null || orbitCamera.CursorCaptured);
+
+        /// <summary>The shot has settled: looking around starts from it.</summary>
+        void BeginLook()
+        {
+            _canLook = config != null && _talkable != null;
+            if (!_canLook) return;
+            _look ??= new DialogueOrbit();
+            _look.Begin(_npcFocus, _to.position);
+        }
+
+        /// <summary>
+        /// Orbits the NPC's head by <paramref name="look"/> degrees, damped over
+        /// unscaled time. Until the first input the camera stays exactly on the
+        /// shot; once the orbit has settled nothing is recomputed (the world is
+        /// stopped, so nothing could have changed).
+        /// </summary>
+        void LookAround(Vector2 look, float unscaledDeltaTime)
+        {
+            if (config == null || !config.LookEnabled) return;
+            var cam = Cam;
+            if (cam == null) return;
+            var settings = config.Look;
+            _look.AddLook(look.x, look.y, settings.MinPitch, settings.MaxPitch);
+            if (!_look.Moved || _look.IsSettled) return;
+
+            _look.Step(unscaledDeltaTime, settings.SmoothTime);
+            Vector3 direction = _look.Direction;
+            Transform partner = director != null ? director.Partner : null;
+            Transform npc = _talkable != null ? _talkable.transform : null;
+            float clear = ClearDistance(_look.Pivot, direction, _look.Radius, partner, npc);
+            float shown = _look.FollowDistance(clear, config.MinCameraDistance, unscaledDeltaTime,
+                                               settings.PullOutSeconds);
+            Vector3 position = _look.Pivot + direction * shown;
+            if (partner != null)
+                position = DialogueOrbit.PushOut(position, partner.position, PlayerHead(),
+                                                 _playerRadius + config.PlayerClearanceMargin, direction);
+
+            var shot = DialogueFraming.Compose(PlayerHead(), position, _npcFocus, _npcFeet,
+                                               cam.aspect, FramingOver(_shoulder));
+            cam.transform.SetPositionAndRotation(shot.Position, shot.Rotation);
+            cam.fieldOfView = shot.FieldOfView;
         }
     }
 }

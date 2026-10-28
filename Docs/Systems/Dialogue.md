@@ -7,7 +7,8 @@ of the screen.
 Code: `Assets/_Project/Scripts/Sandbox/Dialogue/` (contract: `Talkable`, `DialogueDefinition`,
 `DialogueLine`, `DialogueEmote`, `ConversationEndReason`; runtime: `DialogueDirector`,
 `DialogueRunner`, `PlayerInteractor`, `DialogueCamera`, `TalkTargetSelector`, `TalkEligibility`,
-`DialogueFraming`, `TimeScalePause`, `TalkableSet`, `DialogueConfig` and small value types), the
+`DialogueFraming`, `DialogueOrbit`, `DialogueLookInput`, `TalkFacing`, `TimeScalePause`,
+`TalkableSet`, `DialogueConfig` and small value types), the
 input seams `Sandbox/InteractInput.cs`, `Sandbox/PlayerInputGate.cs` and `Sandbox/InputBlock.cs`,
 and the views `UI/DialogueView.cs` and `UI/InteractPromptView.cs`. Setup:
 `Editor/DialogueSetup.cs` (**Tools ▸ Pickleball ▸ Setup Dialogue**). Tests:
@@ -24,19 +25,30 @@ and the views `UI/DialogueView.cs` and `UI/InteractPromptView.cs`. Setup:
 - **Only when free.** No prompt while airborne (past a 0.15 s grace for ground-check flicker),
   dashing, tethered, on the skateboard, swinging the sword or in 4D. A press starts a talk only
   while really grounded, so the first instant of a jump can't freeze you in mid-air.
-- **Starting.** Press E (pad: RB). Your input is cut, the world keeps running for a quarter of a
-  second so you slow to idle instead of freezing mid-stride, the camera starts to push in, and
-  then time stops (`Time.timeScale` 0). The rest of the HUD fades out and the box fades and
-  scales in.
+- **Starting.** Press E (pad: RB). Your input is cut and any lock-on drops (Tab locks again
+  straight after the talk). The world keeps running for a quarter of a second so you slow to
+  idle instead of freezing mid-stride, you turn quickly to face the NPC, and the camera starts to
+  push in. Then time stops (`Time.timeScale` 0). The rest of the HUD fades out and the box fades
+  and scales in.
 - **Talking.** The camera settles just above your head, out past your **left** shoulder (the
   sword is on the right), looking nearly level. Your head and shoulder frame the right of the
   shot; the NPC stands whole on the left, its head on the upper third and its feet just above
   the box. The field of view is chosen from the NPC's height to make that so. The camera swings
   out far enough that no part of your body or cloak covers any part of the NPC, and when the NPC
-  is very close it comes forward toward a side two-shot instead. Text types at 45 characters a
+  is very close it comes forward toward a side two-shot instead. If a wall, slope or prop would
+  hide the NPC from over the left shoulder, or crowd the camera into your back, and the right
+  does better, the shot goes over the right, mirrored. Text types at 45 characters a
   second with short pauses after commas and full stops. The first press shows the whole line,
   the next goes to the next line; a pulsing ▼ marks a finished line. A hurried double-tap can't
   skip a line unread (0.12 s lockout after each change).
+- **Looking around.** Once the shot has settled, the mouse (while the cursor is captured) or the
+  right stick swings the camera round the NPC, at the same speed and sensitivity as the normal
+  camera, while the world stays frozen. The NPC's head stays where the shot put it on screen
+  however you turn: all the way round, up to 60° above it and 10° below. The camera comes in at
+  once in front of walls and terrain, eases back out after, and slides round your body rather
+  than through it. It doesn't fight you: steer behind yourself and your body hides the NPC.
+  Advancing a line keeps your view, and the end swings back from wherever you left it. Moving
+  the mouse or stick never advances a line.
 - **Ending.** After the last line the box fades, the camera swings back to exactly where it
   was, time resumes, and a frame later your controls return. For 0.35 s afterwards E can neither
   reopen the talk nor dash.
@@ -68,6 +80,8 @@ PlayerInteractor reads TalkableSet, LockOnTargeting, ChibiLocomotion,           
 DialogueDirector claims InputBlock.All ─▶ PlayerInputGate (player) ◀─ read by PlayerMovementInput,
                                                     SwordInput, LockOnTargeting, SpacetimeView
 DialogueDirector events ─▶ DialogueCamera (Main Camera), DialogueView (HUD)
+DialogueDirector ─TalkFacing (settle only)─▶ MovementMotor.FacingSource (player)
+DialogueCamera reads mouse delta + right stick itself (DialogueLookInput) ─▶ DialogueOrbit
 PlayerInteractor.TargetChanged ─▶ InteractPromptView (HUD)
 ```
 
@@ -80,7 +94,9 @@ PlayerInteractor.TargetChanged ─▶ InteractPromptView (HUD)
 | `PlayerInteractor` | player root | `TargetChanged(Talkable)` | `InteractInput.Pressed`; polls the `TalkableSet` and eligibility state each frame (no events exist for those) |
 | `DialogueDirector` | "Dialogue" object | `ConversationStarting`, `ConversationStarted`, `LineStarted`, `CharactersRevealed`, `LineRevealed`, `ConversationEnding`, `ConversationEnded` | `InteractInput.Pressed`; its runner's events |
 | `DialogueRunner` (plain C#) | inside the director | `LineStarted`, `CharactersRevealed`, `LineRevealed`, `Finished` | nothing; `Tick(dt)` and `Advance()` |
-| `DialogueCamera` | Main Camera | — | director: Starting, Ending, Ended |
+| `DialogueCamera` | Main Camera | — | director: Starting, Ending, Ended; reads mouse delta and the right stick through `DialogueLookInput` while the shot is held |
+| `DialogueOrbit`, `DialogueLookInput` (plain C#) | inside the camera | — | nothing; look-around math and device read |
+| `TalkFacing` (plain C#) | inside the director | — | installed as `MovementMotor.FacingSource` from the talk press to the pause |
 | `DialogueView` | HUD | — | director: Started, LineStarted, CharactersRevealed, LineRevealed, Ending, Ended |
 | `InteractPromptView` | HUD | — | interactor: `TargetChanged` |
 | `PlayerInputGate` | player root | — | nothing; claimants call `Claim` / `Release` |
@@ -130,9 +146,9 @@ saving it for the release. The readers' gate fields are optional; empty keeps th
 | `PlayerMovementInput.Read` | `Movement` | returns an empty intent |
 | `PlayerMovementInput.Read` | `InteractButton` | `DashPressed` is false (E / RB talk instead) |
 | `SwordInput.OnPerformed` | `Sword` | the press is dropped, never queued on `MeleeCombat` |
-| `LockOnTargeting.Update` | `LockOn` | toggle dropped; flicks skipped and accumulators zeroed; a held lock is kept |
+| `LockOnTargeting` | `LockOn` | a claim releases any lock through `Release()` and the ring hides (the lock-on change, `c6c54ea`); toggles and flicks are dropped while blocked |
 | `SpacetimeView.Update` | `Spacetime` | T / d-pad left dropped |
-| — | `Camera` | no reader yet: the dialogue camera disables `SandboxOrbitCamera` instead |
+| — | `Camera` | no reader yet: the dialogue camera disables `SandboxOrbitCamera` and reads look input itself |
 
 **The camera shot** (`DialogueFraming`, pure and tested). Pivot: the player's humanoid Head
 bone (without one, his root raised by `playerFocusHeight`). Position: on the flat line from the
@@ -154,9 +170,42 @@ exactly (no roll) so the NPC's focus lands at (0.5 ∓ `npcScreenSide`, `npcHead
 on the side away from the player's shoulder. Field of view: chosen from the NPC's height (focus
 above its root) so its feet reach `npcFeetScreenHeight`, above the box, clamped to
 `minFieldOfView`–`maxFieldOfView`; the floor keeps the player's head and shoulder in frame. When
-a wall pulls the camera in, the composition is re-solved for the new spot. The blend in and out
-swings around the player/NPC midpoint (`OrbitBlend`): yaw turns the short way, radius and height
-are lerped, so the camera never passes through either body.
+a wall pulls the camera in, the composition is re-solved for the new spot. The shoulder is
+chosen once, at the talk press: the configured one (`sideOffset`'s sign), unless its shot is
+spoiled and the mirrored one is better. Spoiled means rays from the shot to the NPC's head, middle
+and feet are cut by something on `cameraObstructionMask` (not the player or the NPC), or the
+pull-in took more than `shoulderSwapPullIn` of its distance (crowded into the player's back).
+Better means fewer cut rays, or as few and a pull-in smaller by that margin. The composition
+mirrors with it. The
+blend in and out swings around the player/NPC midpoint (`OrbitBlend`): yaw turns the short way,
+radius and height are lerped, so the camera never passes through either body.
+
+**Looking around** (`DialogueOrbit`, pure and tested). Input is read only once the blend-in has
+finished, so the shot always starts as composed; until the first input the camera stays on it
+exactly. The camera orbits the NPC's focus point at the shot's distance: yaw is an offset from
+the shot's bearing, free and wrapped to (−180°, 180°], keeping the unwrapped remainder so a fast
+spin never turns back the short way; pitch is the camera's elevation above the focus, clamped to
+`lookMinPitch`–`lookMaxPitch` (widened to include the shot's own elevation, so the first touch
+never snaps). Both follow the input with exponential damping over **unscaled** time; a zero step
+changes nothing (no `SmoothDamp`, so no divide by zero at dt 0). Each frame while it moves, a
+sphere sweep (`cameraCollisionRadius`, `cameraObstructionMask`, the player and NPC ignored) from
+the focus along the orbit direction gives the clear distance; the camera comes in to it at once
+and eases out over `lookPullOutSeconds`, never closer than `minCameraDistance`. It is then
+pushed out of the player's capsule (feet to Head bone, the framing clearance radius) so it slides
+round him, and `DialogueFraming.Compose` re-aims it and re-picks the field of view, so the NPC's
+head stays at the shot's screen point with no roll. Once settled nothing is recomputed. Mouse
+look needs the cursor captured (`Cursor.lockState` Locked and the orbit camera's
+`CursorCaptured`); the stick never waits for it. Rates match `SandboxOrbitCamera` (0.12°/count,
+200 / 120 °/s, deadzone 0.15, curve 1.6), but its fields are private, so the dialogue keeps its
+own copies on `DialogueConfig`. `DialogueCamera.Look(Vector2)` takes look input from any source
+(touch later, tests). The blend-out starts from the camera's current pose.
+
+**Facing the NPC** (`TalkFacing`). Movement takes facing requests through `IFacingSource` on
+`MovementMotor.FacingSource` (lock-on and attack square-up use it). From the talk press to the
+pause the director installs an urgent request for the NPC's focus in front of whatever source was
+there, so the body turns fast even while it is still sliding to a stop, then hands the old source
+back (only if its own is still installed). The motor doesn't tick at dt 0, so nothing turns
+during the pause. No movement code changed.
 
 **Typewriter counting** matches TextMeshPro's `maxVisibleCharacters`: only TMP-valid tags
 (`<`, optional `/`, a letter or `#`, a closing `>` with no `<` before it) are tags; formatting
@@ -170,8 +219,9 @@ GUID is fixed (`182ae63664be4615bb6e2329a9d64209`) so the NPC branch and this on
 
 **No per-frame scene searches or allocations.** The interactor scans the `TalkableSet` (a
 handful of entries) into reused lists; the typewriter is two indices and
-`TMP_Text.maxVisibleCharacters`; the camera's sphere sweep runs only while blending in;
-lifecycle events allocate an invocation list a few times per conversation.
+`TMP_Text.maxVisibleCharacters`; the camera's sweeps run only while blending in and while a
+look-around is still moving, into a reused hit buffer; lifecycle events allocate an invocation
+list a few times per conversation.
 
 ## 3. How to tune
 
@@ -187,6 +237,7 @@ reference to it.
 | Prompt flickers between two NPCs or at the edge | `stickyMargin`, `stickyConeDegrees` |
 | Allow talking mid-air or mid-move | `requireFree`, `groundedGraceSeconds` (the grace only keeps the prompt up) |
 | Player freezes mid-stride / takes too long to stop | `settleSeconds` |
+| Player doesn't (or shouldn't) turn to face the NPC | `turnToFaceNpc` (the turn happens during `settleSeconds`; speed is `MovementConfig.lockAttackTurnTime`) |
 | Text speed and rhythm | `charactersPerSecond` (0 = instant), `commaPauseSeconds`, `sentencePauseSeconds` |
 | Presses feel ignored, or lines get skipped | `advanceLockoutSeconds`, `textStartDelaySeconds` |
 | E reopens the talk too easily | `restartCooldownSeconds` |
@@ -194,7 +245,9 @@ reference to it.
 | Player's body or cloak still covers the NPC, or the camera swings too wide | `playerClearanceMargin` (added to the controller radius), `playerFallbackRadius`, `npcHalfWidth`, `maxSideOffset` |
 | Where the NPC sits on screen, how big | `npcHeadScreenHeight`, `npcFeetScreenHeight`, `npcScreenSide`, `minFieldOfView`, `maxFieldOfView` |
 | Camera speed | `blendInSeconds`, `closeSeconds` (also how long time stays stopped after the last line) |
-| Camera clipping | `cameraCollisionRadius`, `minCameraDistance`, `cameraObstructionMask` |
+| Camera clipping, or the shot not swapping shoulder round a prop or slope | `cameraCollisionRadius`, `minCameraDistance`, `cameraObstructionMask` (props need colliders on these layers), `shoulderSwapPullIn` |
+| Looking around: on or off, feel | `lookEnabled`, `lookMouseSensitivity`, `lookStickYawSpeed`, `lookStickPitchSpeed`, `lookStickDeadzone`, `lookStickExponent`, `lookInvertStickY` |
+| Looking around: how far up and down, how floaty | `lookMinPitch`, `lookMaxPitch` (camera elevation above the NPC's head), `lookSmoothTime`, `lookPullOutSeconds` |
 | Box look | `boxColour`, `nameTabColour`, `nameColour`, `textColour`, `continueColour`, `boxFadeInSeconds`, `boxFadeOutSeconds`, `boxScaleFrom`, `continuePulseHz`, `continueBob` |
 | Prompt look | `promptHeightOffset`, `promptFadeSeconds`, `promptLabel`, `keyboardKeyLabel`, `gamepadKeyLabel` |
 | Silence during talk | `pauseAudio` (dialogue sounds need `AudioSource.ignoreListenerPause`) |
@@ -235,7 +288,19 @@ overload) plus a choice list in `DialogueView`; the director and camera need no 
   with the real Birdy: natural walk-ups from in front at about 1.1, 1.5 and 2.1 m, from his left
   and right, and with the orbit camera starting in front and to the side. Birdy's head and body
   were 0% hidden in every case, his lowest vertex sat above the box, and the blend kept 2 m from
-  both bodies. Nobody has judged the shot by eye in the Editor yet.
+  both bodies. Looking around was run the same way in ChibiSandbox (to the side, behind Birdy,
+  top and bottom of the pitch range, the real right stick, into a wall and into the ground):
+  no frame clipped, Birdy's head never left the screen, time stayed at 0 and nothing in the world
+  moved. Nobody has judged either by eye in the Editor yet, and the mouse path could not be
+  driven headlessly (the cursor never reads Locked in batch mode).
+- **Props without colliders are invisible to the camera.** Every camera cast is physics, and
+  `ChibiSandboxSetup` strips the colliders from the tether-anchor rocks. `TetherAnchor_3` stands
+  next to Birdy's spot, so from some walk-ups the shot sits right behind its pale rock, which
+  then fills a corner of the frame or hides Birdy's legs. Looking around can pass through it too.
+  With a MeshCollider added to that rock (tried in the headless harness), the push-in's sweep
+  stops the camera in front of it and Birdy was fully clear in all five walk-ups. The fix
+  belongs to the scene: give the rocks a collider on an obstruction layer, or move Birdy a couple
+  of metres away.
 - **The shot is usually at the side-offset cap.** The chibi's controller plus the cloak margin
   is a wide body, so at natural talk distances the required offset reaches `maxSideOffset` (2 m)
   and the push-in shortens instead. The result is a wide over-the-shoulder two-shot rather than
@@ -245,13 +310,22 @@ overload) plus a choice list in `DialogueView`; the director and camera need no 
   can still be crossed by the player; raise `npcHalfWidth` for such an NPC.
 - **No touch input.** The Sandbox has no touch controls at all, so there is no way to talk on a
   phone yet. The box layout is phone-safe (width-relative, bottom-centre, clear of the notch).
-- **The lock-on reticle stays visible during a talk** (locked ring or hint arrow over the NPC).
-  Hiding it needs a change to `LockOnReticle`, pending its owner's approval. The hint arrow can
-  also overlap the "[E] Talk" pill over an NPC that has a `Health`.
 - **Settle is measured in unscaled time.** It equals scaled time because nothing else changes
   the time scale. If something ever does (slow-mo), decide which one the settle should follow.
-- **The player is not turned to face the NPC.** The shot is built on the player → NPC line, so it
-  frames correctly either way, but a lock-on talk with the NPC behind shows the player's front.
+- **Only the body turns to face the NPC, and only during the settle.** There is no head
+  look-at: `ChibiLocomotion` writes `ChibiFootIK.LookTarget` every frame from the lock-on, with no
+  hook for anyone else to ask, and the player's animator is paused for the talk anyway. (Turned
+  90° and 150° away, he faced Birdy within the 0.25 s settle in the headless run.)
+- **Looking around never hands its yaw to the orbit camera.** The end blends back to the orbit
+  camera's pre-talk pose, because `SandboxOrbitCamera` has no way to be given a yaw and pitch. With
+  one (say `SetOrbit(float yaw, float pitch)`, zeroing its velocities, plus a way to read the
+  pose it would take for them), the blend could end on the view the player chose.
+- **With the cursor free, the mouse can't look during a talk.** After Escape (Editor) the cursor
+  stays free: mouse look is off, and a click neither re-captures it nor advances a line (the
+  orbit camera, which owns capture, is disabled). The stick still looks. Re-capturing from the
+  dialogue would need `SandboxOrbitCamera` to expose its capture (and mark `JustRelocked`).
+- **Looking around ignores the NPC's body.** The sweep skips the NPC, so with a very low pitch
+  limit the ground can pull the camera in close to the NPC's legs; the default −10° keeps clear.
 - **Tall NPCs are cut off by the box.** The field of view stops at `maxFieldOfView`; a
   human-height NPC's legs go under the box, as in BotW.
 - **A press in the airborne grace does nothing**: the prompt (and its claim on E) stays up for

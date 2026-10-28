@@ -133,6 +133,176 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
+        public void Shoulder_NothingInTheWay_IsTheConfiguredLeft()
+        {
+            _director.TryStart(_npc, _player);
+            Frames();
+
+            Assert.That(_camera.transform.position.x, Is.LessThan(-0.5f), "over the left shoulder");
+            Assert.That(_camera.WorldToViewportPoint(_npc.FocusPosition).x, Is.LessThan(0.5f), "NPC on the open left");
+        }
+
+        [Test]
+        public void Shoulder_SceneryHidingTheNpcFromTheLeft_TakesTheRight()
+        {
+            // A post across the left shot's sightlines to the NPC's head and feet.
+            var post = NewHost("Post", new Vector3(-0.7f, 1f, 0.5f));
+            post.AddComponent<BoxCollider>().size = new Vector3(0.5f, 2.5f, 0.5f);
+
+            _director.TryStart(_npc, _player);
+            Frames();
+
+            Vector3 end = _camera.transform.position;
+            Assert.That(end.x, Is.GreaterThan(0.5f), "over the right shoulder");
+            Assert.That(_camera.WorldToViewportPoint(_npc.FocusPosition).x, Is.GreaterThan(0.5f), "NPC on the open right");
+            Assert.That(Physics.Linecast(end, _npc.FocusPosition), Is.False, "nothing between the camera and the NPC's head");
+        }
+
+        [Test]
+        public void Shoulder_AWallCrowdingTheLeftShot_TakesTheRight()
+        {
+            // A wall just left of the player: the left shot would be pulled in against his back.
+            var wall = NewHost("Wall", new Vector3(-1f, 1.5f, -1.25f));
+            wall.AddComponent<BoxCollider>().size = new Vector3(0.2f, 4f, 3.5f);
+
+            _director.TryStart(_npc, _player);
+            Frames();
+
+            Assert.That(_camera.transform.position.x, Is.GreaterThan(0.5f), "over the right shoulder, away from the wall");
+        }
+
+        [Test]
+        public void Shoulder_AWallBehindBoth_KeepsTheConfiguredSide()
+        {
+            var wall = NewHost("Wall", new Vector3(0f, 1.5f, -1f));
+            wall.AddComponent<BoxCollider>().size = new Vector3(6f, 4f, 0.2f);
+
+            _director.TryStart(_npc, _player);
+            Frames();
+
+            Assert.That(_camera.transform.position.x, Is.LessThan(0f), "both sides are crowded alike: stay left");
+        }
+
+        /// <summary>Looks around with time stopped (scaled dt 0) until the orbit settles.</summary>
+        void LookAround(Vector2 degrees)
+        {
+            _dialogueCamera.Look(degrees);
+            for (int i = 0; i < 120; i++) _dialogueCamera.Tick(0f, 0.016f);
+        }
+
+        Pose CameraPose => new(_camera.transform.position, _camera.transform.rotation);
+
+        [Test]
+        public void Look_BeforeAnyInput_TheShotIsUntouched()
+        {
+            _director.TryStart(_npc, _player);
+            Frames();
+            Pose shot = CameraPose;
+
+            for (int i = 0; i < 10; i++) _dialogueCamera.Tick(0f, 0.016f);
+
+            Assert.That(CameraPose.position, Is.EqualTo(shot.position));
+            Assert.That(CameraPose.rotation, Is.EqualTo(shot.rotation));
+        }
+
+        [Test]
+        public void Look_OrbitsTheNpcsHead_WithTimeStopped_KeepingItWhereTheShotPutIt()
+        {
+            _director.TryStart(_npc, _player);
+            Frames();
+            Vector3 head = _npc.FocusPosition;
+            Pose shot = CameraPose;
+            float radius = Vector3.Distance(shot.position, head);
+            Vector3 onScreen = _camera.WorldToViewportPoint(head);
+            Vector3 npcAt = _npc.transform.position, playerAt = _player.position;
+
+            LookAround(new Vector2(70f, 15f));
+
+            Assert.That(Vector3.Distance(CameraPose.position, shot.position), Is.GreaterThan(1f), "it moved");
+            Assert.That(Vector3.Distance(CameraPose.position, head), Is.EqualTo(radius).Within(1e-3f),
+                        "same distance from the NPC's head");
+            Vector3 now = _camera.WorldToViewportPoint(head);
+            Assert.That(now.x, Is.EqualTo(onScreen.x).Within(2e-3f), "the NPC stays where the shot put it");
+            Assert.That(now.y, Is.EqualTo(onScreen.y).Within(2e-3f));
+            Assert.That(Mathf.DeltaAngle(0f, _camera.transform.eulerAngles.z), Is.EqualTo(0f).Within(1e-3f), "no roll");
+            Assert.That(_npc.transform.position, Is.EqualTo(npcAt));
+            Assert.That(_player.position, Is.EqualTo(playerAt));
+        }
+
+        [Test]
+        public void Look_DuringTheBlendIn_IsDropped()
+        {
+            _director.TryStart(_npc, _player);
+            _dialogueCamera.Tick(0f, 0.1f);
+            _dialogueCamera.Look(new Vector2(180f, 0f));    // would put the camera beyond the NPC
+            Frames();
+
+            Assert.That(_camera.transform.position.z, Is.LessThan(0f), "still the shot behind the player");
+        }
+
+        [Test]
+        public void Look_AdvancingALine_KeepsTheView_AndLookNeverAdvances()
+        {
+            var npc = NewTalkable(Definition("One.", "Two."), new Vector3(0f, 0f, 2f));
+            _director.TryStart(npc, _player);
+            _director.Tick(_config.TextStartDelaySeconds + 0.01f, false);
+            Frames();
+            _director.Tick(0.01f, true);                    // reveal line 0
+            LookAround(new Vector2(-50f, 10f));
+            Assert.That(_director.LineIndex, Is.EqualTo(0), "looking is not advancing");
+            Pose looked = CameraPose;
+
+            _director.Tick(0.01f, true);                    // line 1
+            for (int i = 0; i < 10; i++) _dialogueCamera.Tick(0f, 0.016f);
+
+            Assert.That(_director.LineIndex, Is.EqualTo(1));
+            Assert.That(CameraPose.position, Is.EqualTo(looked.position), "no snap back to the shot");
+            Assert.That(CameraPose.rotation, Is.EqualTo(looked.rotation));
+        }
+
+        [Test]
+        public void Look_IntoAWall_PullsTheCameraIn_NeverThrough()
+        {
+            var wall = NewHost("Wall", new Vector3(0f, 1.5f, 3.5f));   // beyond the NPC
+            wall.AddComponent<BoxCollider>().size = new Vector3(12f, 6f, 0.2f);
+            _director.TryStart(_npc, _player);
+            Frames();
+            Vector3 onScreen = _camera.WorldToViewportPoint(_npc.FocusPosition);
+
+            LookAround(new Vector2(180f, 0f));
+
+            Vector3 end = _camera.transform.position;
+            Assert.That(end.z, Is.LessThan(3.4f - _config.CameraCollisionRadius + 1e-3f), "short of the wall");
+            Assert.That(end.z, Is.GreaterThan(_npc.transform.position.z), "but round on the far side of the NPC");
+            Assert.That(Vector3.Distance(end, _npc.FocusPosition), Is.GreaterThanOrEqualTo(_config.MinCameraDistance - 1e-3f));
+            Vector3 now = _camera.WorldToViewportPoint(_npc.FocusPosition);
+            Assert.That(now.x, Is.EqualTo(onScreen.x).Within(2e-3f));
+            Assert.That(now.y, Is.EqualTo(onScreen.y).Within(2e-3f));
+        }
+
+        [Test]
+        public void End_BlendsBackFromWhereThePlayerLeftTheCamera()
+        {
+            _director.TryStart(_npc, _player);
+            Frames();
+            LookAround(new Vector2(120f, 0f));
+            Vector3 looked = _camera.transform.position;
+
+            _director.Tick(_config.TextStartDelaySeconds + 0.01f, false);
+            _director.Tick(0.01f, true);       // reveal
+            _director.Tick(0.01f, true);       // finish: closing starts
+            _dialogueCamera.Look(new Vector2(90f, 0f));     // too late: closing
+            _dialogueCamera.Tick(0f, 0.01f);
+
+            Assert.That(Vector3.Distance(_camera.transform.position, looked), Is.LessThan(0.2f),
+                        "the blend back starts from the player's view, no jump");
+            Frames();
+            _director.Tick(_config.CloseSeconds + 0.01f, false);   // ended
+            Assert.That(_camera.transform.position, Is.EqualTo(StartPosition));
+            Assert.That(_camera.transform.rotation, Is.EqualTo(_startRotation));
+        }
+
+        [Test]
         public void MissingConfig_StillTakesTheOrbitCameraOff_AndGivesItBack()
         {
             SetRef(_dialogueCamera, "config", null);
