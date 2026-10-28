@@ -1,6 +1,6 @@
 # Runtime conventions: timing, ordering, reload safety, test seams
 
-Snapshot as of `a930952`. These cross-cutting choices aren't owned by any one system doc.
+Snapshot as of `a930952`, updated for the QA fixes through `f876b63`. These cross-cutting choices aren't owned by any one system doc.
 `CodingStandards.md` states the rules. This page records how the code meets them and where it
 doesn't yet.
 
@@ -12,13 +12,13 @@ doesn't yet.
 - **Frame-rate independence is a tested property.** The existing EditMode tests run maths at
   30, 60 and 144 fps via `[TestCase]` (for example in `JumpMathTests` and
   `ForceFieldChannelTests`). Smoothing uses `1 - Mathf.Exp(-rate * dt)`.
+- **Fixed-length actions consume exactly their time left.** `Logic/FixedDuration.Consume` steps a
+  timed move by `min(dt, timeLeft)`, so the dash covers exactly speed × duration at any frame rate
+  (`f876b63`). Use it for any new timed move. The sword sweep likewise tests every frame whose
+  interval touched the active window (`BladeSweep`, `6991c60`).
 - **Known frame-rate dependencies.** Each one has a test proposed in
   `Docs/Testing/QA-Assessment.md`.
-  - **Dash:** it moves a full `dt` after its timer runs out, overshooting by up to a frame (about
-    3.27 m against the 3.08 m tooltip).
   - **Tap jump:** the minimum tap-jump height varies with frame rate (about 0.62–0.75 m).
-  - **Sword hit sweep:** `MeleeCombat` tests nothing on a swing's first blade-live frame. A long
-    frame that crosses the whole active window tests nothing at all, despite the code comment.
   - **Tether anchor glow:** `TetherAnchor.SetState` is called twice a frame on the targeted
     anchor, so its blend settles at a frame-rate-dependent value.
 
@@ -47,6 +47,8 @@ use.
 - `LockOnTargeting` self-heals its reticle lazily.
 - `SpacetimeSettings.OnEnable` resets its runtime channel.
 - `SwordAbilities` and `PlayerLevel` initialise lazily.
+- `MovementMotor` resumes an interrupted skid, jump, dash or tether as Fall or Ground, properly
+  entered, and `MovementEffects` resyncs the rope and board on enable (`f876b63`).
 
 **Known violators.** Each one breaks after a reload in Play mode:
 
@@ -59,7 +61,6 @@ use.
 | `TetherSystem` | `_reticle` built in `Awake` |
 | `DashEffects` | ghosts that are mid-fade are orphaned |
 | `PlayerAbilities` | the movement unlocks (a readonly `HashSet`) |
-| `MovementMotor` | `EnsureRuntime` rebuilds states without calling `Enter`, so a tether snaps to its anchor and a dash ends at zero velocity |
 | `ProgressionToast` | its queue isn't serializable but its counters are → blank text |
 
 ## Test seams the code already offers
@@ -69,9 +70,9 @@ one.
 
 - **Pure static or plain C# classes** with no `MonoBehaviour`:
   - Movement: `JumpMath`, `GravityProfile`, `SprintRamp`, `SkidRule`, `JumpChain`, `SpinGesture`,
-    `ForceFieldChannel`
-  - Combat: `ComboResolver`, `ComboProgress`, `SwingTimeline`, `AreaBurst`, `ExperienceCurve`,
-    `LevelUnlockRules`
+    `ForceFieldChannel`, `FixedDuration`
+  - Combat: `ComboResolver`, `ComboProgress`, `SwingTimeline`, `AreaBurst`, `BladeSweep`,
+    `GroundContact`, `ExperienceCurve`, `LevelUnlockRules`, `XpLedger`
   - `ClearanceSolver`, `WorldlineHistory`, `WorldlineMesh`, `InverseSquareVolley.DamageAt`,
     `NewtonBoss.RangeMultiplier`
 
@@ -81,6 +82,8 @@ one.
   for testing time-based components in EditMode, where `Time.deltaTime` is meaningless.
 - **Lazy initialisation:** `SwordAbilities` and `PlayerLevel` initialise on first use, so EditMode
   tests work without `OnEnable`, which `AddComponent` doesn't call in edit mode.
+- **Public simulation steps:** `SpringCloth.Simulate(dt)` and `Rebind()` let tests drive the
+  cloth solver frame by frame (see `Tests/EditMode/Cloth/SpringClothTests`).
 - **Reflection helpers** in `Tests/EditMode/BossTestFixture.cs`:
   - `SetTunable` writes a private serialized float through `SerializedObject` and fails loudly
     if the field was renamed.
@@ -91,11 +94,10 @@ one.
 
 ## Allocation and per-frame cost (CodingStandards §3)
 
-The NonAlloc pattern is used in `MeleeCombat` (`OverlapCapsuleNonAlloc`) and `ChibiFootIK`.
+The NonAlloc pattern with preallocated buffers is used in `MeleeCombat`, `ChibiFootIK` and
+`MovementMotor` (ground check and stand-up test, since `f876b63`).
 
 Known per-frame allocations or scene searches:
-- **`MovementMotor`:** `Physics.SphereCastAll` every frame for the ground check, and
-  `Physics.OverlapCapsule` in `CanStandTo`.
 - **`LockOnTargeting`:** `FindObjectsByType<Health>` every frame while unlocked with the hint on,
   and `Physics.RaycastAll` per candidate for line of sight.
 - **`DashEffects`:** a new GameObject, Mesh and Material per ghost, with no pool.
@@ -115,6 +117,7 @@ The `?.` and `??` operators bypass Unity's overloaded `== null` on destroyed or 
 objects. Several places use them on `UnityEngine.Object`:
 - `BallController`, `GameStateManager`, `PlayerController` and `AIController`, where wiring errors
   then fail silently.
-- The setup scripts' `GetComponent<T>() ?? AddComponent<T>()`.
+- The setup scripts' `GetComponent<T>() ?? AddComponent<T>()`, still in `ChibiSandboxSetup`,
+  `NewtonBossSetup` and `SwingTwistSetup`. `WeaponSetup` switched to `TryGetComponent`.
 
 Use an explicit `!= null` check on Unity objects.

@@ -77,8 +77,8 @@ Three are in use:
 - **Prompt to save:** Setup Chibi Sandbox and Build Training Stage. Chibi Sandbox ignores the
   answer, so Cancel still discards the open scene. Training Stage honours it.
 - **Refuse to run if any scene is dirty:** Create Spacetime Lab Scene.
-- **Mark dirty and never save:** most Setup menus. Setup Weapon Clearance and Setup Newton (Boss)
-  forget to mark the scene dirty. Setup Cloth marks every open scene dirty.
+- **Mark dirty and never save:** most Setup menus. Setup Newton (Boss) forgets to mark the scene
+  dirty; Setup Weapon Clearance was fixed in `e90e5e3`. Setup Cloth marks every open scene dirty.
 
 ## Known hazards
 
@@ -100,9 +100,10 @@ Three are in use:
 - **`Chibi.prefab` lags the scene.** `SwordAbilities`, `WeaponClearance`, `LockOnTargeting` and
   `Health` exist only as ChibiSandbox overrides. Scenes that instantiate the prefab, such as
   SpacetimeLab, don't get them.
-- **The `GetComponent<T>() ?? AddComponent<T>()` pattern** (in `WeaponSetup`, `SwingTwistSetup`) is
-  unsafe on Unity's "fake null" objects, and `WeaponClearanceSetup` warns against it. Use an
-  explicit `if (c == null)`.
+- **The `GetComponent<T>() ?? AddComponent<T>()` pattern** (still in `SwingTwistSetup`,
+  `ChibiSandboxSetup` and `NewtonBossSetup`) is unsafe on Unity's "fake null" objects, and
+  `WeaponClearanceSetup` warns against it. Use `TryGetComponent` or an explicit
+  `if (c == null)`, as `WeaponSetup` now does.
 - **Lookups are by GameObject name** (`GameObject.Find("Chibi")`, "NewtonBoss", "AcademyWorld",
   "FightHUD"), mixed with lookups by type. Renaming a scene object breaks the menus.
 - **Several menus have no Play-mode guard:** Chibi Sandbox, World Look, Clean World, Lock-On,

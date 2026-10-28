@@ -1,6 +1,6 @@
 # How systems talk to each other
 
-Snapshot as of `a930952` (feat/newton-boss-fight). `Docs/CodingStandards.md` §1 sets the rule:
+Snapshot as of `a930952` (feat/newton-boss-fight), updated for the QA fixes through `f876b63`. `Docs/CodingStandards.md` §1 sets the rule:
 ScriptableObject channels between systems, C# events inside one, and no singletons or runtime
 `Find`. This page records what the code **actually** does, so a new change can follow the pattern
 its neighbours use and know which deviations are deliberate.
@@ -22,7 +22,7 @@ its neighbours use and know which deviations are deliberate.
 |---|---|---|
 | `Health` (Boss/) | `Hurt(amount, at)`, `Died`, `Knocked`, `Changed` | `Hurt`: `NewtonBoss` (its own), `TrainingDummy`, `DamageNumbers`, `HealthBarView`. `Died`: only `NewtonBoss`, on its own Health. `Knocked`: `TrainingDummy`. `Changed`: no subscriber. **Nothing listens to the player's `Died`**, so player death has no effect yet. |
 | `NewtonBarks` | `Spoke(line, seconds)` | `BarkView` |
-| `MeleeCombat` | `SwingStarted`, `ChainEnded`, `BladeLiveChanged`, `HitLanded`, `BurstReleased` | `SwordEffects` (all five), `SwordAnimatorDriver` (`SwingStarted`), `CombatXpSource` (`HitLanded`) |
+| `MeleeCombat` | `SwingStarted`, `ChainEnded`, `BladeLiveChanged`, `HitConnecting`, `HitLanded`, `BurstReleased` | `SwordEffects` (all but `HitConnecting`), `SwordAnimatorDriver` (`SwingStarted`), `CombatXpSource` (`HitConnecting` and `HitLanded`). `HitConnecting` is raised just *before* the target's `TakeHit`, so a listener sees the target as it was before the hit; XP uses this to pay only for damage actually applied. |
 | `SwordInput` | `AttackPressed` | `MeleeCombat.QueueAttack` |
 | `PlayerLevel` | `XpGained`, `LeveledUp` | `LevelUnlocks` (`LeveledUp`), `ProgressionToast` (both) |
 | `SwordAbilities` / `PlayerAbilities` | `Unlocked` | `ProgressionToast`. `PlayerAbilities.Revoke` raises nothing. |

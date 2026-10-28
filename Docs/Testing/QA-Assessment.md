@@ -5,6 +5,9 @@
 confirmed by reading the code again or by a read-only Editor query; the rest are static analysis
 with the stated confidence.
 
+**Updated 2026-10-27** for the fixes through `f876b63` and the first batch of P0 tests
+(`Tests/EditMode/{Validation,PickleballCore,Boss,Cloth}/`).
+
 How to run and write tests: [README.md](README.md). Design context:
 [../Architecture/](../Architecture/README.md).
 
@@ -15,39 +18,42 @@ its line. Don't add "done" markers.
 
 ## 1. Summary
 
-- **178 EditMode tests, all logic-level, all passing.** They cover:
+- **275 EditMode tests: 267 pass, 8 skipped as known bugs (PB1, NB3), 0 fail.** This was 178 at
+  `a930952`. The other agents' QA fixes added 32, and the first P0 batch added 65. They cover:
   - pure movement maths
-  - combo resolution and leveling
+  - combo resolution, leveling, the blade sweep, ground contact and the XP ledger
   - weapon clearance maths
-  - `Health`, gravity-well, beam and inverse-square maths
-  - worldline history and mesh, plus the Spacetime switch
+  - `Health`, gravity-well, beam and inverse-square maths, plus Newton's phase switch
+  - worldline history and mesh, plus the Spacetime switch and meter readout
+  - court line calls and the spring-cloth solver
+  - **shipped assets:** script links, value ranges, the combat data graph, and the animator
+    contracts
 
   The test style is good: frame-rate sweeps, explicit time seams and a clean fixture.
-- **What has no tests at all:**
-  - The whole **pickleball game core**.
+- **What still has no tests:**
+  - The pickleball **rules, ball physics, AI and input**. Only the court is covered.
   - Every **MonoBehaviour that orchestrates** (`MeleeCombat`, `MovementMotor` and its 14 states,
-    `NewtonBoss`, `LockOnTargeting`, `TetherSystem`, the cameras).
-  - **Every shipped asset** (combat steps, leveling curve, animator controllers, settings).
+    `NewtonBoss` beyond its phase switch, `LockOnTargeting`, `TetherSystem`, the cameras).
   - **All 19 editor setup scripts.**
 - **No PlayMode assembly and no CI.** Nothing guards physics, timing, animation, scene wiring or
   input.
-- **Highest-value next step:** the P0 list in §3. It is mostly cheap EditMode tests on shipped
-  assets and pure logic. It needs one small enabling change, `InternalsVisibleTo`, plus
-  time-injection seams (§5). Several P0 tests are expected to **fail today**. Each such failure is
-  a real bug listed in §2.
+- **Highest-value next step:** the rest of the P0 list in §3. Most of it is cheap; the remainder
+  needs `InternalsVisibleTo` and time-injection seams (§5).
 
 ### Coverage by area
 
 | Area | Tests today | Main gaps |
 |---|---|---|
-| Pickleball core (ball, court, AI, scoring, input) | **0** | Everything. The game also can't be played from the repo (§2 PB1–PB2). |
-| Movement | 41, all on `Logic/*` | 14 states, motor, config-derived maths, enums, input and animator mapping |
-| Sword combat and progression | 41 | `MeleeCombat` (hit sweep, buffering, track choice), XP source, unlocks, all shipped assets |
-| Weapon clearance | 8 (`ClearanceSolver`) | The `WeaponClearance` component over real swings |
-| Newton boss | 66 (`Health`, wells, beam, volley maths) | `NewtonBoss` phases and timers, apples, barks, HUD, regain drain |
-| Spacetime | 22 | Meter, cooldown, single owner, teleport split, mesh counts, intangible beams |
-| Lock-on, camera, tether, cloth, dash, skateboard | **0** | Scoring and selection, orbit maths, cloth stability, tether highlight |
-| Editor setup and project config | **0** | Idempotency, missing scripts, build scenes, settings invariants |
+| Pickleball core (ball, court, AI, scoring, input) | Court only (`PickleballCore/`) | Rules, ball flight, AI, input. The game also can't be played from the repo (§2 PB1–PB2). |
+| Movement | `Logic/*` plus dash reach | 14 states, motor, config-derived maths, input and animator mapping |
+| Sword combat and progression | Resolver, timeline, `BladeSweep`, `GroundContact`, `XpLedger`, progression | `MeleeCombat` orchestration (buffering), `PlayerLevel` past the cap, `ComboCondition` |
+| Weapon clearance | `ClearanceSolver` | The `WeaponClearance` component over real swings |
+| Newton boss | `Health` (incl. guards), wells, beam and volley maths, phase switch | Attack timers, apples, barks, HUD, regain drain |
+| Spacetime | History, mesh, switch, `Charge01`, latched input | Meter drain and cooldown, single owner, teleport split, mesh counts, intangible beams |
+| Lock-on, camera, tether, dash, skateboard | **0** | Scoring and selection, orbit maths, tether highlight |
+| Cloth | `SpringCloth` solver (`Cloth/`) | Leg-capsule collisions, reload safety (ST3) |
+| Shipped assets | Script links, ranges, combat graph, animator contracts (`Validation/`) | Build-scene wiring (needs scene opens), release guards |
+| Editor setup scripts | **0** | Idempotency and smoke tests (needs an EditorTools assembly) |
 
 ---
 
@@ -60,7 +66,7 @@ IDs are referenced from the test plan below. Confidence: **H**igh, **M**edium, *
 
 | ID | Finding | Where | Conf. |
 |---|---|---|---|
-| PB1 | **The five event-channel assets don't load**: `m_Script` is missing because four channel classes share `EventChannels.cs`. Any scene wired to them gets null. | `ScriptableObjects/Events/*.asset`, `Events/EventChannels.cs` | ✔ (Editor query) |
+| PB1 | **The five event-channel assets don't load**: `m_Script` is missing because four channel classes share `EventChannels.cs`. Any scene wired to them gets null. Test: `ShippedAssetTests.EventChannelAsset_LoadsAsItsChannelType` (ignored until fixed). | `ScriptableObjects/Events/*.asset`, `Events/EventChannels.cs` | ✔ (Editor query) |
 | PB2 | **`GameScene.unity` is an unwired stub** (no camera, AI, GameStateManager, HitZone or UI; references null) and is still build index 0. Press Play does nothing useful. | `Scenes/GameScene.unity`, `EditorBuildSettings.asset` | ✔ |
 | PB3 | The AI ignores incoming balls while walking home after a swing (`_reacting` stays true), so fast returns and early serves are free points. | `AIController` reset walk | H |
 | PB4 | The AI aim error is re-rolled every loop iteration and averages out, so difficulty barely affects accuracy and the AI jitters. | `AIController.ComputeTarget` | H |
@@ -73,14 +79,8 @@ IDs are referenced from the test plan below. Confidence: **H**igh, **M**edium, *
 
 | ID | Finding | Where | Conf. |
 |---|---|---|---|
-| CB1 | **The first blade-live frame tests nothing, and a frame that crosses the whole active window tests nothing.** The comment claims the opposite. | `MeleeCombat.Update` / `SweepForHits` | ✔ |
-| CB2 | Mashing chains at `comboOpen`, which is before `activeEnd` on every non-final step, roughly halving hit windows. *+ C* keeps about 64 ms. Jumping and pressing during Area Under the Curve loses the ring. | step assets, `MeleeCombat` | H (mechanism) |
-| CB3 | A one-frame grounded flicker can start an air step and drop the ground chain. The grace period only delays *leaving* the ground. | `MeleeCombat` track choice, `ComboProgress.RecordStep` | M–H |
-| CB4 | Disabling `MeleeCombat` during hitstop leaves the animator frozen (`animator.speed` 0). | `MeleeCombat.OnDisable`, `SwordAnimatorDriver` | H (rare) |
-| CB5 | XP is paid for hits on already-dead targets, including someone else's killing blow (+250). Refilling dummies can be farmed for about 400 XP per KO (levels 2–5 in about 1.3 KOs). | `CombatXpSource` | M |
 | CB6 | Movement unlocks live in a readonly `HashSet` and are lost on a script reload. `Revoke` raises no event. | `PlayerAbilities` | M |
-| CB7 | `ExperienceCurve.TotalXpFor` overflows `int` at config values the Inspector allows (growth 3, max level 99, base ≥ 92). | `ExperienceCurve`, `LevelingConfig` | L |
-| CB8 | The `AbilityPickup.consumeOnPickup` tooltip says the opposite of what the field does. | `AbilityPickup` | H (trivial) |
+| CB7 | `ExperienceCurve.TotalXpFor` overflows `int` at config values the Inspector allows (growth 3, max level 99, base ≥ 92). `ShippedLevelingCurve_RisesStrictlyToTheCap` guards the shipped config only. | `ExperienceCurve`, `LevelingConfig` | L |
 
 ### Newton boss
 
@@ -88,7 +88,7 @@ IDs are referenced from the test plan below. Confidence: **H**igh, **M**edium, *
 |---|---|---|---|
 | NB1 | **A script reload in Play mode breaks the fight.** `Health` and `_player` are cached only in `Awake`/`Start`, so the boss NREs and attacks silently stop. | `NewtonBoss`, four attack components | H (not reproduced) |
 | NB2 | **Player death does nothing.** Nothing subscribes to the player's `Health.Died`. | — | ✔ |
-| NB3 | **`Health.Damage(NaN)` kills instantly**, `Heal(NaN)` fully heals, and `CreditDamageDealt(NaN)` cashes in all grey. | `Health` guards | ✔ |
+| NB3 | **`Health.Damage(NaN)` kills instantly**, `Heal(NaN)` fully heals, and `CreditDamageDealt(NaN)` cashes in all grey. Tests: the three `*_NaN_*` cases in `Boss/HealthGuardTests` (ignored until fixed). | `Health` guards | ✔ |
 | NB4 | Apples spawned close in time and space cancel each other almost immediately, undercutting the barrage. | `Apple`, `AppleBarrage` | M |
 | NB5 | The barrage ground height is sampled once, under the boss (who stands about 1.7 m up), so markers and splats near the player may float. | `AppleBarrage` | M |
 | NB6 | At point blank, 2–3 orbs of one volley ring hit (60–90 damage against 100 HP, twice in phase 2). There are no i-frames. | `InverseSquareVolley`, `Health` | M |
@@ -104,14 +104,12 @@ IDs are referenced from the test plan below. Confidence: **H**igh, **M**edium, *
 
 | ID | Finding | Where | Conf. |
 |---|---|---|---|
-| ST1 | **`SpacetimeView.Charge01` is negative (−0.167)** while the feature is off and before the first tick; the docs tell HUDs to read it. | `SpacetimeView` | ✔ |
 | ST2 | **The tether's targeted highlight never shows:** `SetState` runs twice per frame on the best anchor, so the blend settles around 0.13, varying with frame rate. | `TetherSystem.Update`, `TetherAnchor.SetState` | ✔ |
 | ST3 | A reload in Play mode kills `SpringCloth` (goes rigid), `SwingTwist` (twist stops), the `TetherSystem` reticle and `DashEffects` ghosts. | Awake-only state | M–H |
 | ST4 | Disabling `LockOnTargeting` while locked leaves the reticle drawn at a stale point. | `LockOnTargeting.OnDisable` | M |
 | ST5 | Lock-on calls `FindObjectsByType<Health>` every frame and `RaycastAll` per candidate. | `LockOnTargeting` | H |
-| ST6 | The Spacetime toggle polls `WasPressedThisFrame`, which drops presses in an unfocused Editor or with simulated input (lock-on latches on `performed` instead). | `SpacetimeView` | M |
-| ST7 | Ended worldlines go stale across off→on cycles and scene changes. The previous scene's ghosts can be drawn. | `SpacetimeSettings.Ended`, `WorldlineRecorder` | L–M |
-| ST8 | Beams are on the Default layer, so in 4D they block lock-on line of sight and tether reach, and can trap Newton. Intangible beams cost a query each per frame and can truncate at 64 hits. | `SpacetimeView` | M |
+| ST7 | Ended worldlines go stale across off→on cycles and scene changes. The previous scene's ghosts can be drawn. Documented in `Spacetime.md`, not fixed. | `SpacetimeSettings.Ended`, `WorldlineRecorder` | L–M |
+| ST8 | Beams are on the Default layer, so in 4D they block lock-on line of sight and tether reach, and can trap Newton. Intangible beams cost a query each per frame and can truncate at 64 hits. Documented in `Spacetime.md`, not fixed. | `SpacetimeView` | M |
 | ST9 | Latent bugs: a camera authored with negative pitch snaps to 65° on first input, `FaceCamera` can lag a frame, and `ropeSegments = 1` writes NaN rope points. | `SandboxOrbitCamera`, `FaceCamera`, `TetherSystem` | M/L |
 
 ### Editor setup and project
@@ -124,7 +122,7 @@ IDs are referenced from the test plan below. Confidence: **H**igh, **M**edium, *
 | ED4 | Re-running Setup Chibi Sandbox wipes everything the later menus added (Newton, fight, lock-on, World Look, Clean World, Spacetime). | `ChibiSandboxSetup` | H |
 | ED5 | The Organize duplicate-model sweep deletes matching models anywhere in the tree; its comment says root level only. | `ChibiSandboxSetup.Organize` | H |
 | ED6 | `Chibi.prefab` lacks `SwordAbilities`, `WeaponClearance`, `LockOnTargeting` and `Health`. They exist only as scene overrides, so SpacetimeLab's chibi has none of them. | `Prefabs/Chibi.prefab` | H |
-| ED7 | Setup Weapon Clearance and Setup Newton (Boss) edit the scene without marking it dirty. Setup Cloth dirties every open scene. | those scripts | M |
+| ED7 | Setup Newton (Boss) edits the scene without marking it dirty. Setup Cloth dirties every open scene. | `NewtonBossSetup`, `ClothSetup` | M |
 | ED8 | `DashGhost.mat` has drifted from the blending the code intends; get-or-create never re-applies it. | `SandboxVfxBuilder` | H |
 | ED9 | Batch entry points exit 0 on failure. Setup World Look writes a non-deterministic GPU capture to a tracked PNG. | `SwordAbilitySetup.Batch`, `WorldLookSetup` | M |
 | ED10 | Build settings list GameScene and the template SampleScene; the shipped Windows build used ChibiSandbox only, and that scene list isn't recorded anywhere tracked. | `EditorBuildSettings.asset` | H |
@@ -139,49 +137,24 @@ until the bug is fixed.
 
 ### Shipped-asset validation (`[Category("Assets")]`, read-only `AssetDatabase`)
 
-- **`EventChannelAssets_LoadWithTheirType`.** All five
-  `ScriptableObjects/Events/*.asset` load as their channel type. ⚠ PB1.
-- **`BuildScenes_ExistAndHaveNoNullRequiredRefs`.** Every enabled build scene exists and opens
-  additively with no null required references. ⚠ PB2, ED10. This forces a decision on whether
-  GameScene is still live.
-- **`Prefabs_AndScenes_NoMissingScripts`.**
-  `GameObjectUtility.GetMonoBehavioursWithMissingScriptCount` is 0 across all scenes and prefabs.
-  Passes today; this locks it in.
-- **`ConfigAssets_WithinRangeAndMin`.** Every serialized field with `[Range]`/`[Min]` on every
-  asset under `ScriptableObjects/` is inside its bounds and not NaN.
-- **Combat:**
-  - `ShippedSteps_AllReachable`: every `ComboStepDefinition` is in the moveset or is an ability's
-    step (9 of 9 today).
-  - `ShippedAbilities_AreWellFormed`: step not null, role not Regular, condition min ≤ max, each
-    unlocked exactly once.
-  - `ShippedUnlockTable_IsReachable`: 2 ≤ level ≤ `MaxLevel`, no duplicates.
-  - `ShippedLeveling_MatchesDocumentedPace`: `TotalXpFor(2..5)` = {50, 150, 300, 500}, strictly
-    increasing to `MaxLevel`.
-  - `ShippedSteps_TimingIsCoherent`: clip set; `activeStart < activeEnd ≤ comboClose ≤ 1`;
-    `comboOpen ≤ comboClose`; burst `triggerAt ≤ comboClose`; `animatorState` unique.
-  - `ShippedSteps_EffectPrefabsArePooled`: each non-null hit or burst effect has `PooledEffect`.
-  - `ShippedSteps_MashedChainStillSweeps`: simulate `SwingTimeline` at 1/30 s over 10 phase
-    offsets, chaining at the first frame past `comboOpen`; at least 2 swept intervals per step.
-    ⚠ CB2 (*+ C* is expected to fail).
-- **Animator contracts:**
-  - `AttackLayer_HasStateForEveryComboStep`: each step's state exists on the Attack layer with a
-    motion.
-  - `NewtonController_HasEveryParameterTheBossHashes`: Death is the first AnyState transition;
-    casts are gated by `!Channeling`.
-  - `MovementController_ConditionsMatchMoveKind`: the animator's int conditions agree with the
-    `MoveKind` and `JumpKind` values.
-- **Spacetime:** `ShippedSpacetimeSettings_IsOff` (`[Category("Ship")]`). This fails while a local
-  test toggle is on, and that is the point.
-- **`ProjectSettings_Invariants`:** `bounceThreshold == 2`, `fixedDeltaTime == 0.02`, Input
-  System-only handler.
+The read-only asset checks now live in `Tests/EditMode/Validation/`. They cover script links,
+`[Range]`/`[Min]` bounds, the combat data graph and timing, effect pooling, and the Attack-layer,
+movement and Newton animator contracts. These remain:
+
+- **`BuildScenes_ExistAndHaveNoNullRequiredRefs`.** Every enabled build scene opens additively
+  with no null required references. ⚠ PB2, ED10. It has to open scenes, so run it in a worktree,
+  never in the shared Editor. It also forces a decision on whether GameScene is still live.
+- **Spacetime:** `ShippedSpacetimeSettings_IsOff` (`[Category("Ship")]`, `[Explicit]`). It fails
+  while a local test toggle is on, and that is the point.
+
+The asset tests deliberately check structure, not tuning. An exact leveling pace and fixed
+project-settings values were considered and left out, because retuning shouldn't need a test
+change.
 
 ### Pickleball core
 
-- **`Court_*` (today).**
-  - `IsInBounds`: (3.069,0,0) is in, (3.08,0,0) is out; (0,0,6.72) is in, (0,0,6.73) is out.
-  - `SideOf`: z = −0.01 → Player; z = 0 → AI.
-  - `ResolveZone`: (0,0,±2.13) → Kitchen; (−1,0,−4) → CourtLeft; (0,0,−2.14) → CourtRight;
-    (3.2,0,1) → OutOfBounds, which beats Kitchen.
+Court line calls are covered by `Tests/EditMode/PickleballCore/CourtTests`.
+
 - **`Referee_*` (seam: extract `RallyReferee`).**
   - `HasWon`: (11,9) yes, (11,10) no, (12,10) yes, (14,13) no.
   - Side-out: the server wins → +1; the receiver wins → the serve changes, no point.
@@ -204,13 +177,9 @@ until the bug is fixed.
 
 ### Newton boss
 
-- **`Phase_EntersTwo_AtThreshold_Inclusive` (today; call `Awake` by reflection).** 50/100 HP at
-  `phaseTwoAt` 0.5 → phase 2; 51 → phase 1. Also `Phase_NeverReverts` and `DeadBoss_DoesNotPhase`.
-- **`Health_*` (today).**
-  - `Damage_NaN_IsIgnored`, plus the same for `Heal` and `Credit`. ⚠ NB3.
-  - Negative or dead `Heal`/`Credit` is a no-op.
-  - `Heal` clamps at max.
-  - `KillingBlow_HurtBeforeDied`: event order.
+Phase two's threshold and one-way rule are covered by `Boss/NewtonPhaseTests`, and `Health`'s
+input guards and event order by `Boss/HealthGuardTests`.
+
 - **`RangeMultiplier_SameLawAsVolley` (today).** Equals `DamageAt(r, 1, …)`, finite at r ≤ 0,
   non-increasing in r.
 - **`Apple_ClosestApproach_*` (today, via reflection).** Head-on → t = 0.5; parallel → 0;
@@ -224,9 +193,10 @@ until the bug is fixed.
 
 ### Movement
 
-- **Enum and state tests (today).**
-  - `MoveKind_ValuesArePinned` and `JumpKind_ValuesArePinned`: the animator conditions use these
-    ints.
+The `MoveKind` and `JumpKind` values the animator conditions use are pinned by
+`Validation/AnimatorContractTests`.
+
+- **State tests (today).**
   - `EveryMoveKindHasOneState`: reflect over the `MoveState` subclasses.
   - `InterruptMatrix`: `AllowsDash`/`Tether`/`Mount`/`Anchor` per kind.
   - `IsExclusive_OnlyDashTetherSkate`: this feeds combat's `IsBusy`.
@@ -252,7 +222,6 @@ All of these are writable today.
   - `SetIn4D` raises only on change.
   - `TryClaim`: the second view is refused; release frees the claim.
 - **`SpacetimeView` meter:**
-  - `Charge01_InRange_WhenOffAndBeforeFirstTick`. ⚠ ST1.
   - `Meter_DrainsAndAutoExits`.
   - `Meter_BlocksEntryBelowMinCharge`.
   - `FlipCooldown`.
@@ -269,16 +238,6 @@ All of these are writable today.
 - **`History_EdgeCases`:** empty → `OldestTime` NaN; span clamps; cutoff inclusive. With
   `maxPoints = 1` it returns *all* samples; pin that or fix it.
 
-### Cloth
-
-All of these are writable today; `Simulate` and `Rebind` are public.
-- `SpringCloth_PreservesSegmentLengths`
-- `SpringCloth_SwingWithinMaxAngle`
-- `SpringCloth_SettlesToRest`
-- `SpringCloth_ZeroDt_HoldsPose`
-- `SpringCloth_HugeDt_NoNaN`
-- `SpringCloth_Teleport_SnapsToRest`
-
 ---
 
 ## 4. Test plan, P1
@@ -289,8 +248,7 @@ All of these are writable today; `Simulate` and `Rebind` are public.
 |---|---|---|
 | Pickleball | Extract `ShotMath` (player and AI) and `InputReader.Classify(start, end, duration, screen, tuning)` | Shot velocities at aim/power extremes. In-bounds sweep from the serve anchor ⚠ PB7. Tap vs swipe at the 80 px boundary; no NaN at duration 0. |
 | Pickleball | none | `HitZone.Contains`: serve anchor inside; rotated zone characterisation; disabled → false (call `Physics.SyncTransforms` first). `AIConfig` difficulty endpoints and monotonicity. Event channel raise/unsubscribe semantics. `ScoreView` text format (extract `Format`). |
-| Combat | Extract `AttackBuffer` and `BladeSweep` from `MeleeCombat`, driven by injected `dt`/`now` | `PressBeforeComboOpen_ChainsAtComboOpen`, `PressAfterChainSpent_IsDropped`, `IdlePress_Expires`, `BladeOnFrame_TestsCurrentBlade` ⚠ CB1, `WholeWindowFrame_TestsAtLeastOnce` ⚠ CB1, `FlickerFramePress_StaysOnGroundTrack` ⚠ CB3 |
-| Combat | Extract `XpLedger` from `CombatXpSource` | Fractional carry; kill bonus once; dead and already credited → 0; refilled target re-arms. `DeadButUncredited_PaysNothing` ⚠ CB5 |
+| Combat | Extract `AttackBuffer` from `MeleeCombat`, driven by injected `dt`/`now`. `BladeSweep`, `GroundContact` and `XpLedger` are already extracted and tested. Under `XpLedger` a refilled target deliberately pays no new XP, which supersedes the old "refill re-arms the bonus" idea. | `PressBeforeComboOpen_ChainsAtComboOpen`, `PressAfterChainSpent_IsDropped`, `IdlePress_Expires` |
 | Combat | Static `WeaponClearance.Solve(...)`, or sample clips in EditMode | Blade clears the head by ≥ −2 cm on every frame of every attack clip; total turn ≤ `maxCorrection` |
 | Boss | `NextWellDelay`, injected RNG and ground probe, `PredictLanding` | Well cadence and retry; placement ≥ 5 m from the player over 1,000 seeds; marker prediction within 0.1 m of the integrated apple |
 | Boss | Fixture helpers `SetReference`/`SetBool`/`SetStrings` | `Barks_*` (rate limit, no repeat, empty → silent), `DamageNumbers_Classify`, `HealthBar_FillsTrackHealth`; `TerminalSpeed_ExceedsFreeFall` and `WellDriftAt5m_IsFelt` against the shipped prefab and config |
@@ -310,7 +268,8 @@ Needs the PlayMode assembly ([README.md](README.md#adding-the-playmode-assembly)
 2. **Jump and dash.** The single, double and triple apex equals config ± 0.03 m at 30, 60 and
    144 fps. Dash distance is 3.08 m ± 0.05 at each rate.
 3. **Ground combo.** A mashed Slash 1–4 against a `Health` dummy plays in order with exactly one
-   hit per swing (4 `Hurt` events) at 1/30, 1/20 and 1/15 s per frame. ⚠ CB1/CB2 at low rates.
+   hit per swing (4 `Hurt` events) at 1/30, 1/20 and 1/15 s per frame. This is the in-scene
+   check of the CB1/CB2 fixes.
 4. **Newton phases and death.**
    - At 54% HP the boss enters phase 2 the same frame; the barrage starts 1.5 s later.
    - Killing him mid-beam and mid-barrage empties `GravityWell.Active`, cancels the apples and
@@ -334,10 +293,15 @@ Needs the PlayMode assembly ([README.md](README.md#adding-the-playmode-assembly)
 
 ### Where to start
 
-If you're picking this up: start with P0, asset validation first (no code changes, catches PB1
-and the combat data contracts). Then Health, Court and the Spacetime meter (writable today). Then
-add `InternalsVisibleTo` and the `Advance` seams (§5) and continue down P0. Raise the PlayMode
-assembly once P0 is green.
+If you're picking this up:
+1. Finish the remaining P0 tests that are writable today: the Spacetime meter, `ComboCondition`,
+   `PlayerLevel`, and the movement logic edges.
+2. Add `InternalsVisibleTo` and the `Advance` seams (§5) and continue down P0.
+3. Raise the PlayMode assembly.
+
+Tests for known bugs are committed with `[Ignore("Known bug <ID> …")]`, so the suite stays green
+while the bug stays visible as a skipped test. Whoever fixes the bug removes the `Ignore` in the
+same commit.
 
 ---
 
@@ -354,7 +318,7 @@ assembly once P0 is green.
    `InputReader.Classify`.
 5. **Movement `IMoveContext`** for `MoveState.Next`. Also move `Next`'s side effects (chain
    landing, sprint reset, pending jump) into `Enter` or `Tick`, so "decisions only" is true.
-6. **Combat extractions:** `AttackBuffer`, `BladeSweep`, `XpLedger`.
+6. **Combat extraction:** `AttackBuffer`.
 7. **Fixture consolidation:** one shared DontSave base, plus `SetReference`/`SetBool`/`SetStrings`
    helpers.
 
@@ -368,7 +332,7 @@ assembly once P0 is green.
 
 **P1**
 - Add the PlayMode and EditorTools test assemblies.
-- Agree the categories in [README.md](README.md#categories-proposed-none-are-in-use-yet).
+- Agree the remaining categories in [README.md](README.md#categories).
 - Add one orchestrator menu that runs the setup order in
   [EditorSetup.md](../Architecture/EditorSetup.md#run-order).
 - Record the shipped build's scene list in a tracked file.
@@ -383,24 +347,6 @@ assembly once P0 is green.
 These were reported to the system-doc owners through the agent-manager session. They are listed
 here so they aren't lost if a doc isn't updated.
 
-- **`SwordAbilities.md`:**
-  - The long-frame sweep claim is wrong (CB1).
-  - The grace period covers only leaving the ground (CB3).
-  - The pad clash and vertical levers are described as unmerged, though they are merged.
-  - The test count (115) is stale.
-  - AirAttack's `comboOpen` differs from `WeaponSetup`.
-  - Knockback advice doesn't match the shipped steps.
-- **`WeaponClearance.md`:**
-  - The `MeleeCombat` sweep runs in `Update`, not `LateUpdate`.
-  - "Untick `rightHanded`" is reverted by setup.
-  - The new-rig workflow doesn't match the setup's fixed path.
-- **`Spacetime.md`:**
-  - The sign of the time shift is wrong (the code shifts by −`timeAxis × age`).
-  - "Nothing happens while off" is overstated.
-  - The `Charge01` advice is unsafe (ST1).
-  - The single-owner rule, the 256 cap, stale ended lines and the Default-layer interactions are
-    missing.
-  - "Remove undoes Add" overstates it.
 - **`CodingStandards.md`:**
   - `ChibiLocomotion` is now 174 lines; the largest file is `ChibiSandboxSetup.cs` at 2,072.
   - Editor scripts don't follow "namespaces mirror folders".
