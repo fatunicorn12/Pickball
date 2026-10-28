@@ -8,7 +8,7 @@ For **what** still needs testing, see [QA-Assessment.md](QA-Assessment.md).
 | Assembly | Folder | State |
 |---|---|---|
 | `Pickleball.Tests.EditMode` | `Assets/_Project/Tests/EditMode/` | 275 tests: 267 pass, 8 skipped as known bugs. References `Pickleball.Runtime` only. |
-| PlayMode | — | **None yet.** See "Adding the PlayMode assembly" below. |
+| `Pickleball.Tests.PlayMode` | `Assets/_Project/Tests/PlayMode/` | **Playtest harness** only: `[Explicit]`, category `Playtest`, so no normal run executes it. Loads the real scenes, drives virtual keyboard / mouse / gamepad, writes telemetry and screenshots outside the repo. See [PlaytestHarness.md](PlaytestHarness.md). No assertion-style PlayMode tests yet. |
 | Editor-tool tests | — | **None.** No test assembly references `Pickleball.Editor`, so setup menus can't be tested. |
 | CI | — | **None.** There is no `.github/` and no build or test scripts. |
 
@@ -97,6 +97,12 @@ what differs. Run each command from PowerShell:
   the test run. See [Architecture/EditorSetup.md](../Architecture/EditorSetup.md#known-hazards).
 
 ## Adding the PlayMode assembly
+
+The assembly now exists (the playtest harness, above). Two lessons from building it: an assembly that
+is `Editor`-only in `includePlatforms` is run as EditMode (it showed up as zero tests), so a PlayMode
+assembly must leave `includePlatforms` empty and guard Editor-only calls with `#if UNITY_EDITOR`; and
+`-testCategory Playtest` (or `-testFilter` with a test name) is what selects the `[Explicit]` scenarios. The
+steps below are the original plan for assertion-style PlayMode tests.
 
 1. Create `Assets/_Project/Tests/PlayMode/Pickleball.Tests.PlayMode.asmdef` with these contents:
    ```json

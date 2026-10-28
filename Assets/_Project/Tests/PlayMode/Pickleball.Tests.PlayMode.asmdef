@@ -1,0 +1,25 @@
+{
+    "name": "Pickleball.Tests.PlayMode",
+    "rootNamespace": "Pickleball.Tests.PlayMode",
+    "references": [
+        "Pickleball.Runtime",
+        "UnityEngine.TestRunner",
+        "UniTask",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
