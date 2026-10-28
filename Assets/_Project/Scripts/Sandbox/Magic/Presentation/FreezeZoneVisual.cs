@@ -75,7 +75,7 @@ namespace Pickleball.Sandbox.Magic.Presentation
         Vector3[] _crystalDirections;
         Vector3[] _crystalScales;
         GameObject _model;
-        float _radius = 1f, _age, _fadeAge;
+        float _radius = 1f, _modelScale = 1f, _age, _fadeAge;
         bool _expired;
 
         void OnEnable()
@@ -127,7 +127,8 @@ namespace Pickleball.Sandbox.Magic.Presentation
             var spell = source.Spell;
             if (_model == null && spell != null && spell.ModelPrefab != null)
             {
-                _model = SpellModel.Spawn(spell.ModelPrefab, transform, _radius * spell.ModelScale);
+                _modelScale = spell.ModelScale;
+                _model = SpellModel.Spawn(spell.ModelPrefab, transform, _radius * _modelScale);
                 if (_model != null && crystals != null) crystals.gameObject.SetActive(false);
             }
             if (snow != null)
@@ -216,7 +217,7 @@ namespace Pickleball.Sandbox.Magic.Presentation
                     c.localScale = _crystalScales[i] * stagger;
                 }
             }
-            if (_model != null) _model.transform.localScale = Vector3.one * (_radius * Mathf.Max(0.01f, spread));
+            if (_model != null) _model.transform.localScale = Vector3.one * ZoneMath.ModelScale(_radius, _modelScale, spread);
             if (coldLight != null) coldLight.intensity = lightIntensity * spread * shimmer;
         }
 

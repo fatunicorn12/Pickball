@@ -35,5 +35,14 @@ namespace Pickleball.Sandbox.Magic
         /// </summary>
         public static Vector3 AxisProbe(Vector3 centre, float height, Vector3 boundsCentre)
             => new(centre.x, Mathf.Clamp(boundsCentre.y, centre.y, centre.y + Mathf.Max(0f, height)), centre.z);
+
+        /// <summary>
+        /// Uniform scale of a zone's optional model (authored for a 1 m radius):
+        /// the zone's <paramref name="radius"/> × the spell's
+        /// <paramref name="modelScale"/> × <paramref name="spread"/>, the 0-1 grow-
+        /// and-fade factor, floored at 1% so the model never hits zero scale.
+        /// </summary>
+        public static float ModelScale(float radius, float modelScale, float spread)
+            => radius * modelScale * Mathf.Max(0.01f, spread);
     }
 }
