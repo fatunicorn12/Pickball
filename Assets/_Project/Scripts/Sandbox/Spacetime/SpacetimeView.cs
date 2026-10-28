@@ -48,6 +48,10 @@ namespace Pickleball.Sandbox
                  "intangible until the player steps clear. Wired by the setup menu.")]
         [SerializeField] private CharacterController player;
 
+        [Tooltip("Optional. While Spacetime is blocked (a conversation), T / d-pad left is " +
+                 "dropped, not saved for later. Empty: never dropped.")]
+        [SerializeField] private PlayerInputGate inputGate;
+
         [Header("Scene dressing")]
         [Tooltip("Shown only in 4D: hints, alternate geometry, a sky tint.")]
         [SerializeField] private GameObject[] onlyIn4D = Array.Empty<GameObject>();
@@ -139,8 +143,7 @@ namespace Pickleball.Sandbox
 
         void Update()
         {
-            bool pressed = _togglePressed;
-            _togglePressed = false;
+            bool pressed = PlayerInputGate.TakeLatched(ref _togglePressed, inputGate, InputBlock.Spacetime);
             Tick(pressed, Time.time, Time.deltaTime);
         }
 
