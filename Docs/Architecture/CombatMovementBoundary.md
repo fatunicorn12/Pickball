@@ -83,6 +83,7 @@ anything new.
 | `SandboxOrbitCamera` | Mouse look (polled) | Right stick look, D-pad Up/Down zoom (polled) |
 | `SpacetimeView` | T | D-pad Left (both bound **only while Spacetime is enabled**) |
 | `TrainingStage` | Backspace respawn; Shift+Backspace also revokes abilities (polled) | — |
+| `InteractInput` (read by `PlayerInteractor`, `DialogueDirector`) | **E Interact**: talk while a talk prompt is showing, and advance text during a conversation | **RB**, the same (all pad buttons are taken) |
 
 Mount moved from West to D-pad Right in `ddb5c9d`, which resolved the "pad clash" with attack.
 

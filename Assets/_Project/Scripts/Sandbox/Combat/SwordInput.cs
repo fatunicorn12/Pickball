@@ -17,6 +17,9 @@ namespace Pickleball.Sandbox.Combat
                  "Escape; while the cursor is free, a mouse click belongs to the " +
                  "camera and must not also swing the sword.")]
         [SerializeField] private SandboxOrbitCamera cameraRig;
+        [Tooltip("Optional. While Sword is blocked (a conversation), attack presses are " +
+                 "dropped, not buffered. Empty: never dropped.")]
+        [SerializeField] private PlayerInputGate inputGate;
 
         /// <summary>Raised on each Attack press that is meant for the sword.</summary>
         public event Action AttackPressed;
@@ -50,6 +53,7 @@ namespace Pickleball.Sandbox.Combat
         void OnPerformed(InputAction.CallbackContext context)
         {
             if (IsCameraClick(context)) return;
+            if (inputGate != null && inputGate.IsBlocked(InputBlock.Sword)) return;
             AttackPressed?.Invoke();
         }
 

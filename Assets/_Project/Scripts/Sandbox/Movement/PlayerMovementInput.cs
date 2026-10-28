@@ -24,6 +24,10 @@ namespace Pickleball.Sandbox.Movement
         [Tooltip("Camera that stick directions are relative to. Falls back to the main " +
                  "camera when empty.")]
         [SerializeField] private Transform cameraTransform;
+        [Tooltip("Optional. While Movement is blocked (a conversation), Read returns an empty " +
+                 "intent; while InteractButton is blocked (a talk prompt is up), E / RB does " +
+                 "not dash. Empty: input is always read.")]
+        [SerializeField] private PlayerInputGate inputGate;
 
         InputAction _move, _sprint, _jump, _crouch, _trick, _mount, _dash, _tether, _anchor;
 
@@ -75,6 +79,7 @@ namespace Pickleball.Sandbox.Movement
         {
             var intent = new MovementIntent();
             if (_move == null) return intent;   // disabled
+            if (inputGate != null && inputGate.IsBlocked(InputBlock.Movement)) return intent;
 
             Vector2 stick = _move.ReadValue<Vector2>();
             if (stick.sqrMagnitude > 1f) stick.Normalize();
@@ -99,7 +104,8 @@ namespace Pickleball.Sandbox.Movement
             intent.CrouchHeld = _crouch.IsPressed();
             intent.TrickPressed = _trick.WasPressedThisFrame();
             intent.MountPressed = _mount.WasPressedThisFrame();
-            intent.DashPressed = _dash.WasPressedThisFrame();
+            intent.DashPressed = _dash.WasPressedThisFrame()
+                                 && (inputGate == null || !inputGate.IsBlocked(InputBlock.InteractButton));
             intent.TetherPressed = _tether.WasPressedThisFrame();
             intent.AnchorPressed = _anchor.WasPressedThisFrame();
             return intent;

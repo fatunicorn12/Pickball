@@ -594,7 +594,8 @@ namespace Pickleball.Sandbox.Movement
         void Update()
         {
             float dt = Time.deltaTime;
-            if (dt <= 0f) return;
+            // Paused: drop field pushes rather than let them pile up and land at once on resume.
+            if (dt <= 0f) { _externalAccel = Vector3.zero; return; }
             EnsureRuntime();
             var c = Config;
 
