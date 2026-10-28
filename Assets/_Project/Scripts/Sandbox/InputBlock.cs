@@ -29,7 +29,9 @@ namespace Pickleball.Sandbox
         /// <summary>The shared Interact / Dash button (E, RB) belongs to an interaction, so it
         /// must not dash. Checked by <c>PlayerMovementInput</c> for the dash only.</summary>
         InteractButton = 1 << 5,
+        /// <summary><c>SpellInput</c>: the spell's aim and fire buttons read as released.</summary>
+        Spell = 1 << 6,
         /// <summary>Every flag.</summary>
-        All = Movement | Sword | LockOn | Camera | Spacetime | InteractButton,
+        All = Movement | Sword | LockOn | Camera | Spacetime | InteractButton | Spell,
     }
 }

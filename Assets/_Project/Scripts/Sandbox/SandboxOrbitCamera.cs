@@ -10,6 +10,14 @@ namespace Pickleball.Sandbox
     ///
     /// Escape releases the cursor so you can get back to the Editor. On a
     /// gamepad the right stick orbits and d-pad up/down zooms.
+    ///
+    /// While the player aims a spell (an <see cref="IAimState"/>, read from
+    /// aimSource) it swings over the shoulder: closer, offset to the right in
+    /// camera space, a little zoomed in, following tighter, looking slower and
+    /// with a much wider pitch range so airborne targets can be aimed at.
+    /// Zoom, recentring and lock-on steering are ignored meanwhile. All of it
+    /// blends by <see cref="AimBlend"/>, so with no aim source, or while never
+    /// aiming, the camera behaves exactly as it did before aim existed.
     /// </summary>
     public class SandboxOrbitCamera : MonoBehaviour
     {
@@ -56,6 +64,41 @@ namespace Pickleball.Sandbox
         [Tooltip("Recentre behind the player (lock pressed with nothing to lock).")]
         [SerializeField] private float recenterSmoothTime = 0.12f;
 
+        [Header("Aim")]
+        [Tooltip("Says whether the player is aiming a spell: any behaviour that " +
+                 "implements IAimState (the SpellCaster). Found on the follow " +
+                 "target if empty; with none, the camera never enters aim mode.")]
+        [SerializeField] private MonoBehaviour aimSource;
+        [Tooltip("Over-the-shoulder offset while aiming, in metres in camera space " +
+                 "(x right, y up). Moves the player off the crosshair so the line " +
+                 "of fire past him is clear.")]
+        [SerializeField] private Vector3 aimShoulderOffset = new(0.6f, 0.1f, 0f);
+        [Tooltip("Distance from the follow point while aiming, in metres. Closer " +
+                 "than the orbit, so the target reads bigger behind the crosshair.")]
+        [SerializeField, Min(0.1f)] private float aimDistance = 2.1f;
+        [Tooltip("Field of view while aiming, as a fraction of the normal one. " +
+                 "Below 1 zooms in a little; 1 leaves the FOV alone.")]
+        [SerializeField, Range(0.3f, 1.2f)] private float aimFovScale = 0.8f;
+        [Tooltip("Time constant of the ease into and out of the aim view, in " +
+                 "seconds of real time (hitstop does not freeze it). It settles in " +
+                 "about three of these; 0 snaps.")]
+        [SerializeField, Min(0f)] private float aimBlendTime = 0.1f;
+        [Tooltip("Follow smoothing while aiming, in seconds. Tighter than " +
+                 "followSmoothTime so the shoulder view does not swim behind the " +
+                 "player as he walks.")]
+        [SerializeField, Min(0f)] private float aimFollowSmoothTime = 0.03f;
+        [Tooltip("Mouse look speed while aiming, as a fraction of sensitivity. " +
+                 "Lower gives finer aim on the narrower view.")]
+        [SerializeField, Range(0.05f, 2f)] private float aimSensitivityScale = 0.65f;
+        [Tooltip("Right-stick turn rate while aiming, as a fraction of the " +
+                 "normal yaw and pitch speeds.")]
+        [SerializeField, Range(0.05f, 2f)] private float aimStickScale = 0.6f;
+        [Tooltip("Furthest look up while aiming, in degrees (negative is up). Far " +
+                 "past minPitch, so targets in the air can be aimed at.")]
+        [SerializeField] private float aimMinPitch = -60f;
+        [Tooltip("Furthest look down while aiming, in degrees (positive is down).")]
+        [SerializeField] private float aimMaxPitch = 70f;
+
         float _yaw = 180f;
         float _pitch = 12f;
         Vector3 _velocity;
@@ -67,6 +110,19 @@ namespace Pickleball.Sandbox
         int _relockFrame = -10;
         float _yawVelocity, _pitchVelocity, _lockBlend;
         float? _recenterYaw;
+        float _aimBlend, _nextAimSearch;
+        bool _aiming, _pitchRecovering, _ownsFov, _aimSourceWarned;
+        MonoBehaviour _aimBehaviour;
+
+        /// <summary>Seconds between fallback searches for an aim source on the
+        /// follow target, in scenes that have none.</summary>
+        const float AimSearchInterval = 1f;
+
+        /// <summary>How far into the over-the-shoulder aim view the camera is:
+        /// 0 is the normal orbit, 1 fully aimed. Eased on unscaled time, so a
+        /// hitstop landing mid-aim does not freeze the swing; presentation (the
+        /// crosshair, say) can fade with it.</summary>
+        public float AimBlend => _aimBlend;
 
         /// <summary>True on the frame left-click was used to re-capture the
         /// cursor. Attack input checks this so the click that grabs the cursor
@@ -101,24 +157,122 @@ namespace Pickleball.Sandbox
         {
             if (_cam == null) _cam = GetComponent<Camera>();
             if (_cam == null) return;
-            if (_punchTime >= _punchDuration) _baseFov = _cam.fieldOfView;
+            if (_baseFov <= 0f) _baseFov = _cam.fieldOfView;
+            _ownsFov = true;
             _punchAmount = degrees;
             _punchDuration = Mathf.Max(duration, 0.01f);
             _punchTime = 0f;
         }
 
-        void UpdatePunch(float dt)
+        /// <summary>
+        /// Writes the field of view: the base, zoomed by aim, plus any punch on
+        /// top. The base is captured once (Start, or lazily) and never re-read
+        /// from the camera. PunchFov used to re-capture it whenever no punch was
+        /// running, which mid-aim would capture the aim zoom as the new base and
+        /// leave the camera stuck zoomed in after aim. Nothing is written until
+        /// the first punch or aim, so a camera that does neither keeps the FOV
+        /// it was given.
+        /// </summary>
+        void UpdateFov(float dt)
         {
-            if (_cam == null || _punchDuration <= 0f) return;
-            if (_punchTime >= _punchDuration)
+            if (_aimBlend > 0f) _ownsFov = true;
+            if (!_ownsFov) return;
+            if (_cam == null) _cam = GetComponent<Camera>();   // lazy: survives a hot reload
+            if (_cam == null) return;
+            if (_baseFov <= 0f) _baseFov = _cam.fieldOfView;
+
+            float punch = 0f;
+            if (_punchTime < _punchDuration)
             {
-                _cam.fieldOfView = _baseFov;
-                return;
+                _punchTime += dt;
+                float k = Mathf.Clamp01(_punchTime / _punchDuration);
+                // Fast out, slow back: sin gives the whole kick in one hump.
+                punch = _punchAmount * Mathf.Sin(k * Mathf.PI) * (1f - k * 0.35f);
             }
-            _punchTime += dt;
-            float k = Mathf.Clamp01(_punchTime / _punchDuration);
-            // Fast out, slow back: sin gives the whole kick in one hump.
-            _cam.fieldOfView = _baseFov + _punchAmount * Mathf.Sin(k * Mathf.PI) * (1f - k * 0.35f);
+            _cam.fieldOfView = _baseFov * Mathf.Lerp(1f, aimFovScale, _aimBlend) + punch;
+        }
+
+        /// <summary>
+        /// Reads the aim source and eases <see cref="AimBlend"/> toward it on
+        /// unscaled time. The exponential ease never lands exactly, so it snaps
+        /// the last thousandth: an AimBlend of exactly 0 is what keeps the
+        /// never-aiming camera identical to the old one.
+        /// </summary>
+        void UpdateAim(float dt)
+        {
+            _aiming = ResolveAiming();
+            if (_aiming) _recenterYaw = null;
+            float goal = _aiming ? 1f : 0f;
+            _aimBlend = Mathf.Lerp(_aimBlend, goal, AimStep(dt));
+            if (Mathf.Abs(_aimBlend - goal) < 0.001f) _aimBlend = goal;
+        }
+
+        /// <summary>Exponential smoothing factor for the aim ease this frame.</summary>
+        float AimStep(float dt) => aimBlendTime > 0f ? 1f - Mathf.Exp(-dt / aimBlendTime) : 1f;
+
+        /// <summary>
+        /// Whether the player is aiming this frame. The source is resolved
+        /// lazily and again whenever it goes missing, so a hot reload (which
+        /// can clear the cached reference) or a destroyed caster costs a lookup
+        /// rather than a dead aim mode. It is cached as the behaviour, not the
+        /// interface, so Unity's null check sees a destroyed caster. The
+        /// fallback search on the follow target is throttled, since scenes with
+        /// no caster at all would otherwise search every frame.
+        /// </summary>
+        bool ResolveAiming()
+        {
+            if (_aimBehaviour == null)
+            {
+                if (aimSource != null)
+                {
+                    if (aimSource is IAimState) _aimBehaviour = aimSource;
+                    else if (!_aimSourceWarned)
+                    {
+                        _aimSourceWarned = true;
+                        Debug.LogWarning($"{name}: aimSource {aimSource.GetType().Name} does not " +
+                                         "implement IAimState; looking on the follow target instead.", this);
+                    }
+                }
+                if (_aimBehaviour == null && target != null && Time.unscaledTime >= _nextAimSearch)
+                {
+                    _nextAimSearch = Time.unscaledTime + AimSearchInterval;
+                    _aimBehaviour = target.GetComponent<IAimState>() as MonoBehaviour;
+                }
+            }
+            return _aimBehaviour != null && _aimBehaviour is IAimState aim && aim.IsAiming;
+        }
+
+        /// <summary>
+        /// Clamps a new pitch to this frame's look limits: the wide aim range
+        /// while aiming, else the orbit's. Just after aim, while the pitch is
+        /// still easing back inside the orbit's range, the limits stretch to
+        /// include the current pitch, so look can bring it in but not push it
+        /// further out, and nothing snaps.
+        /// </summary>
+        float ClampPitch(float pitch)
+        {
+            if (_aiming) return Mathf.Clamp(pitch, aimMinPitch, aimMaxPitch);
+            if (_pitchRecovering)
+                return Mathf.Clamp(pitch, Mathf.Min(minPitch, _pitch), Mathf.Max(maxPitch, _pitch));
+            return Mathf.Clamp(pitch, minPitch, maxPitch);
+        }
+
+        /// <summary>
+        /// Aim looks further up and down than the orbit allows. Letting go of
+        /// aim eases the pitch back inside [minPitch, maxPitch] instead of
+        /// snapping the view the moment the button comes up.
+        /// </summary>
+        void RecoverPitch(float dt)
+        {
+            if (_aiming) { _pitchRecovering = true; return; }
+            if (!_pitchRecovering) return;
+            float inside = Mathf.Clamp(_pitch, minPitch, maxPitch);
+            _pitch = Mathf.Lerp(_pitch, inside, AimStep(dt));
+            if (Mathf.Abs(_pitch - inside) < 0.05f)
+            {
+                _pitch = inside;
+                _pitchRecovering = false;
+            }
         }
 
         // Disabled while another rig (the dialogue camera) holds the transform:
@@ -152,6 +306,11 @@ namespace Pickleball.Sandbox
 
         bool IsLockedOn => lockOn != null && lockOn.IsLocked;
 
+        /// <summary>Lock-on drives the camera only while not aiming. Aim lets go
+        /// of the lock, but if one is still held for a frame the player's look
+        /// must win: the crosshair is the camera's centre.</summary>
+        bool LockSteering => IsLockedOn && !_aiming;
+
         /// <summary>
         /// Drives yaw and pitch while locked on, or while recentring.
         ///
@@ -164,7 +323,7 @@ namespace Pickleball.Sandbox
         /// </summary>
         void UpdateLockOn(Vector3 focus, float dt)
         {
-            bool locked = IsLockedOn;
+            bool locked = LockSteering;
             _lockBlend = Mathf.MoveTowards(_lockBlend, locked ? 1f : 0f, dt * 3f);
 
             if (locked)
@@ -207,19 +366,20 @@ namespace Pickleball.Sandbox
             if (pad == null) return;
             float dt = Time.unscaledDeltaTime;
 
-            if (!IsLockedOn)
+            if (!LockSteering)
             {
                 Vector2 stick = ShapeStick(pad.rightStick.ReadUnprocessedValue());
                 if (stick != Vector2.zero)
                 {
                     float rise = invertStickY ? -stick.y : stick.y;
-                    _yaw += stick.x * stickYawSpeed * dt;
-                    _pitch = Mathf.Clamp(_pitch - rise * stickPitchSpeed * dt, minPitch, maxPitch);
+                    float turn = Mathf.Lerp(1f, aimStickScale, _aimBlend);
+                    _yaw += stick.x * stickYawSpeed * turn * dt;
+                    _pitch = ClampPitch(_pitch - rise * stickPitchSpeed * turn * dt);
                     _recenterYaw = null;
                 }
             }
 
-            float zoom = pad.dpad.ReadValue().y;
+            float zoom = _aiming ? 0f : pad.dpad.ReadValue().y;
             if (zoom != 0f)
                 distance = Mathf.Clamp(distance - zoom * dpadZoomSpeed * dt, minDistance, maxDistance);
         }
@@ -237,7 +397,8 @@ namespace Pickleball.Sandbox
 
         void LateUpdate()
         {
-            UpdatePunch(Time.deltaTime);
+            UpdateAim(Time.unscaledDeltaTime);
+            UpdateFov(Time.deltaTime);
             if (target == null) return;
 
             var kb = Keyboard.current;
@@ -252,31 +413,37 @@ namespace Pickleball.Sandbox
                     _relockFrame = Time.frameCount;
                 }
 
-                // While locked the mouse belongs to target switching, not look.
-                if (_locked && !IsLockedOn)
+                // While locked the mouse belongs to target switching, not look
+                // (aiming overrides that: see LockSteering).
+                if (_locked && !LockSteering)
                 {
                     Vector2 delta = mouse.delta.ReadValue();
-                    _yaw += delta.x * sensitivity;
-                    _pitch = Mathf.Clamp(_pitch - delta.y * sensitivity, minPitch, maxPitch);
+                    float look = sensitivity * Mathf.Lerp(1f, aimSensitivityScale, _aimBlend);
+                    _yaw += delta.x * look;
+                    _pitch = ClampPitch(_pitch - delta.y * look);
                     if (delta.sqrMagnitude > 4f) _recenterYaw = null;
                 }
 
-                float scroll = mouse.scroll.ReadValue().y;
+                float scroll = _aiming ? 0f : mouse.scroll.ReadValue().y;
                 if (Mathf.Abs(scroll) > 0.01f)
                     distance = Mathf.Clamp(distance - scroll * 0.003f, minDistance, maxDistance);
             }
 
             ReadGamepad();
+            RecoverPitch(Time.unscaledDeltaTime);
 
             Vector3 focus = target.position + targetOffset;
             UpdateLockOn(focus, Time.deltaTime);
 
             Quaternion rot = Quaternion.Euler(_pitch, _yaw, 0f);
-            float dist = distance + lockDistanceBonus * _lockBlend;
+            float dist = Mathf.Lerp(distance + lockDistanceBonus * _lockBlend, aimDistance, _aimBlend);
             Vector3 wanted = focus - rot * Vector3.forward * dist;
+            // Over the shoulder: offset in camera space, after the rotation, so
+            // "right" stays screen-right at any yaw and pitch.
+            if (_aimBlend > 0f) wanted += rot * (aimShoulderOffset * _aimBlend);
 
-            transform.position = Vector3.SmoothDamp(transform.position, wanted,
-                                                    ref _velocity, followSmoothTime);
+            transform.position = Vector3.SmoothDamp(transform.position, wanted, ref _velocity,
+                                                    Mathf.Lerp(followSmoothTime, aimFollowSmoothTime, _aimBlend));
             transform.rotation = rot;
 
             // Shake is applied after the follow so it never feeds back into the
