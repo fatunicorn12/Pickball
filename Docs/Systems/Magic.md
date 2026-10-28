@@ -449,6 +449,13 @@ convention:
 - Heal (`modelPrefab`): the rune under the feet, scaled to the ring's diameter × `modelScale`;
   author it 1 m across, flat, facing up.
 
+Setup Magic fills these slots with the Tripo meshes in `Prefabs/Tripo/`
+(`MagicSpellArtBuilder.FillSpellModels`): Fireball 1.3, Thunderbolt bolt + cloud 2.5, Freeze Zone
+ice cluster 1, Heal lotus 0.65. Each slot is filled only while empty, and `modelScale` is written
+only with its `modelPrefab`, so a re-run changes nothing and a hand-set model or scale survives.
+A cleared `modelPrefab` is refilled on the next run (with its default scale); to keep a spell
+procedural, drop its line from `FillSpellModels`.
+
 **Anything else that spends mana** (a sword technique, a dash): call `Mana.TrySpend(cost)` on the
 player's `Mana`. It returns false and changes nothing when the cost can't be paid, so the caller
 needs no `CanAfford` check first. The bar, the pause and the HUD's failure cue all follow

@@ -165,6 +165,7 @@ public static class MagicSetup
             EnsureSpellAsset(HealPath, SeedHeal,
                              ("icon", MagicHudBuilder.SpellIcon(MagicHudBuilder.IconShape.Cross))),
         };
+        MagicSpellArtBuilder.FillSpellModels(spellBook[1], spellBook[2], spellBook[3], spellBook[4]);
 
         // ---- components ----------------------------------------------------
         // Explicit null checks: `??` on a Unity object skips the "fake null"

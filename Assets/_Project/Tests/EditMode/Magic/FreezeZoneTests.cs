@@ -50,6 +50,18 @@ namespace Pickleball.Tests.Magic
             Assert.That(ZoneMath.AxisProbe(Vector3.zero, Height, new Vector3(4f, -3f, 4f)).y, Is.EqualTo(0f));
         }
 
+        [Test]
+        public void ModelScale_KeepsTheSpellsModelScaleWhileGrowing()
+        {
+            // Regression: the visual rescaled its model to radius × spread every
+            // frame, dropping SpellDefinition.ModelScale after the spawn frame.
+            Assert.That(ZoneMath.ModelScale(Radius, 0.5f, 1f), Is.EqualTo(1.5f).Within(1e-5f));
+            Assert.That(ZoneMath.ModelScale(Radius, 2f, 0.5f), Is.EqualTo(3f).Within(1e-5f));
+            Assert.That(ZoneMath.ModelScale(Radius, 1f, 1f), Is.EqualTo(Radius).Within(1e-5f));
+            Assert.That(ZoneMath.ModelScale(Radius, 2f, 0f), Is.EqualTo(Radius * 2f * 0.01f).Within(1e-6f),
+                        "floored at 1%, never zero");
+        }
+
         // ------------------------------------------------------- FreezeZone
 
         SpellDefinition NewZoneSpell()

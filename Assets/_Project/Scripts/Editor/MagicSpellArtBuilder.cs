@@ -353,6 +353,50 @@ public static class MagicSpellArtBuilder
     // Status receiver (scene, per target)
     // ===================================================================
 
+    // ------------------------------------------------------- Tripo models
+
+    /// <summary>Where the imported Tripo spell prefabs live.</summary>
+    public const string TripoPrefabDir = "Assets/_Project/Prefabs/Tripo";
+
+    /// <summary>
+    /// Gives the four spells their Tripo models (Magic.md §4 convention; scales
+    /// checked by rendering each at its slot in game context). Each slot is
+    /// filled only while empty, and <c>modelScale</c> is written only together
+    /// with the <c>modelPrefab</c> it belongs to, so a re-run changes nothing and
+    /// a designer's swap or retune survives. A missing prefab is skipped and the
+    /// spell keeps its procedural look. Null spells are skipped.
+    /// </summary>
+    public static void FillSpellModels(SpellDefinition fireball, SpellDefinition thunderbolt,
+                                       SpellDefinition freezeZone, SpellDefinition heal)
+    {
+        FillModelIfBlank(fireball, "Fireball", null, 1.3f);
+        // One modelScale drives both: a 0.8 × 7 × 0.8 m bolt and a 4 m cloud.
+        FillModelIfBlank(thunderbolt, "LightningBolt", "Thundercloud", 2.5f);
+        FillModelIfBlank(freezeZone, "IceCrystalCluster", null, 1f);
+        FillModelIfBlank(heal, "HealLotus", null, 0.65f);
+    }
+
+    static void FillModelIfBlank(SpellDefinition spell, string model, string secondary, float scale)
+    {
+        if (spell == null) return;
+        var so = new SerializedObject(spell);
+        var modelProp = so.FindProperty("modelPrefab");
+        if (modelProp.objectReferenceValue == null)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{TripoPrefabDir}/{model}.prefab");
+            if (prefab != null)
+            {
+                modelProp.objectReferenceValue = prefab;
+                so.FindProperty("modelScale").floatValue = scale;
+            }
+        }
+        var secondaryProp = so.FindProperty("secondaryModelPrefab");
+        if (secondary != null && secondaryProp.objectReferenceValue == null)
+            secondaryProp.objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<GameObject>($"{TripoPrefabDir}/{secondary}.prefab");
+        if (so.ApplyModifiedPropertiesWithoutUndo()) EditorUtility.SetDirty(spell);
+    }
+
     /// <summary>
     /// Opts <paramref name="target"/> in to slows and staggers: adds a
     /// <see cref="StatusReceiver"/> if it has none, and destroys and rebuilds its

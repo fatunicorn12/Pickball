@@ -16,7 +16,7 @@ MonoBehaviour:
   delivery: 2
   themeColour: {r: 0.55, g: 0.9, b: 1, a: 1}
   icon: {fileID: 21300000, guid: 820e2edbc5db90c4b9ccf7ac7ffd5574, type: 3}
-  modelPrefab: {fileID: 0}
+  modelPrefab: {fileID: 7881971645844902106, guid: 013883e78c54b79458f6af2b6e663305, type: 3}
   secondaryModelPrefab: {fileID: 0}
   modelScale: 1
   manaCost: 35
