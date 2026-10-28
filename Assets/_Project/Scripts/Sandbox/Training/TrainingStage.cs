@@ -1,4 +1,5 @@
 using System;
+using Pickleball.Sandbox.Combat;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -39,16 +40,57 @@ namespace Pickleball.Sandbox
         [Tooltip("Air time below this is a stumble off a step, not a jump, and is not recorded.")]
         [SerializeField] private float minAirTime = 0.2f;
 
-        bool _airborne;
-        Vector3 _takeoff;
-        float _takeoffTime;
-        float _apexY;
+        [Header("Combo readout")]
+        [Tooltip("Sword to read the chain step from. Optional.")]
+        [SerializeField] private MeleeCombat melee;
+        [Tooltip("Dummies whose damage feeds the combo readout.")]
+        [SerializeField] private Health[] dummies = Array.Empty<Health>();
+        [SerializeField] private TMP_Text comboReadout;
+        [Tooltip("Seconds after the last hit before the combo resets. Matches TrainingDummy.refillDelay.")]
+        [SerializeField] private float comboTimeout = 2.5f;
+
+        ComboTracker _combo;
+        JumpSampler _jump;
+        bool _comboDirty = true;
 
         bool _hasJump;
         float _lastRise, _lastCarry, _lastAirTime;
         float _bestRise, _bestCarry;
 
         float _nextRefresh;
+
+        void Awake() => EnsureLogic();
+
+        void EnsureLogic()
+        {
+            _combo ??= new ComboTracker(comboTimeout);
+            _jump ??= new JumpSampler(minAirTime);
+        }
+
+        void OnEnable()
+        {
+            EnsureLogic();
+            foreach (var d in dummies) if (d != null) d.Hurt += OnDummyHurt;
+            if (melee != null) melee.SwingStarted += OnSwingStarted;
+        }
+
+        void OnDisable()
+        {
+            foreach (var d in dummies) if (d != null) d.Hurt -= OnDummyHurt;
+            if (melee != null) melee.SwingStarted -= OnSwingStarted;
+        }
+
+        void OnDummyHurt(float amount, Vector3 at)
+        {
+            _combo.RegisterHit(amount, Time.time);
+            _comboDirty = true;
+        }
+
+        void OnSwingStarted(ResolvedStep step)
+        {
+            _combo.RegisterSwing(step.Index, step.Step != null ? step.Step.DisplayName : string.Empty, Time.time);
+            _comboDirty = true;
+        }
 
         void Update()
         {
@@ -66,10 +108,25 @@ namespace Pickleball.Sandbox
                 return;
             }
 
-            TrackJump(pos);
+            if (_combo.Tick(Time.time)) _comboDirty = true;
+            if (_comboDirty) RefreshCombo();
 
             if (readout != null && Time.unscaledTime >= _nextRefresh)
                 Refresh();
+        }
+
+        // After every Update has run, so the motor's final position this frame is what is sampled.
+        void LateUpdate()
+        {
+            if (player == null) return;
+            if (!_jump.Sample(player.transform.position, player.isGrounded, Time.time, out var r)) return;
+            _hasJump = true;
+            _lastRise = r.Rise;
+            _lastCarry = r.Carry;
+            _lastAirTime = r.AirTime;
+            _bestRise = Mathf.Max(_bestRise, r.Rise);
+            _bestCarry = Mathf.Max(_bestCarry, r.Carry);
+            Refresh();
         }
 
         /// <summary>Back to the spawn with full health. Optionally also revokes
@@ -89,38 +146,21 @@ namespace Pickleball.Sandbox
                 foreach (AbilityKind kind in Enum.GetValues(typeof(AbilityKind)))
                     abilities.Revoke(kind);
 
-            _airborne = false;
+            _jump.Reset();
+            _combo.Clear();
+            _comboDirty = true;
             Refresh();
         }
 
-        void TrackJump(Vector3 pos)
+        void RefreshCombo()
         {
-            bool grounded = player.isGrounded;
-
-            if (!_airborne && !grounded)
-            {
-                _airborne = true;
-                _takeoff = pos;
-                _takeoffTime = Time.time;
-                _apexY = pos.y;
-            }
-            else if (_airborne)
-            {
-                _apexY = Mathf.Max(_apexY, pos.y);
-                if (!grounded) return;
-
-                _airborne = false;
-                float airTime = Time.time - _takeoffTime;
-                if (airTime < minAirTime) return;
-
-                _hasJump = true;
-                _lastRise = _apexY - _takeoff.y;
-                _lastCarry = Vector2.Distance(new Vector2(_takeoff.x, _takeoff.z), new Vector2(pos.x, pos.z));
-                _lastAirTime = airTime;
-                _bestRise = Mathf.Max(_bestRise, _lastRise);
-                _bestCarry = Mathf.Max(_bestCarry, _lastCarry);
-                Refresh();
-            }
+            _comboDirty = false;
+            if (comboReadout == null) return;
+            string last = _combo.Hits > 0 ? _combo.LastHit.ToString("0") : "-";
+            string step = _combo.ChainStep == 0 ? "-"
+                : _combo.StepName.Length > 0 ? $"{_combo.ChainStep}  {_combo.StepName}"
+                : _combo.ChainStep.ToString();
+            comboReadout.text = $"HITS  {_combo.Hits}\nTOTAL  {_combo.TotalDamage:0}\nLAST HIT  {last}\nCHAIN  {step}";
         }
 
         void Refresh()

@@ -149,3 +149,12 @@ The strongest idempotency check is done with git, in a throwaway worktree:
 2. Commit the result.
 3. Run the menu again.
 4. Require `git status --porcelain` to be empty.
+
+## Training stage readouts
+
+`ComboTracker` (hits, damage total, last hit, chain step, timeout reset) and `JumpSampler` (take-off at
+the last grounded sample) are plain C# under `Scripts/Sandbox/Training/`, tested in
+`Tests/EditMode/Training/TrainingReadoutTests.cs`. `TrainingStage` only wires them to `Health.Hurt`,
+`MeleeCombat.SwingStarted` and `LateUpdate`; the HUD panels, controls card and stations are built by
+`TrainingStageSetup.cs` (Tools > Pickleball > Build Training Stage), with the tunables as consts at its top
+and `comboTimeout` on `TrainingStage`.
