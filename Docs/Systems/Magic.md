@@ -19,8 +19,8 @@ by a person yet. The spells were checked by a headless Play-mode harness on Trai
   calls `MagicSpellArtBuilder.AttachStatusReceiver` on each dummy it builds.
 - **Tests:** `Assets/_Project/Tests/EditMode/Magic/` (`ManaPoolTests`, `ManaTests`, `OrbMathTests`,
   `AimInputClaimsTests`, `SpellChannelTests`, `ChannelSignalsTests`, `SpellCooldownsTests`,
-  `SpellSelectionTests`, `SlowLedgerTests`, `FreezeZoneTests`, `BurnTests`, `StrikeMathTests`; shared
-  `MagicTestFixture`).
+  `SpellSelectionTests`, `SpellSelectInputTests`, `SlowLedgerTests`, `FreezeZoneTests`, `BurnTests`,
+  `StrikeMathTests`; shared `MagicTestFixture`; and M-1's `SpellInputTests`).
 
 ## 1. Purpose and player-facing feel
 
@@ -216,8 +216,12 @@ BurnVisual), which listens and detaches itself to finish when the gameplay objec
   VFX or audio.
 - **Input** is `SpellInput` and `SpellSelectInput`. Like `SwordInput`, `SpellInput` counts mouse
   buttons only while the orbit camera has captured the cursor and not on the frame it re-locks, so
-  the click that recaptures the cursor never fires a spell. `SpellSelectInput` reads nothing while
-  the gate blocks Spell, and its pad cycle only while `IAimState.IsAiming`.
+  the click that recaptures the cursor never fires a spell. Both latch their presses from the
+  actions' performed callbacks (M-1): a press is seen through the frame's Update and cleared in
+  their `LateUpdate`, used or not. The caster starts a channel only on that latched press and keeps
+  it going on the polled `FireHeld`, so a press made before aiming never starts one.
+  `SpellSelectInput` reads nothing while the gate blocks Spell, and its pad cycle only while
+  `IAimState.IsAiming`; a press dropped for either reason is not saved for later.
 - **Presentation** is `MagicOrbVisual` (the orb's and the fireball's glow, halo, trail, light and
   burst), `LightningStrikeVisual`, `FreezeZoneVisual`, `BurnVisual`, `StatusReceiverVisual`,
   `HealChannelVisual`, and the HUD views `ManaBarView`, `SpellCrosshairView`, `SpellSelectorView` and
@@ -471,12 +475,14 @@ aiming" component.
 
   Expect tuning of `aimMoveScale`, the camera framing, `orbSpeed` and the aim assist.
 - **The four new spells are not play-tested by a person.** They were exercised by a throwaway
-  headless Play-mode harness on TrainingStage (a virtual gamepad and keyboard driving the real
-  `SpellInput`, so M-1's latched fire press included; 47 checks): selection by keys and by the pad
-  cycle; each spell's cost; orb, fireball, thunderbolt and chain damage; the burn's six ticks; the
-  stagger; the zone's slow on two dummies and its end; the heal completing in 2 s standing still,
-  paying 40 at completion, and cancelling on movement, a hit, letting go and a jump. That harness
-  is not committed.
+  headless Play-mode harness on TrainingStage, rebased onto M-1 (a virtual gamepad and keyboard
+  driving the real `SpellInput` and `SpellSelectInput`; 53 checks): selection by keys and by the
+  pad cycle; each spell's cost; orb, fireball, thunderbolt and chain damage; the burn's six ticks;
+  the stagger; the zone's slow on two dummies and its end; the heal completing in 2 s standing
+  still, paying 40 at completion, and cancelling on movement, a hit, letting go and a jump. With
+  M-1's latched fire: a press made before aiming neither casts nor starts a heal, the latched press
+  starts a channel on its frame, the polled `FireHeld` sustains it, one press starts one channel,
+  and a release does not restart it. That harness is not committed.
 - **Needs the user's OK:** the selection bindings (pad cycle on d-pad up/down while aiming, not
   left/right; see Controls), the costs and cooldowns in the Spells table, Heal's mana timing (on
   completion) and its input (aim + held fire), and the Thunderbolt following its target.
