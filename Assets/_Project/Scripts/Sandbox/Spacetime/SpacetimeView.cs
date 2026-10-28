@@ -69,8 +69,20 @@ namespace Pickleball.Sandbox
 
         /// <summary>Remaining 4D time as 0–1, for a HUD meter. Always 1 when the
         /// meter is off.</summary>
-        public float Charge01 =>
-            settings != null && settings.MaxDuration > 0f ? _charge / settings.MaxDuration : 1f;
+        public float Charge01
+        {
+            get
+            {
+                if (settings == null || settings.MaxDuration <= 0f) return 1f;
+                // Before the first tick the meter has not been filled yet (_charge
+                // holds a −1 sentinel). It starts full, so report full, not the
+                // −0.17 the raw ratio gives.
+                if (_charge < 0f) return 1f;
+                // Clamped as well: lowering maxDuration mid-play leaves a charge
+                // above the new maximum until the next tick.
+                return Mathf.Clamp01(_charge / settings.MaxDuration);
+            }
+        }
 
         /// <summary>
         /// Longest frame the meter will charge for, s. Building every beam makes
@@ -101,6 +113,7 @@ namespace Pickleball.Sandbox
         Material _runtimeMaterial;
         bool _warnedNoShader;
         bool _warnedDuplicate;
+        bool _togglePressed;
         float _charge = -1f;
         float _lastFlip = float.NegativeInfinity;
 
@@ -124,8 +137,22 @@ namespace Pickleball.Sandbox
             if (_runtimeMaterial != null) Dispose(_runtimeMaterial);
         }
 
-        void Update() =>
-            Tick(_toggle != null && _toggle.WasPressedThisFrame(), Time.time, Time.deltaTime);
+        void Update()
+        {
+            bool pressed = _togglePressed;
+            _togglePressed = false;
+            Tick(pressed, Time.time, Time.deltaTime);
+        }
+
+        /// <summary>
+        /// Latched from the action's callback rather than polled with
+        /// WasPressedThisFrame. Polling only sees a press made in the same update
+        /// that Update runs in. Input processed elsewhere (an unfocused Editor,
+        /// simulated keys, a different update mode) performs the action but is
+        /// never "this frame", and a flip that silently eats a press reads as
+        /// broken. Same pattern as LockOnTargeting.
+        /// </summary>
+        void OnTogglePerformed(InputAction.CallbackContext _) => _togglePressed = true;
 
         /// <summary>
         /// One frame of the view: the switch, the flip, the meter and the
@@ -241,6 +268,7 @@ namespace Pickleball.Sandbox
                 _toggle.AddBinding("<Keyboard>/t");
                 // D-pad left: up/down is camera zoom and right is the skateboard.
                 _toggle.AddBinding("<Gamepad>/dpad/left");
+                _toggle.performed += OnTogglePerformed;
                 _toggle.Enable();
             }
             else
@@ -251,7 +279,11 @@ namespace Pickleball.Sandbox
 
         void DisposeInput()
         {
+            // A press latched just before the switch went off must not fire when
+            // it comes back on.
+            _togglePressed = false;
             if (_toggle == null) return;
+            _toggle.performed -= OnTogglePerformed;
             _toggle.Disable();
             _toggle.Dispose();
             _toggle = null;

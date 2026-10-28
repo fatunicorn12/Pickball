@@ -8,9 +8,17 @@ Scene: `Assets/_Project/Scenes/SpacetimeLab.unity`
 Menus: **Tools ▸ Pickleball ▸ Spacetime ▸** Enable · Disable · Add To Sandbox · Remove From Sandbox ·
 Create Spacetime Lab Scene
 
-> **Off by default.** The feature has not been play-tested yet, so it ships switched off. While off,
-> nothing happens: no input binding is registered, nothing records, no beams appear, and
-> ChibiSandbox and the Windows build behave exactly as they did without it.
+> **Off by default.** The feature has not been play-tested yet, so it ships switched off. While off
+> there is no player-visible behaviour: no input binding is registered, nothing records, the view
+> never flips, and no beams appear. ChibiSandbox and the Windows build are unchanged, because
+> **Add To Sandbox** refuses to touch a scene while the switch is off. In a scene that already
+> has the components (SpacetimeLab, or a sandbox wired while the switch was on), they are not
+> completely idle:
+> - `SpacetimeView.Update` and `WorldlineRecorder.LateUpdate` still run every frame, and return
+>   early.
+> - Recorders still register on the settings asset's `Live` list and subscribe to `Changed`.
+> - The view still applies its `onlyIn4D` / `onlyIn3D` dressing on enable. Objects listed in
+>   `onlyIn4D` are hidden even while the feature is off.
 
 ## 1. Purpose and feel
 
@@ -23,8 +31,11 @@ solid beam you can stand on: its *worldline*.
 - A platform moving in a circle leaves a **spiral staircase**.
 - Newton's apple barrage becomes a **forest of frozen falls**.
 
-The past is drawn as a spacetime diagram. Each moment is shifted by `timeAxis × age`, so with the
-default upward axis older positions sit lower, and the present sits exactly where the object is.
+The past is drawn as a spacetime diagram. Each sample is drawn at
+`position − timeAxis × age`, where `age = now − sampleTime`; in code this is
+`position + timeAxis × (sampleTime − now)`. So the past is shifted *against* the axis. With the
+default upward axis older positions sit lower, and the present (age 0) sits exactly where the
+object is.
 Colour runs from violet (past) to cyan (present).
 
 The loop: **in 3D you change things, in 4D you walk on the results.** The beams are a snapshot
@@ -43,6 +54,11 @@ Bound in `SpacetimeView`, and **only while Spacetime is enabled**.
 D-pad Up/Down is the camera zoom and D-pad Right is the skateboard, so Left is the only free
 d-pad direction. T is not bound by anything else (movement uses R, E, Q, G, F, Space, Shift and
 Ctrl; lock-on uses Tab).
+
+The press is latched from the action's `performed` callback and consumed by the next `Update`,
+the same pattern as lock-on, rather than polled with `WasPressedThisFrame`. Polling dropped
+presses in an unfocused Editor and with simulated input (ST6). A press latched while the switch
+is being turned off is discarded.
 
 ## 2. Architecture
 
@@ -63,6 +79,16 @@ missing or `Enabled` false, `SpacetimeView.Tick` disposes the input action and l
 `WorldlineRecorder.Sample` drops its history and returns. Switching off mid-play takes effect
 on the next frame.
 
+**One view per settings asset.** `In4D` is a single state on the asset, so only one
+`SpacetimeView` may drive it. The first view to tick claims it (`SpacetimeSettings.TryClaim`).
+A second view wired to the same asset logs a warning once and does nothing, and the claim is
+released in `OnDisable`. Use a second settings asset if two independent 4D worlds are ever
+needed.
+
+**The ended-line cap.** `SpacetimeSettings.Ended` holds at most 256 histories (`MaxEnded`). Past
+that, the oldest is dropped to make room. A long apple barrage can hit this, and then the
+earliest apples' lines vanish before they would have aged out.
+
 **Beams and the player.** A beam built through the player's capsule (above step height) starts
 with its collider disabled, and becomes solid once the player is clear. Each beam ignores
 collisions with its own object's colliders, so a physics-driven object is not kicked out of its
@@ -78,8 +104,17 @@ Everything is on `SpacetimeSettings.asset`:
   `minChargeToEnter`, `flipCooldown`.
 - **What gets recorded:** `recordApples`.
 
-Per object, on `WorldlineRecorder`: `historySeconds`, `sampleSpacing`, `sampleInterval`,
-`teleportDistance`, `traceOffset`, and width/thickness overrides.
+Per object, on `WorldlineRecorder`:
+- `settings`: the asset it records into. Empty means it is inert.
+- `historySeconds`, `sampleSpacing`, `sampleInterval`: read when a history is *created* (on
+  enable, after a teleport, or after the switch comes back on), so changing them mid-play only
+  affects the next history.
+- `teleportDistance`: a single-frame jump bigger than this splits the line. A long hitch on a
+  fast object can split it falsely.
+- `traceOffset`: the traced point, relative to the pivot in world space.
+- `width`, `thickness`: per-object overrides. 0 means use the settings value.
+- `hideWhileIn4D`: hides the object's renderers and non-`CharacterController` colliders while in
+  4D.
 
 Worth knowing: with an upward time axis, a back-and-forth mover whose period is shorter than about
 twice `historySeconds` stacks the legs of its zigzag too close together to walk between. The lab's
@@ -93,12 +128,30 @@ call `recorder.Bind(settings)` after `AddComponent`, as `SpacetimeView.RecordApp
 
 **Wire Spacetime into another scene:** enable it, open the scene, and run **Add To Sandbox**. It
 needs a `ChibiLocomotion` in the scene. It adds one `Spacetime` object with the view (bound to the
-settings and the chibi's controller) and a recorder on Newton if he is there. It is idempotent,
-marks the scene dirty and never saves. **Remove From Sandbox** undoes it.
+settings and the chibi's controller) and a recorder on Newton if he is there. It never saves. It
+is idempotent in what it creates, with three caveats:
+- A second run re-applies its wiring, so it overwrites manual edits to the view's `settings` /
+  `player` and to Newton's recorder `settings` / `traceOffset`.
+- It marks the scene dirty even when nothing changed.
+- If the scene already has a `SpacetimeView` anywhere, it rewires that one instead of creating
+  the `Spacetime` object.
+
+**Remove From Sandbox** is broader than an undo of Add. It removes *every* `SpacetimeView` and
+*every* `WorldlineRecorder` in the open scenes, except recorders on `SpacetimeDemoMover`s:
+- That includes recorders added by hand or by other menus.
+- A view's GameObject is deleted only if it is named `Spacetime` and holds nothing else.
+  Otherwise just the component goes.
+
+It runs whatever the switch says, and only works outside Play mode.
 
 **React to 4D from another system** (a sky tint, music, a HUD meter): subscribe to
-`SpacetimeSettings.Changed`, or list objects in the view's `onlyIn4D` / `onlyIn3D` arrays. A HUD
-meter can read `SpacetimeView.Charge01`.
+`SpacetimeSettings.Changed`, or list objects in the view's `onlyIn4D` / `onlyIn3D` arrays.
+
+A HUD meter can read `SpacetimeView.Charge01`. It is always in [0, 1]: it reads 1 before the
+first tick, while the meter is disabled (`maxDuration` 0) and while unwired. Before the QA fix
+(ST1) it read −0.17 before the first tick. Check `SpacetimeView.Active` first and
+hide the meter while the feature is off. Otherwise it shows a full meter for a feature that
+does nothing.
 
 ## 5. Known limitations and open questions
 
@@ -113,6 +166,24 @@ meter can read `SpacetimeView.Charge01`.
 - **The player is not recorded.** Walking on your own past is an obvious next experiment.
   `OverlapsPlayer` already copes with beams that appear at the player's feet.
 - **Stacked intangible beams** are re-tested every frame while in 4D, so many of them at once costs
-  a physics query each per frame.
+  a physics query each per frame. The query reads into a 64-entry buffer, so in a crowded spot a
+  beam can be missed and stay intangible longer than it should (ST8).
+- **Beams are on the Default layer** (ST8). In 4D they are ordinary static colliders:
+  - They block lock-on's line of sight and the tether's reach.
+  - They can trap Newton or anything else that moves into them.
+  - Only the beam's own object ignores it.
+  
+  A dedicated layer, excluded from those queries, would fix it, but needs a `ProjectSettings` tag
+  and layer change, which is a shared file.
+- **Ended lines can go stale** (ST7). `Ended` is only pruned while the switch is on, and the
+  settings asset outlives scenes in Play mode. Two consequences:
+  - Switch off, wait, then switch back on. Until the next tick, `Ended` still holds lines from
+    before the switch went off, so a scripted `Enter()` in that window draws them. The key can't
+    hit the window, because the binding only appears on that first tick, which also prunes.
+  - After a scene change, the previous scene's ended lines stay until they age out
+    (`historySeconds`). Flipping during that window draws the old scene's ghosts.
+
+  Clearing `Ended` when the switch goes off and when the scene changes would fix both. That isn't
+  done yet.
 - **Coding-standards deviation:** `SpacetimeView` reads the static `Apple.Airborne` list to find
   apples to record. The alternative was editing the Apple prefab, which this feature does not own.
