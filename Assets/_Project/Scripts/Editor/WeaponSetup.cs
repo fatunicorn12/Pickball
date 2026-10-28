@@ -40,31 +40,31 @@ public static class WeaponSetup
     /// ends by popping the target up, which is the setup for juggling it with
     /// the air attack.
     ///
-    /// Windows are fractions of each clip. These clips carry long wind-ups, so
-    /// the blade goes live around 35% and the chain opens at 50%.
-    ///
     /// `speed` is the Animator state's playback rate. Mixamo authors these
     /// swings at 1.37-1.73s, which is far too ponderous for an arcade combo, so
     /// each is played back at roughly 2.2-2.5x. Measured peak hand speed lands
-    /// at 40-53% of every clip, comfortably inside the active windows below, and
-    /// the windows are fractions — so speeding the states up rescales the whole
-    /// chain without moving the strike out of its hit window.
+    /// at 40-53% of every clip.
+    ///
+    /// Only the clip and the speed live here. The hit windows (active,
+    /// comboOpen, comboClose) used to sit in this table too and were written
+    /// into MeleeCombat; they now live on the step assets
+    /// (ScriptableObjects/Combat/Steps/Step_Slash1-4, Step_AirSlash), which are
+    /// the only source of truth for timing. The columns were removed rather
+    /// than left to drift — AirAttack's had already drifted from its asset.
     /// </summary>
-    static readonly (string role, string file, string trigger, float speed,
-                     float activeStart, float activeEnd,
-                     float comboOpen, float comboClose)[] AttackClips =
+    static readonly (string role, string file, string trigger, float speed)[] AttackClips =
     {
         // 1.37s -> 0.55s. L>R, flat, wide — fastest of the set, so it opens.
-        ("attack1", "sword and shield slash (5).fbx", "Attack1", 2.5f, 0.32f, 0.60f, 0.46f, 0.90f),
+        ("attack1", "sword and shield slash (5).fbx", "Attack1", 2.5f),
         // 1.73s -> 0.69s. R>L, widest lateral sweep (0.603) and longest reach.
-        ("attack2", "sword and shield attack (3).fbx", "Attack2", 2.5f, 0.35f, 0.62f, 0.50f, 0.92f),
+        ("attack2", "sword and shield attack (3).fbx", "Attack2", 2.5f),
         // 1.50s -> 0.63s. L>R, downward, big vertical — the heavy third hit.
-        ("attack3", "sword and shield slash.fbx", "Attack3", 2.4f, 0.34f, 0.62f, 0.50f, 0.92f),
+        ("attack3", "sword and shield slash.fbx", "Attack3", 2.4f),
         // 1.57s -> 0.71s. R>L, UPWARD — the launcher that ends the ground chain.
         // Kept the slowest of the four so the finisher still lands with weight.
-        ("attack4", "sword and shield slash (3).fbx", "Attack4", 2.2f, 0.34f, 0.64f, 0.55f, 0.95f),
+        ("attack4", "sword and shield slash (3).fbx", "Attack4", 2.2f),
         // 1.00s -> 0.45s. In place, compact — suits being airborne.
-        ("airAttack", "sword and shield attack (4).fbx", "AirAttack", 2.2f, 0.25f, 0.60f, 0.5f, 0.9f),
+        ("airAttack", "sword and shield attack (4).fbx", "AirAttack", 2.2f),
     };
 
     /// <summary>
@@ -80,8 +80,8 @@ public static class WeaponSetup
     const float WeaponLength = 0.85f;
 
     /// <summary>
-    /// Name of the masked layer the combo lives on. MeleeCombat looks the layer
-    /// up by this name at runtime, so the two must agree.
+    /// Name of the masked layer the combo lives on. SwordAnimatorDriver and
+    /// SwingTwist look the layer up by this name at runtime, so they must agree.
     ///
     /// The attacks used to be full-body states on the base layer, which meant a
     /// swing replaced the run — the legs froze mid-stride while the character
@@ -204,7 +204,7 @@ public static class WeaponSetup
     static Dictionary<string, AnimationClip> ImportAttackClips()
     {
         var result = new Dictionary<string, AnimationClip>();
-        foreach (var (role, file, _, _, _, _, _, _) in AttackClips)
+        foreach (var (role, file, _, _) in AttackClips)
         {
             string path = $"{PackDir}/{file}";
             var imp = AssetImporter.GetAtPath(path) as ModelImporter;
@@ -367,7 +367,7 @@ public static class WeaponSetup
     public static void RewireControllerFromImportedClips()
     {
         var clips = new Dictionary<string, AnimationClip>();
-        foreach (var (role, file, _, _, _, _, _, _) in AttackClips)
+        foreach (var (role, file, _, _) in AttackClips)
         {
             var clip = AssetDatabase.LoadAllAssetsAtPath($"{PackDir}/{file}").OfType<AnimationClip>()
                 .FirstOrDefault(c => !c.name.StartsWith("__preview__"));
@@ -389,7 +389,7 @@ public static class WeaponSetup
         }
 
         var existing = new HashSet<string>(controller.parameters.Select(p => p.name));
-        foreach (var (_, _, trigger, _, _, _, _, _) in AttackClips)
+        foreach (var (_, _, trigger, _) in AttackClips)
             if (!existing.Contains(trigger))
                 controller.AddParameter(trigger, AnimatorControllerParameterType.Trigger);
         if (!existing.Contains("Combo"))
@@ -423,22 +423,23 @@ public static class WeaponSetup
         AssetDatabase.AddObjectToAsset(sm, controller);
 
         // Empty default state: the layer contributes nothing until a swing
-        // starts, and MeleeCombat fades its weight in for the duration.
+        // starts, and SwordAnimatorDriver fades its weight in for the duration.
         var idle = sm.AddState("None");
         sm.defaultState = idle;
 
-        // One state per swing, named after its trigger so MeleeCombat can
-        // crossfade to it by name. There are deliberately NO transitions on
+        // One state per swing, named after its trigger so SwordAnimatorDriver
+        // can crossfade to it by name. There are deliberately NO transitions on
         // this layer:
         //  - MeleeCombat's timer already owns every window (when the blade is
-        //    live, when the chain may extend), so it crossfades straight to the
-        //    next state itself. Trigger transitions duplicated that timing, and
+        //    live, when the chain may extend), and SwordAnimatorDriver crossfades
+        //    straight to each step as MeleeCombat starts it. Trigger transitions
+        //    duplicated that timing, and
         //    a click that landed while the layer was mid-blend left its trigger
         //    latched to fire a swing later on.
         //  - No exit back to None. An Override layer blending toward an empty
         //    state at full weight drags the arms toward the bind pose; the
-        //    swing instead holds its last frame while MeleeCombat fades the
-        //    layer weight to zero underneath it.
+        //    swing instead holds its last frame while SwordAnimatorDriver fades
+        //    the layer weight to zero underneath it.
         int chain = 0;
         for (int i = 0; i < 4; i++)
         {
@@ -469,7 +470,7 @@ public static class WeaponSetup
             stateMachine = sm,
             avatarMask = ChibiSandboxSetup.EnsureUpperBodyMask(),
             blendingMode = AnimatorLayerBlendingMode.Override,
-            defaultWeight = 0f,       // faded in by MeleeCombat
+            defaultWeight = 0f,       // faded in by SwordAnimatorDriver
         });
 
         EditorUtility.SetDirty(controller);
@@ -491,7 +492,11 @@ public static class WeaponSetup
     /// </summary>
     static void WireCombat(GameObject player, Transform bladeBase, Transform bladeTip)
     {
-        var combat = player.GetComponent<MeleeCombat>() ?? player.AddComponent<MeleeCombat>();
+        // Explicit check, not GetComponent ?? AddComponent: in the Editor a
+        // missing component comes back as a fake-null object that ?? treats as
+        // real, so the component was never added on a fresh player.
+        if (!player.TryGetComponent(out MeleeCombat combat))
+            combat = player.AddComponent<MeleeCombat>();
 
         // Every previous run created one of these at the SCENE ROOT, unparented
         // and never cleaned up, so re-running the setup piled up a new BladeTrail

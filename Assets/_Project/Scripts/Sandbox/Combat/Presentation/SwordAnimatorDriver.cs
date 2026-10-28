@@ -98,7 +98,9 @@ namespace Pickleball.Sandbox.Combat.Presentation
         {
             if (combat == null || animator == null) return;
 
-            // Hitstop freezes the pose; MeleeCombat freezes the clock.
+            // Hitstop freezes the pose; MeleeCombat freezes the clock. IsInHitstop
+            // is false while combat is disabled, so a swordsman disabled mid-impact
+            // is thawed here on the next frame instead of staying frozen (QA CB4).
             bool freeze = combat.IsInHitstop;
             if (freeze != _frozeAnimator)
             {

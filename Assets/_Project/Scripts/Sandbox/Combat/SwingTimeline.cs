@@ -32,8 +32,21 @@ namespace Pickleball.Sandbox.Combat
         /// <summary>True while the blade should be swept for hits.</summary>
         public bool IsBladeLive => IsRunning && _bladeLive;
 
-        /// <summary>True once a buffered press may chain into the next step.</summary>
-        public bool IsChainWindowOpen => IsRunning && Normalized >= _windows.ComboOpen;
+        /// <summary>
+        /// True once a buffered press may chain into the next step: at
+        /// comboOpen, but never before the blade window has closed or the
+        /// step's burst has been released.
+        ///
+        /// Chaining used to open at comboOpen alone, which every shipped step
+        /// put before activeEnd — so a mashed chain cut each hit's live window
+        /// roughly in half (+ C kept ~64 ms), and jumping out of Area Under the
+        /// Curve before its burst lost the ring (QA CB2). A chain may cancel a
+        /// swing's recovery, never its strike.
+        /// </summary>
+        public bool IsChainWindowOpen => IsRunning
+            && Normalized >= _windows.ComboOpen
+            && Normalized >= _windows.ActiveEnd
+            && (_burstAt < 0f || _burstFired);
 
         /// <summary>Begin a swing of <paramref name="duration"/> seconds.
         /// <paramref name="burstAt"/> is the fraction at which to release the
@@ -88,6 +101,13 @@ namespace Pickleball.Sandbox.Combat
 
             if (t >= _windows.ComboClose || t >= 1f)
             {
+                // A swing that ends with its burst still pending (authored past
+                // comboClose) releases it now rather than silently dropping it.
+                if (!_burstFired && _burstAt >= 0f)
+                {
+                    _burstFired = true;
+                    signal |= SwingSignal.BurstDue;
+                }
                 if (_bladeLive) signal |= SwingSignal.BladeOff;
                 _bladeLive = false;
                 IsRunning = false;

@@ -17,7 +17,8 @@ namespace Pickleball.Sandbox
     {
         [Header("Grants")]
         [SerializeField] private AbilityKind ability = AbilityKind.DoubleJump;
-        [Tooltip("Leave the pickup in the scene after collection (useful for testing).")]
+        [Tooltip("Destroy the pickup once collected. Untick to leave it in the scene " +
+                 "after collection, so it can be picked up again (useful for testing).")]
         [SerializeField] private bool consumeOnPickup = true;
 
         [Header("Idle motion")]

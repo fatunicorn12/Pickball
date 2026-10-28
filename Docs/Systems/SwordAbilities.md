@@ -32,12 +32,18 @@ How the chains behave:
 - **One jump buys one air combo.** The air chain refills only when you land, which is what makes
   Air Combo Plus worth learning.
 - **The ground chain resets whenever a swing ends without a follow-up press.**
+- **Mashing never cuts a hit short.** A buffered press chains at the step's `comboOpen`, but never
+  before its blade window has closed or its finisher ring has gone out.
 - **Swinging still never moves or stops you.** The only exception is a step's one-off lunge
   impulse; Area Under the Curve steps in 2.5 m/s.
 
 With the shipped curve (base 50 Lemmas, growth 1, 1.5 Lemmas per HP of damage), levels 2–5 cost
 50, 150, 300 and 500 Lemmas in total. That is roughly 34, 100, 200 and 333 HP of sword damage,
 so the whole slice unlocks inside one Newton fight (600 HP), with a +250 defeat bonus on top.
+
+Only damage actually dealt pays, and each target pays out its worth (max health in damage plus one
+defeat bonus) **once per session**. So the refilling training dummy can't be farmed, and a Newton
+rematch pays nothing new.
 
 ## 2. Architecture
 
@@ -48,6 +54,7 @@ SwordInput ──AttackPressed──▶ MeleeCombat ◀── ICombatMovement / 
                                    │  sweeps the blade, runs AreaBurst rings, deals damage via IDamageable
                                    ├─ SwingStarted ──────▶ SwordAnimatorDriver (crossfade, layer weight, hitstop freeze)
                                    ├─ BladeLiveChanged ──▶ SwordEffects (trail on/off)
+                                   ├─ HitConnecting ─────▶ CombatXpSource (target health before the hit)
                                    ├─ HitLanded ─────────▶ SwordEffects (sparks, hit pop, shake) · CombatXpSource (Lemmas)
                                    ├─ BurstReleased ─────▶ SwordEffects (ring prefab, sized from the event)
                                    └─ ChainEnded ────────▶ SwordEffects (trail off)
@@ -77,7 +84,7 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
 | `SwordAbilities` | The learned set (`Grant` / `Has` / `Revoke` / `Unlocked` event). The sword's counterpart to `PlayerAbilities`. | gameplay |
 | `ChibiMovementAdapter` | Implements `ICombatMovement` and `ICombatImpulses` over ChibiLocomotion's public API. | adapter |
 | `PlayerLevel` | Converts Lemmas into levels. Raises `XpGained` and, once per level gained, `LeveledUp(new, previous)`. | progression |
-| `CombatXpSource` | Turns `HitLanded` into Lemmas, plus a defeat bonus when a `Health` dies on that hit. | progression |
+| `CombatXpSource` | Reads the target's `Health` on `HitConnecting` and `HitLanded` and pays what `XpLedger` says the hit was worth. | progression |
 | `LevelUnlocks` | Grants the abilities listed in the level table as levels are reached. | progression |
 | `SwordAnimatorDriver` | Crossfades the step's Attack-layer state, fades the layer weight, freezes `animator.speed` during hitstop. | presentation |
 | `SwordEffects` | Blade trail tint and emit, impact sparks, pooled hit and burst effects, camera shake and FOV kick. | presentation |
@@ -96,8 +103,24 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
 - **`ComboProgress`:** ground and air hit counters. Ground resets when the chain is dropped or you
   leave the ground; air resets only on landing.
 - **`SwingTimeline`:** the swing clock, with blade-on and blade-off, chain-window, burst and finish
-  signals. A long frame that crosses the whole active window still reports both edges, so the
-  blade still gets swept.
+  signals.
+  - The chain window opens at `comboOpen`, but never before `activeEnd` or before the step's burst
+    has been released.
+  - A burst still pending when the swing ends is released then, not dropped.
+- **`BladeSweep`:** which capsules to overlap-test each frame.
+  - The blade is sampled on every frame of a swing, live or not.
+  - A frame whose interval touched the active window tests the blade where it is plus the arc its tip
+    and base swept since last frame.
+  - So the first live frame, the frame the blade stops, and a long frame that jumps the whole
+    window are all tested.
+- **`GroundContact`:** "airborne" means off the ground for longer than the grace.
+  - That one answer picks the chain for a press and drops the ground chain, so a one-frame flicker
+    on a slope does neither.
+  - Landing counts at once.
+- **`XpLedger`:** what a hit is worth.
+  - Only damage actually applied pays (health before minus after).
+  - The defeat bonus is paid only for the blow that takes a target from above zero to zero.
+  - Each target pays at most its max health plus one bonus, once per session.
 - **`AreaBurst`:** the ring's growth (`GrowthFraction`, an ease-out shared with the visual), its
   height-band test and its centre.
 - **`ExperienceCurve`:** XP from level L to L+1 is `baseXp·L^growth`, with totals and the inverse.
@@ -131,8 +154,9 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
 - Every step plays a state on the masked upper-body **Attack** layer (built by Setup Weapon).
 - `SwordAbilitySetup.WireAttackStatesFromAssets()` adds or updates one state per step asset (clip,
   speed, foot IK off). It never removes states.
-- The five base step assets mirror `WeaponSetup.AttackClips` exactly (`Attack1–4`, `AirAttack`),
-  so the two scripts agree on those states.
+- The five base step assets mirror `WeaponSetup.AttackClips`' clip and speed (`Attack1–4`,
+  `AirAttack`), so the two scripts agree on those states. Hit windows live only on the step
+  assets; `WeaponSetup` no longer carries any.
 - `WeaponSetup` calls back into `SwordAbilitySetup`, so every rebuild of the Attack layer restores
   the ability states (see §5).
 - New states get their hip turn baked by `SwingTwistSetup.Bake`, which the setup menu calls.
@@ -144,10 +168,14 @@ Tune everything live in Play mode on the assets.
 
 - **One swing's feel:** the `Step_*` asset.
   - `playbackSpeed` sets speed. Every window is a fraction, so the strike stays inside its window.
-  - `windows.comboOpen` sets how early a buffered press chains.
+  - `windows.comboOpen` sets how early a buffered press chains. It never takes effect before
+    `activeEnd` or the step's burst; the shipped steps set it equal to `activeEnd`.
   - `hit.hitstop` sets weight.
-  - `hit.knockback`: keep mid-chain hits at or under about 1.5 m/s, or a long chain shoves the target
-    out of reach.
+  - `hit.knockback` (m/s) mostly sets how far a target rocks or slides.
+    - The base hits push 3–4 m/s, inherited from the original chain. That is fine against targets
+      that stay planted: Newton ignores knockback, and the training dummy only rocks.
+    - For enemies that really slide, keep mid-chain hits at or under about 1.5 m/s, as + C does, or
+      a long chain shoves them out of reach before the finisher.
 - **Finisher rings:** the `burst` block.
   - `radius` (m) and `expandSeconds` (s): together these set how readable and jumpable the ring is.
   - `triggerAt`: line it up with the clip's impact frame.
@@ -160,12 +188,14 @@ Tune everything live in Play mode on the assets.
 - **Pace of levelling:** on `Leveling_Player`:
   - `baseXp` sets the pace of the whole curve;
   - `growth` above 1 makes late levels grind;
-  - `xpPerDamage` and `xpPerDefeat` set earning;
+  - `xpPerDamage` and `xpPerDefeat` set earning. Each target pays them out once per session (see
+    `XpLedger`);
   - the `unlocks` table sets the order.
 - **Input forgiveness:** on `MeleeCombat`:
   - `pressBufferSeconds` is how long a press made mid-dash or in hitstop is remembered;
-  - `airborneGraceSeconds` absorbs grounded flicker on slopes, which would otherwise drop a ground
-    chain.
+  - `airborneGraceSeconds` absorbs grounded flicker on slopes. It decides both which chain a press
+    continues and when the ground chain drops, so a press this soon after a real jump still plays a
+    ground step.
 - **Testing late unlocks:**
   - Raise `PlayerLevel.startingLevel`.
   - In Play mode, use **PlayerLevel ▸ ⋮ ▸ Debug: Gain One Level** or **Debug: Max Level**.
@@ -192,8 +222,10 @@ That needs no code. New *behaviour* is small and contained:
 - **A new effect glyph** ("!" for Factorial, "∴" for Corollary): build a prefab with a `PopFlashEffect`,
   or a new `PooledEffect` subclass, and drop it in the step's `presentation.hitEffect`.
 - **A movement-coupled slash** (dive slash, spin slash, plunge, air hang time): add what you need
-  to `ICombatMovement` or `ICombatImpulses` and one line to `ChibiMovementAdapter`, once the
-  movement rework exposes it. See open questions.
+  to `ICombatMovement` or `ICombatImpulses` and one line to `ChibiMovementAdapter`.
+  - The merged movement rework already exposes the levers: `SetVerticalVelocity`, `SuspendGravity`,
+    and `ChibiLocomotion.Movement`.
+  - See open questions.
 
 **Using a clip from the pack that isn't wired yet:** 44 of the 49 Mixamo sword clips are still
 Generic and must be re-imported as Humanoid with `WeaponSetup.ImportAttackClips`' settings first.
@@ -237,9 +269,11 @@ A boss drop can grant an ability early; its level is the fallback.
 ## 5. Known limitations and open questions
 
 - **Not play-tested yet.**
-  - Verified on 2026-10-26 in a headless Unity 6000.3.5f2 on the branch's own worktree:
-    - Setup Sword Abilities ran clean, adding the 4 states and baking swing twist for all 9 swings.
-    - All 115 EditMode tests passed, 41 of them in `Tests/EditMode/Combat/`.
+  - Verified in a headless Unity 6000.3.5f2 on the branch's own worktree:
+    - 2026-10-26: Setup Sword Abilities ran clean, adding the 4 states and baking swing twist for
+      all 9 swings.
+    - 2026-10-27, after the QA fixes: all 198 EditMode tests passed, 61 of them in
+      `Tests/EditMode/Combat/`.
   - Nobody has watched the new swings in Play mode. The new states reuse clips that are already
     wired, at their own speeds: + C is Attack1's sweep at 3×, Phase Shift is the downstroke in the
     air, Unit Circle is the wide sweep, and Area Under the Curve is the launcher at 2×.
@@ -258,28 +292,30 @@ A boss drop can grant an ability early; its level is the fallback.
   air chain per airtime (KH-faithful): one hit at level 1, two at level 3. If that feels stingy,
   give the base air chain a second hit, or refill it on double jump. Don't remove the rule:
   without it Air Combo Plus is meaningless.
-- **Gamepad binding clash (resolved on merge):** the sword attack (`SwordInput`) uses Gamepad
-  `buttonWest`, which on this branch is also ChibiLocomotion's skateboard Mount.
-  - The movement rework moves Mount to D-pad Right (the user's call; `claude/sunshine-movement-b03f04`
-    @ ddb5c9d), so West stays the attack.
-  - Until that merges, a pad press on West both swings and mounts.
+- **Gamepad:** the sword attack (`SwordInput`) is Gamepad `buttonWest` and nothing else uses it.
+  The skateboard Mount moved to D-pad Right in the movement rework.
 - **No hang time or plunge yet:**
   - The adapter can only add *horizontal* momentum, because ChibiLocomotion drops the y of
     `AddMomentum` and gravity outgrows any field acceleration.
   - KH's air-combo hang time ("Stationary Point") and plunges ("Vertical Asymptote") need a vertical
-    hook. The movement rework adds one, on `claude/sunshine-movement-b03f04`:
-    `ChibiLocomotion.SetVerticalVelocity(m/s)` and `SuspendGravity(seconds)`.
-  - Once both branches are merged: add them to `ICombatImpulses` and `ChibiMovementAdapter`, add a
-    per-step "hang" / "vertical speed" field, and wrap `Movement.IMovementState` (MoveKind Dive,
-    SpinJump…) in `ICombatMovement` for dive- and spin-slashes.
-- **Lock-on attack facing:** `ChibiLocomotion` still reads `MeleeCombat.IsAttacking`. The movement
-  rework adds `ChibiLocomotion.SetCombatFacingSource(IFacingSource)`: a source's
-  `TryGetFacingTarget(out point, out urgent)` beats the lock-on square-up, and urgent uses the fast
-  attack turn.
-  - After both merges: add a small combat facing source (the lock-on aim point while
-    `IsAttacking`, urgent) and register it from the setup menu.
-  - Locomotion keeps the `IsAttacking` read as a fallback until a source is registered, then can
-    drop it.
+    hook. Since the merge, `ChibiLocomotion` has one, `SetVerticalVelocity(m/s)` and
+    `SuspendGravity(seconds)`, but combat can't reach it yet.
+  - Next step:
+    - add both to `ICombatImpulses` and `ChibiMovementAdapter`;
+    - add a per-step "hang" / "vertical speed" field;
+    - wrap `Movement.IMovementState` (MoveKind Dive, SpinJump…) in `ICombatMovement` for dive- and
+      spin-slashes.
+- **Lock-on attack facing:** `ChibiLocomotion` still falls back to reading `MeleeCombat.IsAttacking`.
+  - Since the merge it offers `SetCombatFacingSource(IFacingSource)`: a source's
+    `TryGetFacingTarget(out point, out urgent)` beats the lock-on square-up, and urgent uses the fast
+    attack turn.
+  - Combat hasn't registered a source yet. Next step: a small one (the lock-on aim point while
+    `IsAttacking`, urgent), registered from the setup menu. After that, locomotion can drop the
+    fallback.
+- **Costs of the QA fixes (2026-10-27):**
+  - Mashed chains are a little slower, because each hit now keeps its whole blade window.
+  - A jump-attack pressed within 0.08 s of take-off plays a ground step.
+  - A boss rematch pays no new Lemmas.
 - **Two unlock sets:**
   - `SwordAbilities` (assets) sits alongside `PlayerAbilities` (the fixed `AbilityKind` enum
     locomotion switches on). They share the Grant / Has / Unlocked contract, and the toast listens

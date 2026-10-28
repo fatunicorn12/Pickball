@@ -70,9 +70,10 @@ namespace Pickleball.Sandbox
                  "hitstop after a swing ended) is remembered. Without it, pressing " +
                  "a hair early simply does nothing.")]
         [Range(0f, 0.5f)] [SerializeField] private float pressBufferSeconds = 0.15f;
-        [Tooltip("Seconds off the ground before the player counts as airborne " +
-                 "for chain bookkeeping. Absorbs one-frame grounded flicker on " +
-                 "slopes, which would otherwise reset a ground chain mid-combo.")]
+        [Tooltip("Seconds off the ground before the player counts as airborne, " +
+                 "for both choosing the air chain and dropping the ground chain. " +
+                 "Absorbs grounded flicker on slopes; the cost is that a press this " +
+                 "soon after a real jump still plays a ground step.")]
         [Range(0f, 0.3f)] [SerializeField] private float airborneGraceSeconds = 0.08f;
 
         /// <summary>A step has started. Raised for every step, chained or not.</summary>
@@ -85,6 +86,12 @@ namespace Pickleball.Sandbox
         /// <summary>The blade started (true) or stopped (false) hitting.</summary>
         public event Action<bool> BladeLiveChanged;
 
+        /// <summary>A hit has connected and is about to be dealt. Raised just
+        /// before the target's TakeHit, so listeners can read the target's
+        /// state as it was — XP uses it to pay only for damage actually applied
+        /// and never for hitting what was already defeated.</summary>
+        public event Action<MeleeHitReport> HitConnecting;
+
         /// <summary>A hit connected and its damage has been dealt.</summary>
         public event Action<MeleeHitReport> HitLanded;
 
@@ -95,8 +102,9 @@ namespace Pickleball.Sandbox
         /// square up to a lock-on target mid-combo.</summary>
         public bool IsAttacking => _timeline != null && _timeline.IsRunning;
 
-        /// <summary>True while a connecting hit has frozen the action.</summary>
-        public bool IsInHitstop => _hitstopLeft > 0f;
+        /// <summary>True while a connecting hit has frozen the action. Never
+        /// true while disabled, so nothing can stay frozen on its account.</summary>
+        public bool IsInHitstop => isActiveAndEnabled && _hitstopLeft > 0f;
 
         /// <summary>The swing playing now; invalid when idle.</summary>
         public ResolvedStep Current => IsAttacking ? _current : default;
@@ -120,15 +128,14 @@ namespace Pickleball.Sandbox
         HashSet<Object> _alreadyHit;
         Collider[] _overlap;
         ActiveBurst[] _bursts;
+        BladeSweep _sweep;
+        GroundContact _contact;
+        (Vector3 from, Vector3 to)[] _segments;
 
         ResolvedStep _current;
         float _hitstopLeft;
         bool _queued;
         float _startBufferedUntil = -1f;
-        float _airborneFor;
-        bool _airborne;
-        Vector3 _prevTip, _prevBase;
-        bool _hasPrev;
 
         /// <summary>One ring in flight. Pooled: a finisher every second must not
         /// allocate.</summary>
@@ -150,10 +157,17 @@ namespace Pickleball.Sandbox
             ResolveMovement();
         }
 
+        /// <summary>The serialized source if it is alive and implements the
+        /// interface, else whatever on this object does. TryGetComponent rather
+        /// than GetComponent ?? …: in the Editor a missing component comes back
+        /// as a fake-null object, which C#'s ?? and interface casts treat as real.</summary>
         void ResolveMovement()
         {
-            _movement = movementSource as ICombatMovement ?? GetComponent<ICombatMovement>();
-            _impulses = movementSource as ICombatImpulses ?? GetComponent<ICombatImpulses>();
+            var source = movementSource != null ? movementSource : null;
+            _movement = source as ICombatMovement;
+            if (_movement == null && TryGetComponent(out ICombatMovement state)) _movement = state;
+            _impulses = source as ICombatImpulses;
+            if (_impulses == null && TryGetComponent(out ICombatImpulses levers)) _impulses = levers;
         }
 
         void OnEnable()
@@ -165,6 +179,9 @@ namespace Pickleball.Sandbox
             _overlap = new Collider[OverlapCapacity];
             _bursts = new ActiveBurst[BurstCapacity];
             for (int i = 0; i < _bursts.Length; i++) _bursts[i] = new ActiveBurst();
+            _sweep = new BladeSweep();
+            _contact = new GroundContact();
+            _segments = new (Vector3, Vector3)[BladeSweep.MaxSegments];
             _hitstopLeft = 0f;
             _queued = false;
             _startBufferedUntil = -1f;
@@ -180,6 +197,9 @@ namespace Pickleball.Sandbox
         {
             if (input != null) input.AttackPressed -= QueueAttack;
             if (_timeline != null && _timeline.IsRunning) FinishChain();
+            // Disabled mid-hitstop, the countdown would never run out and the
+            // animator driver would hold the pose frozen for good (QA CB4).
+            _hitstopLeft = 0f;
         }
 
         /// <summary>
@@ -220,6 +240,7 @@ namespace Pickleball.Sandbox
 
             if (!_timeline.IsRunning)
             {
+                _sweep.Reset();    // no swing: the next one must not sweep from a stale pose
                 if (Time.time <= _startBufferedUntil && TryStartStep())
                     _startBufferedUntil = -1f;
                 return;
@@ -227,13 +248,10 @@ namespace Pickleball.Sandbox
 
             var signal = _timeline.Advance(dt);
             if ((signal & SwingSignal.BladeOn) != 0) BladeLiveChanged?.Invoke(true);
-            // A whole window crossed in one long frame still gets one sweep.
-            if (_timeline.IsBladeLive || (signal & SwingSignal.BladeOn) != 0) SweepForHits();
-            if ((signal & SwingSignal.BladeOff) != 0)
-            {
-                _hasPrev = false;
-                BladeLiveChanged?.Invoke(false);
-            }
+            // Sampled every frame of the swing; tested whenever any part of this
+            // frame's interval was live (QA CB1).
+            SampleBlade(BladeSweep.ShouldTest(_timeline.IsBladeLive, signal));
+            if ((signal & SwingSignal.BladeOff) != 0) BladeLiveChanged?.Invoke(false);
             if ((signal & SwingSignal.BurstDue) != 0) ReleaseBurst();
 
             if (_queued && (_timeline.IsChainWindowOpen || (signal & SwingSignal.Finished) != 0))
@@ -245,26 +263,18 @@ namespace Pickleball.Sandbox
         }
 
         /// <summary>
-        /// Ground/air bookkeeping for the chain counters.
-        ///
-        /// Asymmetric on purpose. Leaving the ground only counts after a short
-        /// grace, so one-frame grounded flicker on a slope cannot drop a ground
-        /// chain. Touching the ground refills the air chain at once, with no
-        /// grace — otherwise an air step started during such a flicker would
-        /// leave the counter part-spent until the next real jump and landing.
+        /// Ground/air bookkeeping for the chain counters; see
+        /// <see cref="GroundContact"/> for why leaving the ground has a grace and
+        /// touching it does not, and why the track choice uses the same grace.
         /// </summary>
         void TrackGround(float dt)
         {
-            bool grounded = IsGrounded;
-            _airborneFor = grounded ? 0f : _airborneFor + dt;
-            if (grounded && _progress.AirHits > 0) _progress.Land();
-
-            bool airborne = _airborneFor > airborneGraceSeconds;
-            if (airborne && !_airborne) _progress.LeaveGround();
-            _airborne = airborne;
+            bool justLeft = _contact.Tick(IsGroundedRaw, dt, airborneGraceSeconds);
+            if (_contact.IsGrounded && _progress.AirHits > 0) _progress.Land();
+            if (justLeft) _progress.LeaveGround();
         }
 
-        bool IsGrounded => _movement == null || _movement.IsGrounded;
+        bool IsGroundedRaw => _movement == null || _movement.IsGrounded;
 
         /// <summary>Attacks refuse to start while another system owns the body
         /// (tether, skateboard, dash) rather than fight it for control.</summary>
@@ -288,7 +298,7 @@ namespace Pickleball.Sandbox
         bool TryStartStep()
         {
             if (!CanSwing || moveset == null) return false;
-            var track = IsGrounded ? ComboTrack.Ground : ComboTrack.Air;
+            var track = _contact.Track;
             var placement = _resolver.Resolve(BuildContext(track, _progress.HitsIn(track)),
                                               moveset, Learned);
             if (!placement.IsValid) return false;
@@ -307,7 +317,8 @@ namespace Pickleball.Sandbox
             _timeline.Start(step);
             _queued = false;
             _alreadyHit.Clear();
-            _hasPrev = false;
+            // The sweep history is kept across a chain: the blade moves
+            // continuously from one step into the next.
 
             // An impulse, once — see ICombatImpulses for why never per frame.
             if (step.LungeSpeed > 0f && _impulses != null)
@@ -323,35 +334,21 @@ namespace Pickleball.Sandbox
                 BladeLiveChanged?.Invoke(false);
             _queued = false;
             _alreadyHit.Clear();
-            _hasPrev = false;
+            _sweep.Reset();
             _progress.DropChain();
             ChainEnded?.Invoke(ended);
         }
 
         // ------------------------------------------------------------ blade
 
-        /// <summary>
-        /// Sweep the volume the blade covered since last frame.
-        ///
-        /// A collider on the blade would tunnel: at swing speed the tip crosses
-        /// metres per frame and can be on both sides of a target without ever
-        /// overlapping it. Testing the capsule between last frame's blade and
-        /// this frame's catches the whole arc.
-        /// </summary>
-        void SweepForHits()
+        /// <summary>Record the blade every frame of a swing and, when
+        /// <paramref name="test"/>, overlap-test what it swept. See
+        /// <see cref="BladeSweep"/>.</summary>
+        void SampleBlade(bool test)
         {
             if (bladeBase == null || bladeTip == null) return;
-            Vector3 b = bladeBase.position, tip = bladeTip.position;
-
-            if (_hasPrev)
-            {
-                TestCapsule(b, tip);
-                TestCapsule(_prevTip, tip);
-                TestCapsule(_prevBase, b);
-            }
-            _prevBase = b;
-            _prevTip = tip;
-            _hasPrev = true;
+            int count = _sweep.Sample(bladeBase.position, bladeTip.position, test, _segments);
+            for (int i = 0; i < count; i++) TestCapsule(_segments[i].from, _segments[i].to);
         }
 
         void TestCapsule(Vector3 a, Vector3 b)
@@ -381,10 +378,12 @@ namespace Pickleball.Sandbox
         void Deal(IDamageable target, Collider col, Vector3 point, HitSettings hit, Vector3 push,
                   ResolvedStep placement, bool fromBurst)
         {
+            var report = new MeleeHitReport(target, col, point, hit.Damage, placement, fromBurst);
+            HitConnecting?.Invoke(report);
             target.TakeHit(hit.Damage, point, push, hit.IsLauncher);
             // Max, not sum: a ring sweeping three targets in one frame is one impact.
             _hitstopLeft = Mathf.Max(_hitstopLeft, hit.Hitstop);
-            HitLanded?.Invoke(new MeleeHitReport(target, col, point, hit.Damage, placement, fromBurst));
+            HitLanded?.Invoke(report);
         }
 
         // ----------------------------------------------------------- bursts
