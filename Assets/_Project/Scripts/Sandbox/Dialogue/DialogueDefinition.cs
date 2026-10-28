@@ -17,8 +17,8 @@ namespace Pickleball.Sandbox.Dialogue
                  "GameObject name.")]
         [SerializeField] private string speakerName = "";
 
-        [Tooltip("Lines in the order they are shown. E advances to the next one; the " +
-                 "conversation ends after the last.")]
+        [Tooltip("Lines in the order they are shown. The talk button moves to the next one; " +
+                 "the conversation ends after the last.")]
         [SerializeField] private DialogueLine[] lines = Array.Empty<DialogueLine>();
 
         /// <summary>Name for the dialogue box's name tab; may be empty.</summary>
