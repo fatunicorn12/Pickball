@@ -52,8 +52,6 @@ public static class BirdyNpcSetup
     const string PrefabPath = PrefabDir + "/Birdy.prefab";
     const string DialogueDir = "Assets/_Project/ScriptableObjects/Dialogue";
     const string DialoguePath = DialogueDir + "/Birdy_Intro.asset";
-    /// <summary>Owned and created by the dialogue system's Setup Dialogue. Only read here.</summary>
-    const string TalkableSetPath = DialogueDir + "/TalkableSet.asset";
     const string ConfigPath = "Assets/_Project/ScriptableObjects/Npc/NpcAnimationConfig.asset";
     const string SandboxScenePath = "Assets/_Project/Scenes/ChibiSandbox.unity";
 
@@ -98,11 +96,32 @@ public static class BirdyNpcSetup
     /// <summary>
     /// Vertical nudge of the model under the root, m. Clips bake their height
     /// feet-based (like Newton's), but on Birdy's short legs the fallback idle
-    /// still sinks the soles 4.6 cm into the ground (measured with Report
-    /// Birdy Poses at offset 0), so the model is lifted by that much.
-    /// Re-measure when real clips land.
+    /// still leaves the soles slightly below the root. Measured through the
+    /// Animator (Rebind + Update, with per-state foot IK, as at runtime) by
+    /// Report Birdy Poses: the "soles" of the idle, read with this at 0, is
+    /// the negative of what it should be. (A first calibration with
+    /// AnimationClip.SampleAnimation skipped foot IK and over-lifted him by
+    /// 3.7 cm, so he hovered.) Re-measure when real clips land.
     /// </summary>
-    const float ModelYOffset = 0.045f;
+    const float ModelYOffset = 0.008f;
+
+    /// <summary>
+    /// How far, °, the avatar lets the upper arm (the wing) fold down from the
+    /// T-pose. Less range scales every clip's arm-down motion by the same
+    /// ratio (the retargeted muscle value is unchanged), so the wings fold
+    /// less in every clip without a per-clip change. Unity's default is 60°:
+    /// the fallback idle then folds the wings 80° and presses them into the
+    /// body. At 40° they fold 70° and sit just off it, which still reads as
+    /// folded. Rendered at 40° and at 25° (61–65°): neither closed the white
+    /// tears at the wing roots and harness. Those come from Tripo's skin
+    /// weights (the wing planks are hinged at the shoulder, and the right
+    /// strap part is weighted to the right arm while its left mirror is not),
+    /// so this is kept at 40° for the look, not as a fix for them.
+    /// </summary>
+    const float WingFoldDegrees = 40f;
+
+    /// <summary>The rotor mesh part, for the rotor-drift line of Report Birdy Poses.</summary>
+    const string RotorPartName = "tripo_part_1";
 
     /// <summary>Modest: a basic sword combo (10+12+14+20) downs him, a single
     /// stray hit does not.</summary>
@@ -117,11 +136,18 @@ public static class BirdyNpcSetup
     const float CapsuleRadiusShare = 0.75f;
 
     // Placement around the player's spawn.
-    const float NewtonClearance = 8f;
+    /// <summary>Kept from Newton's root, m. 7 rather than more because the
+    /// starting camera looks toward him: in ChibiSandbox the only central,
+    /// flat, open spots near the spawn are 7.3–7.7 m from him.</summary>
+    const float NewtonClearance = 7f;
     const float DummyClearance = 3f;
-    const float PickupClearance = 2f;
-    const float AnchorClearance = 2.5f;
+    /// <summary>Gap kept between Birdy's capsule and a pickup's / tether anchor's renderer footprint, m.</summary>
+    const float PickupMargin = 0.8f;
+    const float AnchorMargin = 0.6f;
     const float NpcClearance = 2f;
+    /// <summary>Preferred distance from the spawn, m: close enough to notice,
+    /// far enough not to crowd the first steps.</summary>
+    const float PreferredDistance = 6f;
     const float MaxGroundStep = 1f;
     const float MaxGroundSlope = 15f;
 
@@ -158,8 +184,19 @@ public static class BirdyNpcSetup
         if (prefab == null) return;
 
         PlaceInOpenScene(prefab, bounds);
-        AssetDatabase.SaveAssets();
+        // Birdy's own assets only. AssetDatabase.SaveAssets() would also write
+        // every other dirty asset, such as the TMP example fonts that loading
+        // ChibiSandbox upgrades in memory (DialogueSetup avoids it the same way).
+        // Importer settings, the prefab, the seeded assets and the controller's
+        // .meta are written where they are changed.
+        SaveIfDirty(material, controller, config, dialogue);
         Debug.Log($"Setup Birdy NPC done. Prefab: {PrefabPath}. The scene is marked dirty, not saved.");
+    }
+
+    static void SaveIfDirty(params Object[] assets)
+    {
+        foreach (var asset in assets)
+            if (asset != null) AssetDatabase.SaveAssetIfDirty(asset);
     }
 
     /// <summary>
@@ -175,8 +212,7 @@ public static class BirdyNpcSetup
             Debug.LogError("Rebuild Birdy Animator: exit Play mode first.");
             return;
         }
-        BuildAnimator(EnsureConfig(), force: true);
-        AssetDatabase.SaveAssets();
+        SaveIfDirty(BuildAnimator(EnsureConfig(), force: true));
     }
 
     // ============================================================ the model
@@ -345,9 +381,59 @@ public static class BirdyNpcSetup
         }
 
         if (!ChibiSandboxSetup.SetupRigPublic(importer, scale)) return false;
+        LimitWingFold(importer);
         EnforceArmTPose(importer);
         MeasureModel(out bounds);
         return true;
+    }
+
+    /// <summary>
+    /// Narrows the upper arms' Down-Up muscle range to
+    /// <see cref="WingFoldDegrees"/> (see there). SetupRigPublic writes default
+    /// limits on every run, so this rewrites the two arm limits every run too;
+    /// the stored result is the same each time.
+    /// </summary>
+    static void LimitWingFold(ModelImporter importer)
+    {
+        var desc = importer.humanDescription;
+        var report = new List<string>();
+        for (int i = 0; i < desc.human.Length; i++)
+        {
+            var hb = desc.human[i];
+            if (hb.humanName != "LeftUpperArm" && hb.humanName != "RightUpperArm") continue;
+            int bone = Array.IndexOf(HumanTrait.BoneName, hb.humanName);
+            if (bone < 0) continue;
+
+            Vector3 min = Vector3.zero, max = Vector3.zero;
+            int downUp = -1;
+            for (int dof = 0; dof < 3; dof++)
+            {
+                int muscle = HumanTrait.MuscleFromBone(bone, dof);
+                if (muscle < 0) continue;
+                min[dof] = HumanTrait.GetMuscleDefaultMin(muscle);
+                max[dof] = HumanTrait.GetMuscleDefaultMax(muscle);
+                if (HumanTrait.MuscleName[muscle].Contains("Down-Up")) downUp = dof;
+            }
+            if (downUp < 0) continue;
+            report.Add($"{hb.humanName} down {min[downUp]:0}° -> {-WingFoldDegrees:0}°");
+            min[downUp] = -WingFoldDegrees;
+
+            // The upper arm's length, for the limit's axis: the stored
+            // reference skeleton's offset of the forearm.
+            string lower = desc.human.FirstOrDefault(h => h.humanName ==
+                (hb.humanName == "LeftUpperArm" ? "LeftLowerArm" : "RightLowerArm")).boneName;
+            float length = desc.skeleton.Where(s => s.name == lower).Select(s => s.position.magnitude)
+                                        .DefaultIfEmpty(0f).First();
+            hb.limit = new HumanLimit
+            {
+                useDefaultValues = false, min = min, max = max, center = Vector3.zero, axisLength = length,
+            };
+            desc.human[i] = hb;
+        }
+        if (report.Count == 0) return;
+        importer.humanDescription = desc;
+        importer.SaveAndReimport();
+        Debug.Log($"Birdy wing fold limited: {string.Join(", ", report)}.");
     }
 
     /// <summary>Height of the model as imported, m, with its renderer bounds
@@ -474,7 +560,7 @@ public static class BirdyNpcSetup
 
     /// <summary>Bump when BuildController's layout changes, so Setup Birdy NPC
     /// rebuilds controllers whose inputs have not.</summary>
-    const string ControllerLayoutVersion = "birdy-controller-1";
+    const string ControllerLayoutVersion = "birdy-controller-2";
 
     /// <summary>
     /// Imports the clips and rebuilds the controller. With
@@ -497,7 +583,8 @@ public static class BirdyNpcSetup
         }
 
         var controller = BuildController(clips, config);
-        AssetDatabase.SaveAssets();
+        // Write the controller before its importer reimports from disk.
+        AssetDatabase.SaveAssetIfDirty(controller);
         importer = AssetImporter.GetAtPath(ControllerPath);
         if (importer != null && importer.userData != signature)
         {
@@ -746,11 +833,27 @@ public static class BirdyNpcSetup
             into.AddCondition(AnimatorConditionMode.Equals, (int)emote, NpcAnimatorParameters.Emote);
             into.AddCondition(AnimatorConditionMode.IfNot, 0, NpcAnimatorParameters.Dead);
 
+            // The settle back to listening is interruptible by its
+            // destination's transitions (below), so a line that starts while
+            // the previous gesture is still settling cuts straight in instead
+            // of waiting out the blend. With the default (None) a quick skip
+            // left the next line's gesture 0.35 s late.
             var settle = st.AddTransition(listen);
             settle.hasExitTime = false;
             settle.duration = cfg.SettleBlend;
+            settle.interruptionSource = TransitionInterruptionSource.Destination;
             settle.AddCondition(AnimatorConditionMode.IfNot, 0, NpcAnimatorParameters.Speaking);
             settle.AddCondition(AnimatorConditionMode.If, 0, NpcAnimatorParameters.Talking);
+
+            // TalkIdle's own way into each gesture: the same conditions as the
+            // Any State transition, but as a destination transition of the
+            // settle above it is what may interrupt it.
+            var cut = listen.AddTransition(st);
+            cut.hasExitTime = false;
+            cut.duration = cfg.TalkBlend;
+            cut.AddCondition(AnimatorConditionMode.If, 0, NpcAnimatorParameters.Speaking);
+            cut.AddCondition(AnimatorConditionMode.Equals, (int)emote, NpcAnimatorParameters.Emote);
+            cut.AddCondition(AnimatorConditionMode.IfNot, 0, NpcAnimatorParameters.Dead);
 
             var end = st.AddTransition(idles[0]);
             end.hasExitTime = false;
@@ -926,15 +1029,13 @@ public static class BirdyNpcSetup
             if (dialogueProp.objectReferenceValue == null) dialogueProp.objectReferenceValue = dialogue;
             tso.FindProperty("focusPoint").objectReferenceValue = head;
             tso.FindProperty("fallbackFocusHeight").floatValue = height * 0.7f;
+            // The shared runtime set the player's interactor scans, so Birdy can
+            // be talked to by walking up. DialogueSetup owns the asset and
+            // creates it on first use, so this works before or after Setup
+            // Dialogue. A hand-picked registry is left alone.
             var registryProp = tso.FindProperty("registry");
-            if (registryProp != null && registryProp.objectReferenceValue == null)
-            {
-                var set = AssetDatabase.LoadAssetAtPath<TalkableSet>(TalkableSetPath);
-                if (set != null) registryProp.objectReferenceValue = set;
-                else Debug.LogWarning($"Birdy: {TalkableSetPath} does not exist yet, so Birdy can only be " +
-                                      "talked to while locked on. Run Tools ▸ Pickleball ▸ Setup Dialogue, " +
-                                      "then re-run Setup Birdy NPC to register him.");
-            }
+            if (registryProp.objectReferenceValue == null)
+                registryProp.objectReferenceValue = DialogueSetup.EnsureTalkableSet();
             tso.ApplyModifiedPropertiesWithoutUndo();
 
             var driver = GetOrAdd<NpcAnimatorDriver>(root);
@@ -1064,7 +1165,7 @@ public static class BirdyNpcSetup
 
             float height = Mathf.Max(bounds.size.y, 0.2f);
             float radius = Mathf.Max(Mathf.Min(bounds.extents.x, bounds.extents.z) * CapsuleRadiusShare, 0.1f);
-            if (!ChooseSpot(spawn, view, height, radius, player.transform, out var spot, out string why))
+            if (!ChooseSpot(spawn, view, cam, height, radius, player.transform, out var spot, out string why))
             {
                 spot = spawn + view * 4f;
                 Debug.LogWarning($"Setup Birdy NPC: no clear spot found ({why}); placed at {spot}. " +
@@ -1098,67 +1199,127 @@ public static class BirdyNpcSetup
     }
 
     /// <summary>
-    /// First candidate around the spawn that is on flat ground near spawn
-    /// height, has room for Birdy, keeps clear of everything in the avoid
-    /// list and can be seen from the player's eye. Candidates go out from the
-    /// starting camera's view direction, on the side away from Newton first.
+    /// Where Birdy stands: the candidate around the spawn that is on flat
+    /// ground near spawn height, has room for him, keeps clear of Newton,
+    /// training dummies, other NPCs and the footprint of every pickup and
+    /// tether anchor, can be seen from the player's eye, and is most central in
+    /// the starting camera's view at about <see cref="PreferredDistance"/>.
+    /// If nothing in view qualifies, the first clear spot in a ring around
+    /// the spawn (side away from Newton first) is used instead.
     /// </summary>
-    static bool ChooseSpot(Vector3 spawn, Vector3 view, float height, float radius, Transform player,
-                           out Vector3 spot, out string why)
+    static bool ChooseSpot(Vector3 spawn, Vector3 view, Camera cam, float height, float radius,
+                           Transform player, out Vector3 spot, out string why)
     {
         Physics.SyncTransforms();   // autoSyncTransforms is off in this project
-        var avoid = new List<(Vector3 at, float clearance, string what)>();
+        var circles = new List<(Vector3 at, float clearance, string what)>();
         foreach (var b in Object.FindObjectsByType<NewtonBoss>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            avoid.Add((b.transform.position, NewtonClearance, "Newton"));
+            circles.Add((b.transform.position, NewtonClearance, "Newton"));
         foreach (var d in Object.FindObjectsByType<TrainingDummy>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            avoid.Add((d.transform.position, DummyClearance, "a training dummy"));
-        foreach (var p in Object.FindObjectsByType<AbilityPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            avoid.Add((p.transform.position, PickupClearance, p.name));
-        foreach (var a in Object.FindObjectsByType<TetherAnchor>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            avoid.Add((a.transform.position, AnchorClearance, a.name));
+            circles.Add((d.transform.position, DummyClearance, "a training dummy"));
         foreach (var n in Object.FindObjectsByType<Talkable>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            avoid.Add((n.transform.position, NpcClearance, n.name));
+            circles.Add((n.transform.position, NpcClearance, n.name));
+        // Pickups and anchors by their footprint: a pendulum frame is wide, a
+        // pickup is small, and a fixed radius was either too strict or too loose.
+        var boxes = new List<Bounds>();
+        foreach (var p in Object.FindObjectsByType<AbilityPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            boxes.Add(Footprint(p.gameObject, PickupMargin + radius));
+        foreach (var a in Object.FindObjectsByType<TetherAnchor>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            boxes.Add(Footprint(a.gameObject, AnchorMargin + radius));
+
+        bool Blocked(Vector3 at)
+        {
+            foreach (var (pos, clearance, _) in circles)
+            {
+                Vector3 d = at - pos;
+                d.y = 0f;
+                if (d.magnitude < clearance) return true;
+            }
+            foreach (var b in boxes)
+                if (at.x > b.min.x && at.x < b.max.x && at.z > b.min.z && at.z < b.max.z) return true;
+            return false;
+        }
 
         float baseYaw = Mathf.Atan2(view.x, view.z) * Mathf.Rad2Deg;
+        Vector3 eye = spawn + Vector3.up * 1.4f;
+        int tried = 0, noGround = 0, crowded = 0, noRoom = 0, hidden = 0, offscreen = 0;
+        bool Usable(Vector3 probe, out Vector3 ground)
+        {
+            tried++;
+            if (!GroundAt(probe, spawn.y, player, out ground)) { noGround++; return false; }
+            if (Blocked(ground)) { crowded++; return false; }
+            if (!HasRoom(ground, height, radius, player)) { noRoom++; return false; }
+            if (!Visible(eye, ground + Vector3.up * height * 0.6f, player)) { hidden++; return false; }
+            return true;
+        }
+        string Counts() => $"{tried} tried: no flat ground {noGround}, too close to something {crowded}, " +
+                           $"no room {noRoom}, out of sight {hidden}, off the starting screen {offscreen}";
+
+        // ---- in the starting view, most central first -------------------------
+        bool found = false;
+        float bestScore = float.PositiveInfinity, bestAngle = 0f, bestDistance = 0f, bestVx = 0f;
+        spot = default;
+        for (float a = -60f; a <= 60f; a += 10f)
+            foreach (float d in new[] { 4.5f, 5f, 5.5f, 6f, 6.5f, 7f, 7.5f, 8f })
+            {
+                Vector3 dir = Quaternion.Euler(0f, baseYaw + a, 0f) * Vector3.forward;
+                if (!Usable(spawn + dir * d, out var ground)) continue;
+                float vx = 0.5f;
+                if (cam != null)
+                {
+                    var vp = cam.WorldToViewportPoint(ground + Vector3.up * height * 0.75f);
+                    if (vp.z <= 0f || vp.x < 0.15f || vp.x > 0.85f || vp.y < 0f || vp.y > 1f)
+                    {
+                        offscreen++;
+                        continue;
+                    }
+                    vx = vp.x;
+                }
+                float score = Mathf.Abs(vx - 0.5f) * 2f + Mathf.Abs(d - PreferredDistance) * 0.15f;
+                if (score >= bestScore) continue;
+                bestScore = score;
+                spot = ground;
+                bestAngle = a;
+                bestDistance = d;
+                bestVx = vx;
+                found = true;
+            }
+        if (found)
+        {
+            why = $"Chose {bestAngle:+0;-0}° off the start view, {bestDistance} m out, at viewport x " +
+                  $"{bestVx:0.00} of the starting camera ({Counts()}).";
+            return true;
+        }
+
+        // ---- anywhere clear around the spawn, away from Newton first ---------
         float side = 1f;
-        var newton = avoid.FirstOrDefault(a => a.what == "Newton");
+        var newton = circles.FirstOrDefault(c => c.what == "Newton");
         if (newton.what != null)
         {
             Vector3 to = newton.at - spawn;
             if (Mathf.DeltaAngle(baseYaw, Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg) > 0f) side = -1f;
         }
-
-        // Direction first, distance second: a spot in view at 6.5 m beats one
-        // behind the camera at 4.5 m.
-        float[] angles = { 30f, -30f, 50f, -50f, 15f, -15f, 75f, -75f, 105f, -105f, 140f, -140f, 180f };
-        float[] distances = { 4.5f, 5.5f, 3.5f, 6.5f, 8f };
-        int rejected = 0, noGround = 0, crowded = 0, noRoom = 0, hidden = 0;
-        foreach (float a in angles)
-            foreach (float d in distances)
+        foreach (float a in new[] { 75f, -75f, 105f, -105f, 140f, -140f, 180f })
+            foreach (float d in new[] { 4.5f, 5.5f, 3.5f, 6.5f, 8f })
             {
                 Vector3 dir = Quaternion.Euler(0f, baseYaw + a * side, 0f) * Vector3.forward;
-                Vector3 probe = spawn + dir * d;
-                bool ok = false;
-                if (!GroundAt(probe, spawn.y, player, out var ground)) noGround++;
-                else if (TooClose(ground, avoid)) crowded++;
-                else if (!HasRoom(ground, height, radius, player)) noRoom++;
-                else if (!Visible(spawn + Vector3.up * 1.4f, ground + Vector3.up * height * 0.6f, player)) hidden++;
-                else ok = true;
-                if (!ok)
-                {
-                    rejected++;
-                    continue;
-                }
+                if (!Usable(spawn + dir * d, out var ground)) continue;
                 spot = ground;
-                why = $"Chose {a * side:+0;-0}° off the start view, {d} m out; {rejected} better-ranked " +
-                      $"spot(s) rejected (no flat ground {noGround}, too close to something {crowded}, " +
-                      $"no room {noRoom}, out of sight {hidden}).";
+                why = $"Nothing clear in the starting view; chose {a * side:+0;-0}° off it, {d} m out ({Counts()}).";
                 return true;
             }
-        spot = default;
-        why = $"all {rejected} candidates rejected (no flat ground {noGround}, too close {crowded}, " +
-              $"no room {noRoom}, out of sight {hidden})";
+        why = $"no candidate qualified ({Counts()})";
         return false;
+    }
+
+    /// <summary>XZ footprint of a scene object's renderers, grown by <paramref name="margin"/>.</summary>
+    static Bounds Footprint(GameObject go, float margin)
+    {
+        var renderers = go.GetComponentsInChildren<Renderer>(true);
+        var b = new Bounds(go.transform.position, Vector3.zero);
+        foreach (var r in renderers)
+            if (!(r is ParticleSystemRenderer)) b.Encapsulate(r.bounds);
+        b.Expand(new Vector3(margin * 2f, 0f, margin * 2f));
+        return b;
     }
 
     static bool GroundAt(Vector3 probe, float spawnY, Transform player, out Vector3 ground)
@@ -1177,17 +1338,6 @@ public static class BirdyNpcSetup
             ground = h.point;
         }
         return found && Mathf.Abs(ground.y - spawnY) <= MaxGroundStep;
-    }
-
-    static bool TooClose(Vector3 at, List<(Vector3 at, float clearance, string what)> avoid)
-    {
-        foreach (var (pos, clearance, _) in avoid)
-        {
-            Vector3 d = at - pos;
-            d.y = 0f;
-            if (d.magnitude < clearance) return true;
-        }
-        return false;
     }
 
     static bool HasRoom(Vector3 ground, float height, float radius, Transform player)
@@ -1212,84 +1362,181 @@ public static class BirdyNpcSetup
     // ======================================================== diagnostics
 
     /// <summary>
-    /// Samples each of Birdy's states on a throwaway copy of the prefab and
-    /// logs where the soles land, how far the wing tips sit from horizontal,
-    /// and where the death clip leaves him. A stand-in for looking at him,
-    /// for checks that have to run headless.
+    /// Evaluates each of Birdy's states on a throwaway copy of the prefab
+    /// through the Animator (Play, then Update(0): the runtime path, per-state
+    /// foot IK included) and logs, per sample: the lowest point of the body
+    /// (soles), the rotor's lowest point, the top, how far the wings droop,
+    /// the arm Down-Up muscle values, and how far the rotor has drifted
+    /// relative to the Head bone since the bind pose (should be ~0: it is
+    /// rigid to the head). For the death it also sweeps the clip and reports
+    /// the sink with and without the configured ground lift. A stand-in for
+    /// looking at him, for checks that have to run headless.
     /// </summary>
     [MenuItem("Tools/Pickleball/Diagnostics/Report Birdy Poses")]
     public static void ReportPoses()
     {
         var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
         var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
+        var config = AssetDatabase.LoadAssetAtPath<NpcAnimationConfig>(ConfigPath);
         if (prefab == null || controller == null)
         {
             Debug.LogWarning("Report Birdy Poses: run Setup Birdy NPC first.");
             return;
         }
+
+        var bind = Object.Instantiate(prefab);
         var go = Object.Instantiate(prefab);
-        go.hideFlags = HideFlags.HideAndDontSave;
+        bind.hideFlags = go.hideFlags = HideFlags.HideAndDontSave;
         var baked = new Mesh();
         try
         {
+            bind.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
             go.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            bind.GetComponentInChildren<Animator>().enabled = false;
             var anim = go.GetComponentInChildren<Animator>();
+            anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             anim.Rebind();
-            var smrs = go.GetComponentsInChildren<SkinnedMeshRenderer>();
-            var lines = new List<string> { $"[BirdyPoses] humanScale {anim.humanScale:0.000}" };
+            anim.Update(0f);
 
+            var smrs = go.GetComponentsInChildren<SkinnedMeshRenderer>();
+            var bindSmrs = bind.GetComponentsInChildren<SkinnedMeshRenderer>();
+            int rotor = Array.FindIndex(smrs, s => s.name == RotorPartName);
+            string headName = HumanBoneName(anim.avatar, "Head");
+            var head = FindDeep(go.transform, headName);
+            var bindHead = FindDeep(bind.transform, headName);
+
+            // Rotor vertices in Head space at bind, to measure drift against.
+            Vector3[] rotorBind = null;
+            if (rotor >= 0 && bindHead != null)
+            {
+                rotorBind = Baked(bindSmrs[rotor]);
+                for (int v = 0; v < rotorBind.Length; v++) rotorBind[v] = bindHead.InverseTransformPoint(rotorBind[v]);
+            }
+
+            var handler = new HumanPoseHandler(anim.avatar, anim.transform);
+            var pose = new HumanPose();
+            int MuscleOf(HumanBodyBones b)
+            {
+                for (int dof = 0; dof < 3; dof++)
+                {
+                    int m = HumanTrait.MuscleFromBone((int)b, dof);
+                    if (m >= 0 && HumanTrait.MuscleName[m].Contains("Down-Up")) return m;
+                }
+                return -1;
+            }
+            int lMuscle = MuscleOf(HumanBodyBones.LeftUpperArm), rMuscle = MuscleOf(HumanBodyBones.RightUpperArm);
             Transform Bone(HumanBodyBones b) => anim.GetBoneTransform(b);
             var lUpper = Bone(HumanBodyBones.LeftUpperArm);
             var rUpper = Bone(HumanBodyBones.RightUpperArm);
             var lHand = Bone(HumanBodyBones.LeftHand);
             var rHand = Bone(HumanBodyBones.RightHand);
-            var hips = Bone(HumanBodyBones.Hips);
-            var head = Bone(HumanBodyBones.Head);
 
-            string Sample(string label)
+            Vector3[] Baked(SkinnedMeshRenderer smr)
             {
-                float lo = float.PositiveInfinity, hi = float.NegativeInfinity;
-                foreach (var smr in smrs)
-                {
-                    smr.BakeMesh(baked, true);
-                    var m = smr.transform.localToWorldMatrix;
-                    foreach (var v in baked.vertices)
-                    {
-                        float y = m.MultiplyPoint3x4(v).y;
-                        if (y < lo) lo = y;
-                        if (y > hi) hi = y;
-                    }
-                }
-                static float Droop(Transform upper, Transform hand)
-                {
-                    if (upper == null || hand == null) return float.NaN;
-                    Vector3 d = hand.position - upper.position;
-                    return Mathf.Atan2(-d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg;
-                }
-                return $"  {label,-28} soles {lo:+0.000;-0.000} m, top {hi:0.00} m, " +
-                       $"hips {(hips != null ? hips.position.y : 0f):0.00} m, head {(head != null ? head.position.y : 0f):0.00} m, " +
-                       $"wing droop L {Droop(lUpper, lHand):0}° R {Droop(rUpper, rHand):0}°, " +
-                       $"hips xz offset {(hips != null ? new Vector2(hips.position.x, hips.position.z).magnitude : 0f):0.00} m";
+                smr.BakeMesh(baked, true);
+                var m = Matrix4x4.TRS(smr.transform.position, smr.transform.rotation, Vector3.one);
+                var verts = baked.vertices;
+                for (int v = 0; v < verts.Length; v++) verts[v] = m.MultiplyPoint3x4(verts[v]);
+                return verts;
             }
 
-            lines.Add(Sample("bind pose"));
+            (float body, float rotorLow, float top, float drift) Measure(float lift)
+            {
+                float body = float.PositiveInfinity, rotorLow = float.PositiveInfinity, top = float.NegativeInfinity;
+                float drift = 0f;
+                for (int s = 0; s < smrs.Length; s++)
+                {
+                    var verts = Baked(smrs[s]);
+                    for (int v = 0; v < verts.Length; v++)
+                    {
+                        float y = verts[v].y + lift;
+                        if (s == rotor) rotorLow = Mathf.Min(rotorLow, y);
+                        else body = Mathf.Min(body, y);
+                        top = Mathf.Max(top, y);
+                        if (s == rotor && rotorBind != null && head != null)
+                            drift = Mathf.Max(drift, Vector3.Distance(head.InverseTransformPoint(verts[v]), rotorBind[v]));
+                    }
+                }
+                return (body, rotorLow, top, drift);
+            }
+
+            static float Droop(Transform upper, Transform hand)
+            {
+                if (upper == null || hand == null) return float.NaN;
+                Vector3 d = hand.position - upper.position;
+                return Mathf.Atan2(-d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg;
+            }
+
+            string Line(string label, float lift = 0f)
+            {
+                var (body, rotorLow, top, drift) = Measure(lift);
+                handler.GetHumanPose(ref pose);
+                string muscles = lMuscle >= 0 ? $", arm down-up muscle L {pose.muscles[lMuscle]:+0.00;-0.00} R {pose.muscles[rMuscle]:+0.00;-0.00}" : "";
+                return $"  {label,-30} soles {body:+0.000;-0.000} m, rotor low {rotorLow:+0.00;-0.00} m, top {top:0.00} m, " +
+                       $"wing droop L {Droop(lUpper, lHand):0}° R {Droop(rUpper, rHand):0}°, " +
+                       $"rotor drift vs Head {drift * 100f:0.0} cm{muscles}";
+            }
+
+            var lines = new List<string>
+            {
+                $"[BirdyPoses] model offset {ModelYOffset:0.000} m, humanScale {anim.humanScale:0.000}; " +
+                "evaluated through the Animator (Play + Update, foot IK on)",
+            };
+            {
+                var (body, rotorLow, top, _) = Measure(0f);
+                lines.Add($"  {"bind pose (no animation)",-30} soles {body:+0.000;-0.000} m, rotor low {rotorLow:+0.00;-0.00} m, top {top:0.00} m");
+            }
+
             var sm = controller.layers[0].stateMachine;
             foreach (var cs in sm.states)
             {
                 if (!(cs.state.motion is AnimationClip clip)) continue;
-                foreach (float f in new[] { 0f, 0.5f, 1f })
+                bool death = cs.state.name == NpcAnimatorParameters.DeathState;
+                foreach (float f in death ? new[] { 0f, 0.5f, 1f } : new[] { 0.1f, 0.5f, 0.9f })
                 {
-                    go.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
-                    clip.SampleAnimation(anim.gameObject, clip.length * f * 0.999f);
-                    lines.Add(Sample($"{cs.state.name} ({clip.name}) @{f:0.0}"));
+                    anim.Play(cs.state.nameHash, 0, f);
+                    anim.Update(0f);
+                    lines.Add(Line($"{cs.state.name} ({clip.name}) @{f:0.0}"));
                 }
+                if (!death) continue;
+
+                // Sweep the death: the lowest body point over the clip, raw and
+                // with the configured lift, and where the sink begins.
+                float amount = config != null ? config.DeathGroundLift : 0f;
+                float start = config != null ? config.DeathLiftStart : 0f;
+                float worstRaw = float.PositiveInfinity, worstLifted = float.PositiveInfinity, endRaw = 0f;
+                float firstSink = -1f, maxHover = 0f;
+                var profile = new List<string>();
+                for (int i = 0; i <= 20; i++)
+                {
+                    float t = i / 20f;
+                    anim.Play(cs.state.nameHash, 0, t);
+                    anim.Update(0f);
+                    float raw = Measure(0f).body;
+                    float lifted = raw + NpcDeathLift.At(t, amount, start);
+                    worstRaw = Mathf.Min(worstRaw, raw);
+                    worstLifted = Mathf.Min(worstLifted, lifted);
+                    if (firstSink < 0f && raw < -0.02f) firstSink = t;
+                    if (i == 20) endRaw = raw;
+                    // Hover: the body's lowest point above the ground while it
+                    // should be touching it (the lift raising a standing body).
+                    maxHover = Mathf.Max(maxHover, lifted - Mathf.Max(raw, 0f));
+                    profile.Add($"{t:0.00}:{raw:+0.00;-0.00}");
+                }
+                lines.Add($"  death sink: raw lowest {worstRaw:+0.000;-0.000} m (end {endRaw:+0.000;-0.000}), " +
+                          $"first below -2 cm at t={firstSink:0.00}; with lift {amount:0.000} m from t={start:0.00}: " +
+                          $"lowest {worstLifted:+0.000;-0.000} m, end {endRaw + NpcDeathLift.At(1f, amount, start):+0.000;-0.000} m, " +
+                          $"largest lift over a non-sunk body {maxHover:0.000} m");
+                lines.Add("  death profile (t:raw soles) " + string.Join(" ", profile));
             }
+            handler.Dispose();
             Debug.Log(string.Join("\n", lines));
         }
         finally
         {
             Object.DestroyImmediate(baked);
             Object.DestroyImmediate(go);
+            Object.DestroyImmediate(bind);
         }
     }
 
