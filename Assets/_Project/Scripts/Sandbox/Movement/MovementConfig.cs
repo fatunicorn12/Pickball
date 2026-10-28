@@ -330,6 +330,11 @@ namespace Pickleball.Sandbox.Movement
         [Header("Ground probe")]
         [Tooltip("How far below the capsule the ground check reaches, m.")]
         [SerializeField, Min(0f)] private float groundProbe = 0.12f;
+        [Tooltip("Ground moves snap down onto walkable floor up to this far below the feet, m, " +
+                 "so he runs down slopes and small steps instead of flickering into a fall. " +
+                 "Sunshine keeps Mario grounded over drops of up to 100 units (1.06 m at our " +
+                 "scale). 0 = off.")]
+        [SerializeField, Min(0f)] private float groundSnapDistance = 0.35f;
 
         // ------------------------------------------------------------ getters
         public float RunSpeed => runSpeed;
@@ -428,6 +433,7 @@ namespace Pickleball.Sandbox.Movement
         public float LockFaceSpeed => lockFaceSpeed;
         public float LockAttackTurnTime => lockAttackTurnTime;
         public float GroundProbe => groundProbe;
+        public float GroundSnapDistance => groundSnapDistance;
 
         /// <summary>The jump gravity profile: light rise, hanging apex, heavy fall.</summary>
         public GravityProfile JumpGravity

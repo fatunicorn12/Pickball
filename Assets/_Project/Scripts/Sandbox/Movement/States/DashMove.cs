@@ -1,3 +1,4 @@
+using Pickleball.Sandbox.Movement.Logic;
 using UnityEngine;
 
 namespace Pickleball.Sandbox.Movement.States
@@ -26,7 +27,9 @@ namespace Pickleball.Sandbox.Movement.States
         public override void Enter(MovementMotor m, MoveKind from)
         {
             var c = m.Config;
-            if (!m.IsGrounded) m.AirDashUsed = true;   // one per airtime
+            // One dash per airtime, a ground dash included: it launches him, so a
+            // ground dash plus an air dash used to fit in one airtime (QA MV10).
+            m.AirDashUsed = true;
 
             Vector3 flat = m.transform.forward;
             flat.y = 0f;
@@ -46,15 +49,17 @@ namespace Pickleball.Sandbox.Movement.States
         public override MoveKind Next(MovementMotor m)
         {
             if (_timeLeft > 0f) return MoveKind.Dash;
-            return m.IsGrounded ? m.GroundKind : MoveKind.Fall;
+            return m.IsGrounded ? m.LandingMove() : MoveKind.Fall;
         }
 
         public override void Tick(MovementMotor m, float dt)
         {
             m.ClearField();
-            _velocity += m.FrameFieldAcceleration * (m.Config.DashFieldBend * dt);
-            _timeLeft -= dt;
-            m.Controller.Move(_velocity * dt);
+            // Only the time that is left: the last frame no longer overshoots the
+            // advertised reach (QA MV1; see FixedDuration).
+            float step = FixedDuration.Consume(ref _timeLeft, dt);
+            _velocity += m.FrameFieldAcceleration * (m.Config.DashFieldBend * step);
+            m.Controller.Move(_velocity * step);
             m.VerticalVelocity = _velocity.y;
         }
 

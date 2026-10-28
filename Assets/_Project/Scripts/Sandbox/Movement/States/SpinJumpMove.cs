@@ -41,7 +41,7 @@ namespace Pickleball.Sandbox.Movement.States
             if (m.IsGrounded)
             {
                 m.Chain.Landed(0, UnityEngine.Time.time);
-                return m.GroundKind;
+                return m.LandingMove();
             }
             if (i.CrouchPressed) return MoveKind.Dive;
             if (i.JumpPressed && m.CanFeatherJump) return MoveKind.AirJump;

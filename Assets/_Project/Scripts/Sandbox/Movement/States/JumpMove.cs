@@ -87,7 +87,7 @@ namespace Pickleball.Sandbox.Movement.States
             if (m.IsGrounded)
             {
                 m.Chain.Landed(_step, Time.time);
-                return m.GroundKind;
+                return m.LandingMove();
             }
             if (i.JumpPressed && m.CanFeatherJump) return MoveKind.AirJump;
             if (i.CrouchPressed) return MoveKind.Dive;

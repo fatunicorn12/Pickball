@@ -62,7 +62,7 @@ namespace Pickleball.Sandbox.Movement.States
                 release = true;
             }
             if (!release) return MoveKind.Tether;
-            return m.IsGrounded ? m.GroundKind : MoveKind.Fall;
+            return m.IsGrounded ? m.LandingMove() : MoveKind.Fall;
         }
 
         /// <summary>

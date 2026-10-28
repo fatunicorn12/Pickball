@@ -98,16 +98,7 @@ IDs are referenced from the test plan below. Confidence: **H**igh, **M**edium, *
 
 | ID | Finding | Where | Conf. |
 |---|---|---|---|
-| MV1 | **The dash overshoots by up to one frame:** about 3.27 m against the "fixed" 3.08 m. | `DashMove.Tick` | ✔ |
 | MV2 | The minimum tap-jump height depends on frame rate (about 0.62–0.75 m), contradicting `JumpMath`'s promise. | `JumpMove` variable-height cut | M–H |
-| MV3 | `SuspendGravity` time outlives landing and freezes a later fall. | `MovementMotor` hover timer | M |
-| MV4 | Anchor, then mount, then hold Jump gives a flying skateboard: the anchor keeps running in states that refuse it. | `MovementMotor`, `SkateMove` | M |
-| MV5 | The `CollisionFlags.Below` fallback bypasses the slope limit, so the player can stand and chain-jump on steep walls. | `MovementMotor` ground check | M–L |
-| MV6 | No ground snapping: sprinting down slopes over about 16° flickers between Ground and Fall. | `groundedStick` hold-down | M |
-| MV7 | Per-frame allocations: `SphereCastAll` for the ground check, `OverlapCapsule` in `CanStandTo`. | `MovementMotor` | H |
-| MV8 | A reload mid-move rebuilds states without `Enter`, so a tether snaps to its anchor and a dash ends at zero velocity. | `MovementMotor.EnsureRuntime` | M (Editor only) |
-| MV9 | Landing at rest after a sprint reports `GroundKind` Sprint for up to 0.2 s, because the sprint ramp is frozen in the air. | `SprintRamp` usage | M |
-| MV10 | A rollout press is eaten: the jump buffer (0.12 s) is shorter than `bellySlideMinTime` (0.15 s). Also, a ground dash plus an air dash fit in one airtime. | `BellySlideMove`, `DashMove` | M |
 
 ### Spacetime, lock-on, camera, tether, cloth
 
@@ -303,7 +294,7 @@ All of these are writable today; `Simulate` and `Rebind` are public.
 | Combat | Static `WeaponClearance.Solve(...)`, or sample clips in EditMode | Blade clears the head by ≥ −2 cm on every frame of every attack clip; total turn ≤ `maxCorrection` |
 | Boss | `NextWellDelay`, injected RNG and ground probe, `PredictLanding` | Well cadence and retry; placement ≥ 5 m from the player over 1,000 seeds; marker prediction within 0.1 m of the integrated apple |
 | Boss | Fixture helpers `SetReference`/`SetBool`/`SetStrings` | `Barks_*` (rate limit, no repeat, empty → silent), `DamageNumbers_Classify`, `HealthBar_FillsTrackHealth`; `TerminalSpeed_ExceedsFreeFall` and `WellDriftAt5m_IsFelt` against the shipped prefab and config |
-| Movement | `InternalsVisibleTo` plus an internal `IMoveContext` passed to `MoveState.Next` | Ground priority order (Fall > Jump > Dive > Crouch > Skid > RunStop); locked never skids; stop delay; side flip vs spin jump; skid exit speeds; landing records the chain step; coyote beats feather; belly slide rules; `LandAtRest_AfterSprint_IsGround` ⚠ MV9 |
+| Movement | `InternalsVisibleTo` plus an internal `IMoveContext` passed to `MoveState.Next` | Ground priority order (Fall > Jump > Dive > Crouch > Skid > RunStop); locked never skids; stop delay; side flip vs spin jump; skid exit speeds; landing records the chain step; coyote beats feather; belly slide rules; `LandAtRest_AfterSprint_IsGround` |
 | Movement | Pure helpers for the variable jump, intent mapping and animator mapping | `TapApex_FrameRateIndependent` ⚠ MV2; camera-relative intent; trigger choice and flip speed |
 | Traversal | One state per anchor per frame in `TetherSystem`; `SetState(state, dt)` | `TetherAnchor_HeldTarget_ReachesFullTargetBlend` ⚠ ST2 |
 | Traversal | Extract `LockOnScoring`, `LockOnState`, `OrbitMath`, `SwingTwist.SampleTrack` | Angle-first scoring, cone and range rejection, side flicks, handover on death, break range, sight grace; pitch normalisation ⚠ ST9; zoom and pitch clamps |
@@ -317,7 +308,7 @@ Needs the PlayMode assembly ([README.md](README.md#adding-the-playmode-assembly)
 1. **Scene boot smoke.** ChibiSandbox, TrainingStage and SpacetimeLab each run 120 frames with no
    errors. Any `LogError` fails the test. Decide whether GameScene belongs in this list.
 2. **Jump and dash.** The single, double and triple apex equals config ± 0.03 m at 30, 60 and
-   144 fps. Dash distance is 3.08 m ± 0.05 at each rate. ⚠ MV1.
+   144 fps. Dash distance is 3.08 m ± 0.05 at each rate.
 3. **Ground combo.** A mashed Slash 1–4 against a `Health` dummy plays in order with exactly one
    hit per swing (4 `Hurt` events) at 1/30, 1/20 and 1/15 s per frame. ⚠ CB1/CB2 at low rates.
 4. **Newton phases and death.**
@@ -403,14 +394,6 @@ here so they aren't lost if a doc isn't updated.
   - The `MeleeCombat` sweep runs in `Update`, not `LateUpdate`.
   - "Untick `rightHanded`" is reverted by setup.
   - The new-rig workflow doesn't match the setup's fixed path.
-- **`Movement.md`:**
-  - The West-button clash and "bindings unchanged" are stale.
-  - The `IsAttacking` fallback is described wrongly.
-  - The vertical levers aren't reachable by combat.
-  - Frame step 2 is incomplete.
-  - The spin, dive and triple-jump claims are overstated.
-  - The tap height is frame-rate dependent (MV2).
-  - `Next()` has side effects.
 - **`Spacetime.md`:**
   - The sign of the time shift is wrong (the code shifts by −`timeAxis × age`).
   - "Nothing happens while off" is overstated.

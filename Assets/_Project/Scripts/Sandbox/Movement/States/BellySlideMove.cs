@@ -18,17 +18,29 @@ namespace Pickleball.Sandbox.Movement.States
         public override MoveKind Kind => MoveKind.BellySlide;
         public override bool AllowsDash => false;
 
-        public override void Enter(MovementMotor m, MoveKind from) => m.Chain.Reset();
+        bool _rolloutQueued;
+
+        public override void Enter(MovementMotor m, MoveKind from)
+        {
+            m.Chain.Reset();
+            // A press buffered just before touchdown counts too.
+            _rolloutQueued = m.JumpBuffered;
+        }
 
         public override MoveKind Next(MovementMotor m)
         {
             var c = m.Config;
             ref var i = ref m.Intent;
             if (!m.IsGrounded) return MoveKind.Dive;
+            // Remembered for the whole slide, not just the 0.12 s jump buffer: that
+            // is shorter than bellySlideMinTime, so a Jump pressed on touchdown
+            // used to expire before the slide would accept it (QA MV10).
+            if (i.JumpPressed) _rolloutQueued = true;
             if (m.TimeInMove >= c.BellySlideMinTime)
             {
-                if (m.JumpBuffered && m.CanStandTo(1f))
+                if (_rolloutQueued && m.CanStandTo(1f))
                 {
+                    _rolloutQueued = false;
                     m.PendingJump = JumpKind.Rollout;
                     return MoveKind.Jump;
                 }

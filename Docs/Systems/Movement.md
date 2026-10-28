@@ -19,16 +19,27 @@ little and scaled to a 1.7 m character:
   Jumping during the skid gives Sunshine's **side somersault**, a tall jump out the new way.
 - **Floaty, high jumps.**
   - Chain: a single (2 m standing), then a double (2.8 m) if he re-jumps within 0.2 s of landing,
-    then a **triple** flip (4.5 m) if he is still at sprint speed.
+    then a **triple** flip (4.5 m) if he lands moving at least 5 m/s (`tripleMinSpeed`). In
+    practice that means sprinting and holding forward through the jumps, since each takeoff trims
+    speed by 20%.
   - Height control: letting go of Jump early cuts the jump short. Holding it rises on light
-    gravity and hangs at the apex.
+    gravity and hangs at the apex. The shortest tap currently depends on frame rate (about
+    0.62–0.75 m; QA-Assessment MV2, open).
   - Falls come down on heavier gravity, capped at 18 m/s.
-- **Dive.** Crouch (Ctrl / B) at running speed, or at any time in the air, dives forward. Landing
-  turns into a **belly slide**: holding forward glides, holding back brakes. Jump rolls out onto
-  his feet with the slide's speed; crouch dives again.
+- **Dive.** Crouch (Ctrl / B) dives forward:
+  - on the ground at 3.2 m/s or faster (`diveMinSpeed`; slower, it crouches);
+  - out of a skid;
+  - in the air, during a jump, a fall, the feather jump or a spin jump. Not out of a dash, the
+    tether or the board.
+
+  Landing turns into a **belly slide**: holding forward glides, holding back brakes.
+  - **Jump rolls out** onto his feet with the slide's speed. A press is remembered for the whole
+    slide and taken once it has run 0.15 s (`bellySlideMinTime`).
+  - **Crouch dives again**, after the same 0.15 s.
 - **Spin jump.** Rotate the stick (about three-quarters of a circle in half a second), then Jump,
-  for a tall corkscrew that comes down slowly. Spinning the stick mid-jump turns any jump into the
-  slow spin descent.
+  for a tall corkscrew that comes down slowly. Spinning the stick during a ground jump (any of
+  the chain, the side flip or the rollout) or a fall turns it into the slow spin descent. It does
+  not do this during the feather jump, a dive or a dash.
 - **The existing abilities are unchanged:**
   - feather mid-air jump
   - protractor 45° dash
@@ -140,7 +151,7 @@ but simulates four 120 Hz ticks per frame (`src/System/MarDirectorDirect.cpp`). 
 | Chain window | landing-state timer `mMaxTimer`, checked MarioRun.cpp:1541 | 16 ticks | — | 0.133 s | `chainWindow` 0.2 s | time-scaled (0.194) |
 | Gravity | `mVel.y −= mGravity` per tick, MarioPhysics.cpp:478; `TJumpParams::mGravity` MarioInit.cpp:543 | 0.8 | 1.0 † | 38.25 m/s², one value | `riseGravity` 18, `apexGravity` 10, `fallGravity` 26 | time-scaled (18), plus an asked-for apex hang and heavier fall |
 | Terminal fall speed | clamp at −75, MarioPhysics.cpp:468–469, 484–485 | 75 u/f | — | 23.9 m/s | `maxFallSpeed` 18 | time-scaled is 16.4 |
-| Variable height | `if (!A && vy > 20) vy *= 0.75` instead of gravity, MarioPhysics.cpp:458, 472 | 20 u/f, ×0.75 | — | cut to ≤ 6.4 m/s; minimum tap 0.70 m | `jumpReleaseSpeed` 5 (instant cap) | time-scaled (4.4); tap measured 0.69 m |
+| Variable height | `if (!A && vy > 20) vy *= 0.75` instead of gravity, MarioPhysics.cpp:458, 472 | 20 u/f, ×0.75 | — | cut to ≤ 6.4 m/s; minimum tap 0.70 m | `jumpReleaseSpeed` 5 (instant cap) | time-scaled (4.4); tap 0.69 m at the play-test's ~250 fps, 0.62–0.75 m across frame rates (MV2, open) |
 | Air acceleration | `fwd += mag·cos(Δ)·JumpAccelControl`, MarioJump.cpp:107; MarioInit.cpp:547 | 0.5 | 0.008 † | 9.8 m/s² forward/back | `airAcceleration` 6 (vector) | ≈ time-scaled (4.6) + strafe |
 | Air strafe | `side = mag·sin(Δ)·JumpSlideControl`, MarioJump.cpp:108; MarioInit.cpp:548 | 0.5 | 0.3 † | ≤ 3.06 m/s that tick | folded into the vector steer | changed |
 | Air drag / caps | `×JumpSpeedBrake` MarioJump.cpp:81 (0.999, MarioInit.cpp:546); >32 −0.2, <−16 +0.4 MarioJump.cpp:112–115 | — | — | τ 8.3 s; soft cap 10.2 m/s | `airDrag` 1 m/s²; cap at takeoff speed | changed |
@@ -182,7 +193,7 @@ harness is described in §5):
 | Sprint | Starts 1.0 s after W; tops out at 7.00 m/s; RunStop from 5.9 m/s comes to rest in 0.49 s |
 | Skid turn at 7 m/s | 0.149 s plant + turn; exits at 6.44 m/s (92%), still Sprint |
 | Single jump, held | 1.97 m apex (authored 2.0), 1.05 s airtime |
-| Single jump, tap | 0.69 m apex, 0.45 s (Sunshine's minimum tap: 0.70 m) |
+| Single jump, tap | 0.69 m apex, 0.45 s at ~250 fps (Sunshine's minimum tap: 0.70 m). Frame-rate dependent: 0.62–0.75 m (QA MV2, open) |
 | Running single jump from sprint | 2.72 m, 1.21 s; lands still at 7 m/s and sprinting |
 | Chain jumps (re-jump on landing) | Single 2.73 m → Double 3.76 m → Triple 4.46 m; 1.07 / 1.20 / 1.49 s |
 | Side somersault out of the skid | 4.16 m, 1.45 s |
@@ -215,29 +226,42 @@ PlayerMovementInput ──Read()──▶ MovementMotor ──MoveChanged / Tric
 
 | Component | File | One job |
 |---|---|---|
-| `PlayerMovementInput` | `PlayerMovementInput.cs` | Builds the InputActions (moved from ChibiLocomotion, bindings unchanged) and returns a camera-relative `MovementIntent` per frame. |
+| `PlayerMovementInput` | `PlayerMovementInput.cs` | Builds the InputActions (moved from ChibiLocomotion; same bindings except gamepad Mount, now D-pad Right) and returns a camera-relative `MovementIntent` per frame. |
 | `MovementMotor` | `MovementMotor.cs` | Owns the CharacterController and the state machine, and integrates the body: speed along a heading, vertical velocity, momentum, force fields. Raises `MoveChanged`. Never touches Animator, VFX or UI. |
-| `MoveState` + 14 states | `States/*.cs` | One class per `MoveKind`. `Next()` decides, `Tick()` integrates. |
+| `MoveState` + 14 states | `States/*.cs` | One class per `MoveKind`. `Next()` decides the next move and `Tick()` integrates. `Next()` is not pure: it may spend presses and update shared bookkeeping (the jump chain's landing, the pending jump kind, the sprint ramp). |
 | `MovementConfig` | `MovementConfig.cs` | Every gameplay tunable, read live every frame. |
 | `MovementAnimatorDriver` | `Presentation/MovementAnimatorDriver.cs` | Listens to `MoveChanged` and sets the Animator: triggers, continuous params, and the int `Move` / `JumpKind`. Owns the model offset, ride lift and placeholder poses. |
 | `MovementEffects` | `Presentation/MovementEffects.cs` | Listens to `MoveChanged`: the feather puff, `DashEffects.Play`, `TetherSystem.Attach/Detach`, `SkateboardMount.SetRidden`. |
 | `MovementAnimationConfig` | `Presentation/MovementAnimationConfig.cs` | Presentation tunables (strides, clip timing, poses). |
 | `ChibiLocomotion` | `Sandbox/ChibiLocomotion.cs` | Facade with the stable API, plus player glue: lock-on and attack facing, head look-at. |
-| `Logic/*` | `Logic/*.cs` | Pure, tested rules: `JumpMath`, `GravityProfile`, `SprintRamp`, `SkidRule`, `JumpChain`, `SpinGesture`, `ForceFieldChannel`. |
+| `Logic/*` | `Logic/*.cs` | Pure, tested rules: `JumpMath`, `GravityProfile`, `SprintRamp`, `SkidRule`, `JumpChain`, `SpinGesture`, `ForceFieldChannel`, `FixedDuration` (the dash's exact reach). |
 
 ### The frame
 
 `MovementMotor.Update` runs in this order:
 
-1. Read the intent and run the ground check. Rising is never grounded, which replaced the old
+1. Read the intent, note the time of a Jump press (the jump buffer) and how long the stick has
+   been neutral, then run the ground check. Rising is never grounded, which replaced the old
    0.15 s post-jump latch.
-2. Drain the force-field accumulator, tick the movement lock, the Gravity Anchor and the spin
-   gesture.
+   - The check sweeps a sphere to `groundProbe` below the feet, walkable floor only.
+   - It also trusts the controller's own Below contact, but only over walkable floor.
+   - Being grounded resets the feather jump and the air dash, and ends a combat air hang
+     (`SuspendGravity`).
+2. Drain the force-field accumulator. Then tick, in this order:
+   - the movement lock;
+   - the combat air hang;
+   - the Gravity Anchor (its expiry and the G toggle);
+   - the spin gesture.
 3. Up to four hops of `Interrupt() ?? current.Next()`, switching states as needed.
    - Interrupts, in the old order: mount, tether latch, dash. Each state can refuse them
      (`AllowsDash`, `AllowsTether`, `AllowsMount`, `AllowsAnchor`).
-4. `current.Tick(dt)`, then apply the capsule height the move asked for. Growing the capsule is
-   refused under a ceiling.
+   - Each switch runs `Exit`, then ends a running Gravity Anchor if the new move refuses it,
+     then `Enter`, then raises `MoveChanged`.
+4. `current.Tick(dt)`, then apply the capsule height the move asked for.
+   - Ground moves snap down onto walkable floor within `groundSnapDistance`, so they follow
+     slopes and small steps down.
+   - The capsule never gets shorter than its diameter, and growing it is refused under a
+     ceiling.
 
 Because deciding and integrating are separate, a state that changes on a press (Ground → Jump)
 has the new state move the character on that same frame. Each switch runs `Exit` and `Enter`,
@@ -273,13 +297,20 @@ All of these keep their exact contracts:
 - `AddAcceleration` and `LockMovement` (GravityWell)
 - `IsMovementLocked`, `IsAnchored`
 
-`SetCombatFacingSource(IFacingSource)` lets combat supply where a swing must face; it takes
-priority over the lock-on square-up. Until combat registers one, the facade falls back to reading
-`MeleeCombat.IsAttacking`.
+`SetCombatFacingSource(IFacingSource)` lets combat supply where a swing must face. Whenever it
+claims facing, it takes priority over lock-on. When it doesn't (none registered, or it returns
+false), the lock-on rule applies:
+- **While locked on:** the body squares up to the target. The turn is urgent (fast) if
+  `MeleeCombat.IsAttacking`, otherwise it happens only once he has stopped.
+- **Not locked on:** an attack doesn't turn him at all.
 
 Two vertical levers were added for combat (sword abilities):
 - `SetVerticalVelocity(m/s)`: set once per event. Upward speed lifts him off the ground.
-- `SuspendGravity(seconds)`: an air hang, refreshed rather than accumulated.
+- `SuspendGravity(seconds)`: an air hang, refreshed rather than accumulated. It ends on landing.
+
+Both are public on `ChibiLocomotion` and `MovementMotor`, but **combat can't reach them yet**.
+`Combat/ChibiMovementAdapter` (`ICombatImpulses`) forwards only `AddMomentum` and
+`LockMovement`. Forwarding the levers there is sword-abilities' planned follow-up.
 
 The serialized field `lockOn` keeps its name, because `LockOnSetup` writes it by string. New code
 should hold an `IMovementState` (`ChibiLocomotion.Movement`) instead.
@@ -332,6 +363,8 @@ tooltip with its unit and its Sunshine value.
   - Release: `jumpReleaseSpeed` (how short a tap is), `minJumpHoldTime`.
   - Chain: `chainWindow`, `tripleMinSpeed`.
 - **Air control:** `airAcceleration` (vector steering: pulling back slows him), `airDrag`.
+- **Ground contact:** `groundProbe` (how far below the feet counts as standing),
+  `groundSnapDistance` (how far a ground move snaps down onto a slope or step; 0 = off).
 - **Dive and slide:** `diveSpeedBoost`, `diveMaxSpeed`, `diveHopSpeed`, and `bellySlideDecay*`
   (exponential, 1/s).
 - **Spin:** `spinRequiredDegrees`, `spinWindow`, `spinJumpHeight`, `spinFallGravity`,
@@ -400,10 +433,15 @@ to its airborne length.
   once.
 - **Air control is vector steering.** It approximates Sunshine's "no turning in the air, plus a
   strafe". Air turns are wider than before.
-- **Not yet in:** backflip (crouch + jump), wall kick, ground pound, and staying grounded over
-  small drops (Sunshine keeps Mario grounded over 1 m; here a step down is a short Fall).
-- **Gamepad conflict, pre-existing:** buttonWest is both skateboard Mount and MeleeCombat's
-  attack.
+- **Not yet in:** backflip (crouch + jump), wall kick and ground pound.
+- **Ground snapping reaches only `groundSnapDistance` (0.35 m).** Sunshine keeps Mario grounded
+  over drops up to 1.06 m; a bigger step down here is a short Fall.
+- **Too-steep slopes hold him rather than slide him.** On a surface steeper than the slope limit
+  (50°) he is correctly not grounded: no standing and no ground jumps. But the controller doesn't
+  slide him down it, so he hangs in Fall until he moves off. Sunshine slides Mario down.
+- **The skateboard's wheels read `CharacterController.velocity` directly.** After a ground snap
+  that is only the snap's motion, so on a downslope the wheels can stutter for a frame.
+  `MovementMotor.Velocity` reports the whole frame's motion.
 - **Play-testing in an unfocused Editor.**
   - Set `Application.runInBackground = true` at runtime, or Play mode stops ticking.
   - With `editorInputBehaviorInPlayMode = AllDeviceInputAlwaysGoesToGameView`, the real

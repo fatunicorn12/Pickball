@@ -56,6 +56,8 @@ namespace Pickleball.Sandbox.Movement
         Vector3 _travel = Vector3.forward;
         Vector3 _externalAccel, _frameFieldAccel;
         float _moveLockLeft, _hoverLeft;
+        Vector3 _achievedVelocity, _frameVelocity;
+        bool _frameVelocitySet;
         float _anchorLeft, _anchorReadyAt;
         float _jumpPressedAt = -99f;
         float _standHeight, _standRadius;
@@ -65,6 +67,12 @@ namespace Pickleball.Sandbox.Movement
         SprintRamp _sprint;
         JumpChain _chain;
         SpinGesture _spin;
+        // Physics query buffers, so the per-frame ground check and stand-up test
+        // allocate nothing (QA MV7). Not readonly, and rebuilt in EnsureRuntime,
+        // so a script reload never leaves one null.
+        RaycastHit[] _hits;
+        Collider[] _overlaps;
+        const int QueryBuffer = 16;
 
         // ------------------------------------------------------------ events
         /// <inheritdoc/>
@@ -80,7 +88,10 @@ namespace Pickleball.Sandbox.Movement
         public JumpKind CurrentJump { get; internal set; }
         public float TimeInMove => _timeInMove;
         public bool IsGrounded { get; private set; }
-        public Vector3 Velocity => _cc != null ? _cc.velocity : Vector3.zero;
+        /// <summary>The whole frame's motion, m/s. Usually the controller's own
+        /// velocity, but a ground snap is a second Move, and the controller only
+        /// reports the last one — so the standard move records both.</summary>
+        public Vector3 Velocity => _cc != null ? _achievedVelocity : Vector3.zero;
         public float PlanarSpeed => Speed;
         public float VerticalSpeed => VerticalVelocity;
         public Vector3 TravelDirection => _travel;
@@ -267,9 +278,21 @@ namespace Pickleball.Sandbox.Movement
             return MoveKind.SpinJump;
         }
 
-        /// <summary>The ground move to land in: sprinting if the ramp says so.</summary>
+        /// <summary>The ground move to be in: sprinting if the ramp says so.</summary>
         internal MoveKind GroundKind
             => _sprint.IsSprinting(Config.SprintDelay) ? MoveKind.Sprint : MoveKind.Ground;
+
+        /// <summary>
+        /// The ground move a landing hands over to. The sprint ramp is frozen in the
+        /// air so a sprint survives a jump with the stick held; landing with the
+        /// stick released spends it here, instead of reporting Sprint while at rest
+        /// until the ramp's grace runs out (QA MV9).
+        /// </summary>
+        internal MoveKind LandingMove()
+        {
+            if (!HasMoveIntent) _sprint.Reset();
+            return GroundKind;
+        }
 
         /// <summary>The capsule this move wants (1 = standing). Applied after the
         /// state ticks; growing is refused under a ceiling and retried each frame.</summary>
@@ -461,7 +484,14 @@ namespace Pickleball.Sandbox.Movement
             float vy = dt > 0f ? verticalDisplacement / dt : 0f;
             Vector3 requested = own + field + Vector3.up * vy;
             CollisionFlags flags = _cc.Move((own + field) * dt + Vector3.up * verticalDisplacement);
-            _field.Attribute(requested, field, IsGrounded, _cc.velocity);
+            // Fields are credited from the main move alone, so Velocity −
+            // AppliedFieldVelocity stays his own motion with the snap counted as
+            // his (it is: he ran down the slope).
+            Vector3 achieved = _cc.velocity;
+            _field.Attribute(requested, field, IsGrounded, achieved);
+            float snapped = SnapToGround(flags);
+            _frameVelocity = dt > 0f ? achieved + Vector3.down * (snapped / dt) : achieved;
+            _frameVelocitySet = true;
 
             // Head bonk: a ceiling ends the rise instead of pinning him to it for
             // the whole (deliberately long) hang time.
@@ -469,6 +499,25 @@ namespace Pickleball.Sandbox.Movement
 
             float drag = IsGrounded ? c.MomentumGroundDrag : c.MomentumAirDrag;
             Momentum = Vector3.MoveTowards(Momentum, Vector3.zero, drag * dt);
+        }
+
+        /// <summary>
+        /// Keeps a ground move on the ground over a downslope or a small step down,
+        /// which the fixed hold-down speed cannot follow: sprinting down anything
+        /// steeper than ~16° used to flicker Ground ↔ Fall every few frames (QA MV6).
+        /// Only for ground moves that were grounded and are not rising, and only onto
+        /// walkable floor within <see cref="MovementConfig.GroundSnapDistance"/>.
+        /// </summary>
+        /// <returns>How far he was moved down, m (0 if no snap).</returns>
+        float SnapToGround(CollisionFlags flags)
+        {
+            if ((flags & CollisionFlags.Below) != 0) return 0f;
+            if (!IsGrounded || VerticalVelocity > 0f || !_currentKind.IsGrounded()) return 0f;
+            float reach = Config.GroundSnapDistance;
+            if (reach <= 0f || !FindFloor(reach, out float drop) || drop <= 0.001f) return 0f;
+            float before = transform.position.y;
+            _cc.Move(Vector3.down * (drop + 0.01f));
+            return before - transform.position.y;
         }
 
         /// <summary>Cut loose from every force field (tether, dash). See
@@ -499,7 +548,10 @@ namespace Pickleball.Sandbox.Movement
             _sprint ??= new SprintRamp();
             _chain ??= new JumpChain();
             _spin ??= new SpinGesture();
-            if (_states == null)
+            _hits ??= new RaycastHit[QueryBuffer];
+            _overlaps ??= new Collider[QueryBuffer];
+            bool rebuilt = _states == null;
+            if (rebuilt)
             {
                 _states = new MoveState[]
                 {
@@ -512,6 +564,31 @@ namespace Pickleball.Sandbox.Movement
                     Debug.Assert((int)_states[i].Kind == i, $"MoveState order: {_states[i].Kind} at {i}");
             }
             _current = _states[(int)_currentKind];
+            if (rebuilt) ResumeAfterRebuild();
+        }
+
+        /// <summary>
+        /// After a script reload the states are new objects that never ran Enter.
+        /// Most moves keep nothing essential of their own and carry on, but a skid,
+        /// jump, dash or tether would resume with zeroed data — the rope at length 0
+        /// snapped him onto its anchor, the dash ended at once with no exit speed
+        /// (QA MV8). Those are handed over, properly entered, to Fall or Ground.
+        /// Editor-only in practice: builds never reload scripts.
+        /// </summary>
+        void ResumeAfterRebuild()
+        {
+            if (_currentKind is not (MoveKind.SkidTurn or MoveKind.Jump or MoveKind.Dash or MoveKind.Tether))
+                return;
+            MoveKind from = _currentKind;
+            MoveKind safe = IsGrounded ? MoveKind.Ground : MoveKind.Fall;
+            CurrentJump = JumpKind.None;
+            TetherAnchor = null;
+            _previousKind = from;
+            _currentKind = safe;
+            _current = _states[(int)safe];
+            _timeInMove = 0f;
+            _current.Enter(this, from);
+            MoveChanged?.Invoke(from, safe);
         }
 
         void Update()
@@ -531,6 +608,9 @@ namespace Pickleball.Sandbox.Movement
                 LastGroundedTime = Time.time;
                 AirJumpsUsed = 0;
                 AirDashUsed = false;
+                // An air hang ends with the airtime. Left running, its leftover
+                // time froze the next fall in mid-air (QA MV3).
+                _hoverLeft = 0f;
             }
 
             // Fields: drain the frame's accumulated acceleration exactly once,
@@ -554,6 +634,10 @@ namespace Pickleball.Sandbox.Movement
                 Switch(next);
             }
             _current.Tick(this, dt);
+            // Moves that drive the controller themselves (dash, tether) leave its
+            // own velocity as the truth; the standard move records the frame's.
+            _achievedVelocity = _frameVelocitySet ? _frameVelocity : _cc.velocity;
+            _frameVelocitySet = false;
             _timeInMove += dt;
             UpdateCapsule();
         }
@@ -593,6 +677,10 @@ namespace Pickleball.Sandbox.Movement
             _currentKind = next;
             _current = _states[(int)next];
             _timeInMove = 0f;
+            // A move that refuses the anchor also ends one already running: it used
+            // to carry on into the skateboard, where holding Jump flew the board
+            // (QA MV4).
+            if (IsAnchored && !_current.AllowsAnchor) EndAnchor();
             _current.Enter(this, from);
             MoveChanged?.Invoke(from, next);
         }
@@ -651,15 +739,18 @@ namespace Pickleball.Sandbox.Movement
             float h = _standHeight * fraction;
             Vector3 bottom = transform.position + Vector3.up * (_standRadius + 0.02f);
             Vector3 top = transform.position + Vector3.up * Mathf.Max(h - _standRadius, _standRadius + 0.03f);
-            // OverlapCapsule rather than CheckCapsule: the character's own
+            // An overlap query rather than CheckCapsule: the character's own
             // controller sits inside this volume and would otherwise report a hit
             // every frame, trapping him crouched forever.
-            var hits = Physics.OverlapCapsule(bottom, top, _standRadius * 0.95f, ~0, QueryTriggerInteraction.Ignore);
-            foreach (var h2 in hits)
-                if (h2.transform != transform && !h2.transform.IsChildOf(transform))
+            int n = Physics.OverlapCapsuleNonAlloc(bottom, top, _standRadius * 0.95f, _overlaps, ~0,
+                                                   QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+                if (!IsSelf(_overlaps[i].transform))
                     return false;
             return true;
         }
+
+        bool IsSelf(Transform t) => t == transform || t.IsChildOf(transform);
 
         // -------------------------------------------------------------- ground
 
@@ -673,32 +764,70 @@ namespace Pickleball.Sandbox.Movement
         bool CheckGrounded()
         {
             if (VerticalVelocity > 0.01f) return false;
+            if (FindFloor(Config.GroundProbe, out _)) return true;
 
-            // The sphere starts just above the feet and sweeps GroundProbe below
-            // them, so its lowest point reaches exactly that far. (It used to
-            // start a full capsule radius up and sweep radius + probe, which put
-            // its bottom 0.9 × radius + probe below the feet — 0.8 m on this
-            // capsule. Any jump under 0.8 m was "grounded" from its apex on and
-            // sank at the ground hold-down speed; taller ones did it for their
-            // last 0.8 m. Play-testing the new jumps found it.)
-            float radius = Mathf.Max(_cc.radius * 0.9f, 0.05f);
-            const float lift = 0.05f;
-            Vector3 origin = transform.position + Vector3.up * (radius + lift);
-            float distance = lift + Config.GroundProbe;
-
-            var hits = Physics.SphereCastAll(origin, radius, Vector3.down, distance, ~0,
-                                             QueryTriggerInteraction.Ignore);
-            foreach (var h in hits)
-            {
-                if (h.transform == transform || h.transform.IsChildOf(transform)) continue;
-                if (h.distance <= 0f) continue;   // started inside a collider
-                if (Vector3.Angle(h.normal, Vector3.up) > _cc.slopeLimit) continue;
-                return true;
-            }
-            // The cast can miss while he is plainly standing (on the scanned floor
+            // The sweep can miss while he is plainly standing (on the scanned floor
             // it starts overlapping a bump, or clips past a crease, and he loops
-            // Fall on flat ground). The controller's own last Move knows better.
-            return (_cc.collisionFlags & CollisionFlags.Below) != 0;
+            // Fall on flat ground), so the controller's own Below contact is
+            // trusted too — but only over walkable floor. Taken alone it ignored
+            // the slope limit, and he could stand and chain-jump on walls far too
+            // steep to walk (QA MV5).
+            return (_cc.collisionFlags & CollisionFlags.Below) != 0 && WalkableUnderCentre();
+        }
+
+        /// <summary>
+        /// Sweeps a sphere down from inside the capsule and finds the nearest
+        /// walkable surface within <paramref name="reach"/> below the feet.
+        /// <paramref name="drop"/> is how far below the feet it is, m.
+        ///
+        /// The sphere's lowest point travels from <c>lift</c> above the feet to
+        /// exactly <paramref name="reach"/> below them. (It used to start a full
+        /// capsule radius up and sweep radius + probe, so it reached 0.8 m below the
+        /// feet on this capsule and jumps were "grounded" 0.8 m up.) The lift keeps
+        /// the start clear of bumps in the scanned floor, which a start inside a
+        /// collider would skip.
+        /// </summary>
+        bool FindFloor(float reach, out float drop)
+        {
+            float radius = Mathf.Max(_cc.radius * 0.9f, 0.05f);
+            float lift = Mathf.Min(0.25f, radius);
+            Vector3 origin = transform.position + Vector3.up * (radius + lift);
+            int n = Physics.SphereCastNonAlloc(origin, radius, Vector3.down, _hits, lift + reach, ~0,
+                                               QueryTriggerInteraction.Ignore);
+            drop = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < n; i++)
+            {
+                RaycastHit h = _hits[i];
+                if (IsSelf(h.transform) || h.distance <= 0f) continue;   // self, or started inside
+                if (Vector3.Angle(h.normal, Vector3.up) > _cc.slopeLimit) continue;
+                float d = h.distance - lift;
+                if (d < drop) { drop = d; found = true; }
+            }
+            return found;
+        }
+
+        /// <summary>A narrow probe under the capsule's centre: is the floor right
+        /// below him walkable? On a too-steep wall the controller still reports a
+        /// Below contact at the capsule's rim, but under the centre there is either
+        /// steep surface or nothing in reach.</summary>
+        bool WalkableUnderCentre()
+        {
+            const float lift = 0.3f, radius = 0.15f;
+            Vector3 origin = transform.position + Vector3.up * (lift + radius);
+            int n = Physics.SphereCastNonAlloc(origin, radius, Vector3.down, _hits,
+                                               lift + Config.GroundProbe + 0.05f, ~0,
+                                               QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                RaycastHit h = _hits[i];
+                if (IsSelf(h.transform)) continue;
+                // Started inside a bump: he is standing in the scanned floor's
+                // relief, not on a wall.
+                if (h.distance <= 0f) return true;
+                if (Vector3.Angle(h.normal, Vector3.up) <= _cc.slopeLimit) return true;
+            }
+            return false;
         }
     }
 }

@@ -30,7 +30,14 @@ namespace Pickleball.Sandbox.Movement.Presentation
 
         void OnEnable()
         {
-            if (motor != null) motor.MoveChanged += OnMoveChanged;
+            if (motor == null) return;
+            motor.MoveChanged += OnMoveChanged;
+            // Resync the persistent effects with whatever move is current. After a
+            // script reload the motor may already have handed a tether or skate
+            // over (QA MV8) before this listener re-subscribed, and the change
+            // event would be missed. Both calls are idempotent.
+            if (board != null) board.SetRidden(motor.Current == MoveKind.Skate);
+            if (tether != null && motor.Current != MoveKind.Tether) tether.Detach();
         }
 
         void OnDisable()
