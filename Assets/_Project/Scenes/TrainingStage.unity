@@ -4172,7 +4172,7 @@ MonoBehaviour:
   sensitivity: 0.12
   minPitch: -25
   maxPitch: 65
-  followSmoothTime: 0.06
+  followSmoothTime: 0.18
   stickYawSpeed: 200
   stickPitchSpeed: 120
   stickDeadzone: 0.15
