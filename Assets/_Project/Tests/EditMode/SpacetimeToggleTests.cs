@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using Pickleball.Sandbox;
 using UnityEditor;
@@ -159,6 +160,98 @@ namespace Pickleball.Tests
             // disposed. EditMode runs no OnDisable to do it on teardown.
             settings.SetEnabled(false);
             view.Tick(togglePressed: false, now: 2.1f, deltaTime: 0.1f);
+        }
+
+        [Test]
+        public void Charge01_InRange_WhenOffAndBeforeFirstTick()
+        {
+            // ST1: before the first tick the raw ratio was −1/maxDuration, and a
+            // HUD that read it drew a negative meter.
+            var off = NewWired<SpacetimeView>(NewSettings(on: false));
+            var on = NewWired<SpacetimeView>(NewSettings(on: true));
+            var unwired = NewWired<SpacetimeView>(null);
+
+            foreach (var view in new[] { off, on, unwired })
+            {
+                Assert.That(view.Charge01, Is.InRange(0f, 1f));
+                Assert.That(view.Charge01, Is.EqualTo(1f), "the meter starts full");
+            }
+        }
+
+        [Test]
+        public void Charge01_StaysInRange_WhenMaxDurationIsLoweredMidPlay()
+        {
+            var settings = NewSettings(on: true);
+            var view = NewWired<SpacetimeView>(settings);
+            view.Tick(togglePressed: false, now: 1f, deltaTime: 0.1f);   // fills the meter
+
+            var so = new SerializedObject(settings);
+            so.FindProperty("maxDuration").floatValue = settings.MaxDuration * 0.25f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            Assert.That(view.Charge01, Is.InRange(0f, 1f));
+        }
+
+        [Test]
+        public void Update_FlipsOnALatchedPress_ExactlyOnce()
+        {
+            // ST6: the press is latched from InputAction.performed and consumed by
+            // the next Update, rather than polled with WasPressedThisFrame.
+            var settings = NewSettings(on: true);
+            RecorderWithHistory(settings);
+            var view = NewWired<SpacetimeView>(settings);
+            view.Tick(togglePressed: false, now: 2f, deltaTime: 0.1f);   // registers input
+            Assert.That(view.InputRegistered, Is.True, "precondition: binding registered");
+
+            SetLatch(view, true);
+            RunUpdate(view);
+            Assert.That(settings.In4D, Is.True, "the latched press flipped into 4D");
+            Assert.That(GetLatch(view), Is.False, "the press was consumed");
+
+            RunUpdate(view);
+            Assert.That(settings.In4D, Is.True, "no second flip without a second press");
+
+            settings.SetEnabled(false);
+            view.Tick(togglePressed: false, now: 3f, deltaTime: 0.1f);
+        }
+
+        [Test]
+        public void SwitchingOff_DropsALatchedPress()
+        {
+            // A press latched just before the switch went off must not flip the
+            // world the moment it comes back on.
+            var settings = NewSettings(on: true);
+            var view = NewWired<SpacetimeView>(settings);
+            view.Tick(togglePressed: false, now: 1f, deltaTime: 0.1f);
+            SetLatch(view, true);
+
+            settings.SetEnabled(false);
+            view.Tick(togglePressed: false, now: 1.1f, deltaTime: 0.1f);
+
+            Assert.That(GetLatch(view), Is.False);
+        }
+
+        const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
+
+        static void SetLatch(SpacetimeView view, bool value) =>
+            LatchField().SetValue(view, value);
+
+        static bool GetLatch(SpacetimeView view) => (bool)LatchField().GetValue(view);
+
+        static FieldInfo LatchField()
+        {
+            var field = typeof(SpacetimeView).GetField("_togglePressed", Private);
+            Assert.That(field, Is.Not.Null, "SpacetimeView._togglePressed was renamed; update the test.");
+            return field;
+        }
+
+        /// <summary>One frame of the view's private Update, which EditMode never
+        /// calls on its own.</summary>
+        static void RunUpdate(SpacetimeView view)
+        {
+            var update = typeof(SpacetimeView).GetMethod("Update", Private);
+            Assert.That(update, Is.Not.Null, "SpacetimeView.Update was renamed; update the test.");
+            update.Invoke(view, null);
         }
 
         [Test]
