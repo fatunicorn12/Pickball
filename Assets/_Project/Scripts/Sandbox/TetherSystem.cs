@@ -17,7 +17,8 @@ namespace Pickleball.Sandbox
     /// press latches HERE") and a locked marker on the anchor the rope is on.
     /// The anchor glow says "reachable / aimed at"; the marker says exactly
     /// which one the button will take, which the glow alone cannot when two
-    /// lit anchors sit close together.
+    /// lit anchors sit close together. While the <see cref="PlayerInputGate"/>
+    /// blocks <see cref="InputBlock.Movement"/> (a conversation) no marker shows.
     /// </summary>
     public class TetherSystem : MonoBehaviour
     {
@@ -54,8 +55,12 @@ namespace Pickleball.Sandbox
         [Tooltip("Vertical nudge for the pre-lock hint, in metres. 0 puts it right " +
                  "on the attach point, which is where the rope will meet.")]
         [SerializeField] private float hintHeightOffset = 0f;
-        [Tooltip("Show the pre-lock hint at all. The locked marker is always shown.")]
+        [Tooltip("Show the pre-lock hint at all. The locked marker is always shown, " +
+                 "except while the input gate blocks movement.")]
         [SerializeField] private bool showHint = true;
+        [Tooltip("Optional; found on the player if empty. While it blocks Movement (a " +
+                 "conversation) the tether cannot fire, so no marker shows.")]
+        [SerializeField] private PlayerInputGate inputGate;
 
         public TetherAnchor Best { get; private set; }
         public Vector3 RopeOrigin => ropeOrigin != null ? ropeOrigin.position : transform.position;
@@ -77,6 +82,7 @@ namespace Pickleball.Sandbox
             // Same gate ChibiLocomotion uses for the button itself: no point
             // advertising a latch the player cannot perform yet.
             _abilities = GetComponentInParent<PlayerAbilities>();
+            if (inputGate == null) inputGate = GetComponentInParent<PlayerInputGate>();
 
             // Created at runtime and parked at the scene root (it must not
             // inherit the player's rotation), so the scene needs no wiring.
@@ -198,6 +204,14 @@ namespace Pickleball.Sandbox
             if (_reticle == null) return;
             if (aimSource == null && Camera.main != null) aimSource = Camera.main.transform;
             Transform cam = aimSource;
+
+            // Same rule as the enemy lock-on: a conversation ends targeting.
+            // Movement is the tether button's flag.
+            if (inputGate != null && inputGate.IsBlocked(InputBlock.Movement))
+            {
+                _reticle.Hide();
+                return;
+            }
 
             if (_attached != null)
             {

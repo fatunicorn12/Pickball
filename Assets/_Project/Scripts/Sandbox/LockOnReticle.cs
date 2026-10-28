@@ -306,14 +306,20 @@ namespace Pickleball.Sandbox
 
         // ----------------------------------------------------------- animation
 
-        void LateUpdate()
+        // Unscaled: hit-stop, slow-mo or a conversation's stopped time should
+        // not drag the UI with it, or a fade would freeze half-visible.
+        void LateUpdate() => Tick(Time.unscaledDeltaTime);
+
+        /// <summary>One frame of animation, <paramref name="unscaledDeltaTime"/>
+        /// seconds. LateUpdate passes unscaled time; public so EditMode tests can
+        /// drive the fades with explicit time.</summary>
+        public void Tick(float unscaledDeltaTime)
         {
             if (!built) return;
             EnsureBuilt();
             if (_cam == null) { ResetAnimation(); return; }
 
-            // Unscaled: hit-stop or slow-mo should not drag the UI with it.
-            float dt = Time.unscaledDeltaTime;
+            float dt = unscaledDeltaTime;
             if (_lockInPending && _mode == Mode.Locked) StartLockIn();
             TickHint(dt);
             TickLocked(dt);

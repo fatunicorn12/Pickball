@@ -14,12 +14,13 @@ namespace Pickleball.Sandbox
     {
         /// <summary>Nothing blocked.</summary>
         None = 0,
-        /// <summary><c>PlayerMovementInput</c>: stick, jump, sprint, crouch, flip, mount, dash, tether, anchor.</summary>
+        /// <summary><c>PlayerMovementInput</c>: stick, jump, sprint, crouch, flip, mount, dash, tether, anchor.
+        /// <c>TetherSystem</c> hides its selector marker.</summary>
         Movement = 1 << 0,
         /// <summary><c>SwordInput</c>: attack presses are dropped, not buffered.</summary>
         Sword = 1 << 1,
         /// <summary><c>LockOnTargeting</c>: the toggle and target flicks are dropped (never saved
-        /// for the release). A lock already held is kept; call <c>Release()</c> to drop it.</summary>
+        /// for the release), a held lock is released and no hint shows. Any claimant ends targeting.</summary>
         LockOn = 1 << 2,
         /// <summary>Camera look. No reader checks it yet: the dialogue camera disables the
         /// orbit camera instead, since it needs the transform as well as the input.</summary>
