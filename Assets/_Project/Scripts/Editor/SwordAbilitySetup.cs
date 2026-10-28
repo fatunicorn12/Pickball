@@ -65,46 +65,48 @@ public static class SwordAbilitySetup
     }
 
     /// <summary>
-    /// The base chain mirrors WeaponSetup.AttackClips exactly (state names,
-    /// clips, speeds, windows) so the two never fight over a state. Measured
-    /// directions alternate A/B; see the clip audit in the system doc.
+    /// The base chain mirrors WeaponSetup.AttackClips' state names, clips and
+    /// speeds so the two never fight over a state; the windows exist only here
+    /// (and on the assets). Every comboOpen is at least its activeEnd, which is
+    /// what SwingTimeline enforces anyway. Measured directions alternate A/B;
+    /// see the clip audit in the system doc.
     /// </summary>
     static readonly StepSeed[] Steps =
     {
         new() { Asset = "Step_Slash1", Display = "Opening Slash", State = "Attack1",
                 Clip = "sword and shield slash (5).fbx", Speed = 2.5f, BlendIn = 0.06f,
-                Windows = new SwingWindows(0.32f, 0.60f, 0.46f, 0.90f), Hit = new HitSettings(10f, 4f, 0f, 0.05f) },
+                Windows = new SwingWindows(0.32f, 0.60f, 0.60f, 0.90f), Hit = new HitSettings(10f, 4f, 0f, 0.05f) },
         new() { Asset = "Step_Slash2", Display = "Return Sweep", State = "Attack2",
                 Clip = "sword and shield attack (3).fbx", Speed = 2.5f,
-                Windows = new SwingWindows(0.35f, 0.62f, 0.50f, 0.92f), Hit = new HitSettings(12f, 4f, 0f, 0.05f) },
+                Windows = new SwingWindows(0.35f, 0.62f, 0.62f, 0.92f), Hit = new HitSettings(12f, 4f, 0f, 0.05f) },
         new() { Asset = "Step_Slash3", Display = "Downstroke", State = "Attack3",
                 Clip = "sword and shield slash.fbx", Speed = 2.4f,
-                Windows = new SwingWindows(0.34f, 0.62f, 0.50f, 0.92f), Hit = new HitSettings(14f, 3f, 0f, 0.07f) },
+                Windows = new SwingWindows(0.34f, 0.62f, 0.62f, 0.92f), Hit = new HitSettings(14f, 3f, 0f, 0.07f) },
         new() { Asset = "Step_Slash4", Display = "Rising Finish", State = "Attack4",
                 Clip = "sword and shield slash (3).fbx", Speed = 2.2f,
-                Windows = new SwingWindows(0.34f, 0.64f, 0.55f, 0.95f), Hit = new HitSettings(20f, 8f, 12.8f, 0.1f),
+                Windows = new SwingWindows(0.34f, 0.64f, 0.64f, 0.95f), Hit = new HitSettings(20f, 8f, 12.8f, 0.1f),
                 Shake = 0.25f },
         new() { Asset = "Step_AirSlash", Display = "Air Slash", State = "AirAttack",
                 Clip = "sword and shield attack (4).fbx", Speed = 2.2f, BlendIn = 0.06f,
-                Windows = new SwingWindows(0.25f, 0.60f, 0.45f, 0.90f), Hit = new HitSettings(12f, 3f, 0f, 0.05f) },
+                Windows = new SwingWindows(0.25f, 0.60f, 0.60f, 0.90f), Hit = new HitSettings(12f, 3f, 0f, 0.05f) },
 
         // Lv 2 — + C. Attack1's flat sweep, played faster as a quick fourth hit:
         // direction A, so it alternates into the B-direction Rising Finish.
         new() { Asset = "Step_PlusC", Display = "+ C", State = "PlusC",
                 Clip = "sword and shield slash (5).fbx", Speed = 3.0f,
-                Windows = new SwingWindows(0.30f, 0.58f, 0.44f, 0.88f), Hit = new HitSettings(13f, 1.5f, 0f, 0.05f),
+                Windows = new SwingWindows(0.30f, 0.58f, 0.58f, 0.88f), Hit = new HitSettings(13f, 1.5f, 0f, 0.05f),
                 Trail = new Color(1f, 0.85f, 0.35f, 0.95f), HitFx = "PlusPop" },
         // Lv 3 — Phase Shift. The downstroke, as a second air hit after the
         // compact Air Slash: the wave dips.
         new() { Asset = "Step_PhaseShift", Display = "Phase Shift", State = "PhaseShift",
                 Clip = "sword and shield slash.fbx", Speed = 2.6f,
-                Windows = new SwingWindows(0.30f, 0.60f, 0.46f, 0.90f), Hit = new HitSettings(14f, 2.5f, 0f, 0.06f),
+                Windows = new SwingWindows(0.30f, 0.60f, 0.60f, 0.90f), Hit = new HitSettings(14f, 2.5f, 0f, 0.06f),
                 Trail = new Color(0.75f, 0.5f, 1f, 0.95f) },
         // Lv 4 — Unit Circle. The widest sweep, releasing a 1.8 m ring all the
         // way round the player in mid-air, with a radius line sweeping like θ.
         new() { Asset = "Step_UnitCircle", Display = "Unit Circle", State = "UnitCircle",
                 Clip = "sword and shield attack (3).fbx", Speed = 2.4f,
-                Windows = new SwingWindows(0.30f, 0.62f, 0.55f, 0.92f), Hit = new HitSettings(16f, 5f, 0f, 0.08f),
+                Windows = new SwingWindows(0.30f, 0.62f, 0.62f, 0.92f), Hit = new HitSettings(16f, 5f, 0f, 0.08f),
                 Burst = new AreaBurst(0.45f, 1.8f, 0.15f, new HitSettings(10f, 5f, 0f, 0.06f), 0f, 1.4f),
                 Trail = new Color(0.45f, 1f, 0.95f, 0.95f), Shake = 0.25f, ShakeSeconds = 0.2f, Fov = 3f,
                 BurstFx = "UnitCircleRing" },
@@ -112,7 +114,7 @@ public static class SwordAbilitySetup
         // stepping in and releasing a 3 m Riemann ring along the ground.
         new() { Asset = "Step_AreaUnderCurve", Display = "Area Under the Curve", State = "AreaUnderCurve",
                 Clip = "sword and shield slash (3).fbx", Speed = 2.0f, Lunge = 2.5f,
-                Windows = new SwingWindows(0.34f, 0.64f, 0.58f, 0.95f), Hit = new HitSettings(20f, 8f, 12.8f, 0.1f),
+                Windows = new SwingWindows(0.34f, 0.64f, 0.64f, 0.95f), Hit = new HitSettings(20f, 8f, 12.8f, 0.1f),
                 Burst = new AreaBurst(0.62f, 3f, 0.35f, new HitSettings(12f, 6f, 2f, 0.08f), 0.8f, 0.6f),
                 Trail = new Color(0.55f, 1f, 0.45f, 0.95f), Shake = 0.3f, ShakeSeconds = 0.22f, Fov = 4f,
                 BurstFx = "RiemannRing" },

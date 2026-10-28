@@ -21,7 +21,7 @@ MonoBehaviour:
   windows:
     activeStart: 0.32
     activeEnd: 0.6
-    comboOpen: 0.46
+    comboOpen: 0.6
     comboClose: 0.9
   hit:
     damage: 10
