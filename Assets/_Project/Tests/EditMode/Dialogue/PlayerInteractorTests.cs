@@ -127,6 +127,27 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
+        public void NpcWhosePromptIsOffScreen_IsNotATarget_AndEStaysDash()
+        {
+            // The prompt view only draws a pill that is on screen; E must only talk
+            // when that pill is drawn.
+            var npc = NpcAt(new Vector3(0f, 0f, 1.5f));
+            var view = NewHost("ViewCamera", new Vector3(0f, 1.6f, 3f)).AddComponent<Camera>();
+            view.transform.rotation = Quaternion.LookRotation(Vector3.forward);   // NPC behind it
+            SetRef(_interactor, "viewCamera", view);
+
+            _interactor.Tick(Frame, true);
+            Assert.That(_interactor.CurrentTarget, Is.Null);
+            Assert.That(_director.IsBusy, Is.False);
+            Assert.That(_gate.IsBlocked(InputBlock.InteractButton), Is.False);
+
+            view.transform.rotation = Quaternion.LookRotation(Vector3.back);      // now facing it
+            _interactor.Tick(Frame, false);
+            Assert.That(_interactor.CurrentTarget, Is.SameAs(npc));
+            Assert.That(_gate.IsBlocked(InputBlock.InteractButton), Is.True);
+        }
+
+        [Test]
         public void LockedOnToANonTalker_NoPrompt_EStaysDash()
         {
             NpcAt(new Vector3(0f, 0f, 1.5f));

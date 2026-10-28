@@ -127,6 +127,17 @@ namespace Pickleball.Tests.Dialogue
             Assert.That(Select(new[] { At(-0.3f, 2.0f), At(0.3f, 1.5f) }, rules, current: 0), Is.EqualTo(1));
         }
 
+        [TestCase(0.5f, 0.5f, 3f, true, TestName = "InView_Centre")]
+        [TestCase(0f, 1f, 3f, true, TestName = "InView_EdgesInclusive")]
+        [TestCase(0.5f, 0.5f, -3f, false, TestName = "InView_BehindTheCamera")]
+        [TestCase(0.5f, 0.5f, 0f, false, TestName = "InView_OnTheCameraPlane")]
+        [TestCase(1.05f, 0.5f, 3f, false, TestName = "InView_OffTheRightEdge")]
+        [TestCase(0.5f, -0.01f, 3f, false, TestName = "InView_BelowTheBottom")]
+        public void IsInView_IsInFrontAndInsideTheScreen(float x, float y, float z, bool expected)
+        {
+            Assert.That(TalkTargetSelector.IsInView(new Vector3(x, y, z)), Is.EqualTo(expected));
+        }
+
         [Test]
         public void Empty_OrNull_SelectsNobody()
         {

@@ -41,9 +41,6 @@ namespace Pickleball.Sandbox
         /// <summary>Every flag some owner currently claims.</summary>
         public InputBlock Blocked => _blocked;
 
-        /// <summary>Raised whenever <see cref="Blocked"/> changes value.</summary>
-        public event Action<PlayerInputGate> Changed;
-
         /// <summary>True if any of <paramref name="flags"/> is claimed by anyone.</summary>
         public bool IsBlocked(InputBlock flags) => (_blocked & flags) != 0;
 
@@ -124,9 +121,7 @@ namespace Pickleball.Sandbox
             var union = InputBlock.None;
             if (_claims != null)
                 for (int i = 0; i < _claims.Count; i++) union |= _claims[i].Flags;
-            if (union == _blocked) return;
             _blocked = union;
-            Changed?.Invoke(this);
         }
     }
 }

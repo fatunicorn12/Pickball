@@ -39,6 +39,19 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
+        public void Hold_WhenTimeIsAlreadyStopped_Refuses_AndNeverRestoresTheOtherPause()
+        {
+            Time.timeScale = 0f;                 // someone else (a second director) paused
+            var pause = new TimeScalePause();
+
+            Assert.That(pause.Hold(false), Is.False);
+            Assert.That(pause.IsHeld, Is.False);
+
+            pause.Release();
+            Assert.That(Time.timeScale, Is.EqualTo(0f), "their pause is theirs to end");
+        }
+
+        [Test]
         public void Release_WithoutHold_ChangesNothing()
         {
             Time.timeScale = 0.3f;

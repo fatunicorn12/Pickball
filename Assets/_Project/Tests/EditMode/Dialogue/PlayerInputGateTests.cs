@@ -79,21 +79,6 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
-        public void Changed_FiresOnlyWhenTheUnionChanges()
-        {
-            var gate = NewGate();
-            int changed = 0;
-            gate.Changed += _ => changed++;
-
-            gate.Claim(_dialogue, InputBlock.Sword);   // None → Sword
-            gate.Claim(_aiming, InputBlock.Sword);     // still Sword
-            gate.Release(_dialogue);                   // still Sword
-            gate.Release(_aiming);                     // Sword → None
-
-            Assert.That(changed, Is.EqualTo(2));
-        }
-
-        [Test]
         public void ReleaseAll_DropsEveryClaim()
         {
             var gate = NewGate();

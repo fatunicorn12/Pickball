@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace Pickleball.Sandbox.Dialogue
 {
@@ -16,13 +15,16 @@ namespace Pickleball.Sandbox.Dialogue
     /// <item><b>Settling</b> for <see cref="DialogueConfig.SettleSeconds"/>: the
     /// world keeps running with the player's input blocked, so he slows to idle
     /// instead of freezing mid-stride.</item>
-    /// <item><c>Time.timeScale</c> goes to 0, the previous value kept.</item>
+    /// <item><c>Time.timeScale</c> goes to 0, the previous value kept. If time
+    /// is already stopped by someone else by then, the talk is aborted rather
+    /// than recording 0 as the value to restore.</item>
     /// <item>The Talkable is told and <see cref="ConversationStarted"/> fires;
     /// the box fades in. <b>Opening</b> lasts
     /// <see cref="DialogueConfig.TextStartDelaySeconds"/> and ignores presses.</item>
     /// </list>
     /// <b>Talking.</b> A <see cref="DialogueRunner"/> types each line in unscaled
-    /// time. E / RB shows the whole line, then moves on.
+    /// time. Interact (E / RB, from <see cref="InteractInput"/>) shows the whole
+    /// line, then moves on.
     ///
     /// <b>End, in this order.</b>
     /// <list type="number">
@@ -39,9 +41,16 @@ namespace Pickleball.Sandbox.Dialogue
     /// reopen it.</item>
     /// </list>
     ///
-    /// <b>The press that starts a talk is not an advance.</b> Both this and the
-    /// interactor bind E / RB. <see cref="TryStart"/> drops any press latched so
-    /// far and ignores the start frame, and Settling and Opening ignore presses.
+    /// <b>Exception safety.</b> The end path never stops half way. Lifecycle
+    /// events are invoked one subscriber at a time, and a subscriber that throws
+    /// is logged and skipped; restoring time, leaving the conversation and
+    /// releasing input sit in <c>finally</c> blocks besides. A broken listener
+    /// can cost its own clean-up, never a frozen game.
+    ///
+    /// <b>The press that starts a talk is not an advance.</b> The interactor and
+    /// this director both hear the same press. <see cref="TryStart"/> drops any
+    /// press latched so far and ignores the start frame, and Settling and
+    /// Opening ignore presses.
     ///
     /// <b>Aborts.</b> Every frame the director checks its Talkable: destroyed,
     /// inactive, disabled, out of the conversation or dead (a Health on its
@@ -49,7 +58,7 @@ namespace Pickleball.Sandbox.Dialogue
     /// does disabling the director, which a script reload in Play mode does
     /// first: <c>OnDisable</c> restores time and releases input at once, and the
     /// camera and the views undo their own state from the events or their own
-    /// <c>OnDisable</c>. The game can never be left frozen.
+    /// <c>OnDisable</c>.
     ///
     /// The only writer of <c>Time.timeScale</c> in the project. It will not
     /// start a talk while time is already stopped.
@@ -83,6 +92,9 @@ namespace Pickleball.Sandbox.Dialogue
         [Tooltip("The player's input gate. Everything is blocked for the whole conversation. " +
                  "Empty: nothing is blocked (time still stops).")]
         [SerializeField] private PlayerInputGate inputGate;
+        [Tooltip("The player's Interact button (E / RB); a press advances the text. Empty: " +
+                 "nothing can advance, so a conversation never ends by itself.")]
+        [SerializeField] private InteractInput interactInput;
 
         // Longest unscaled step one frame may take. A hitch (a load, the Editor
         // regaining focus) would otherwise jump a fade or a blend to its end.
@@ -90,7 +102,7 @@ namespace Pickleball.Sandbox.Dialogue
 
         DialogueRunner _runner;
         TimeScalePause _pause;
-        InputAction _advance;
+        InteractInput _listening;
         bool _advancePressed;
         int _startFrame = -1;
         float _phaseTime;
@@ -98,17 +110,11 @@ namespace Pickleball.Sandbox.Dialogue
         float _cooldownUntil;
         Health _currentHealth;
 
-        /// <summary>The tunables this director runs on.</summary>
-        public DialogueConfig Config => config;
-
         /// <summary>Current phase.</summary>
         public Phase State { get; private set; } = Phase.Idle;
 
         /// <summary>True from <see cref="TryStart"/> until input is released.</summary>
         public bool IsBusy => State != Phase.Idle;
-
-        /// <summary>True while time is stopped for a conversation.</summary>
-        public bool IsPaused => Pause.IsHeld;
 
         /// <summary>True after a conversation, until a new one may start.</summary>
         public bool IsCoolingDown => State == Phase.Idle && _clock < _cooldownUntil;
@@ -178,29 +184,25 @@ namespace Pickleball.Sandbox.Dialogue
 
         void OnEnable()
         {
-            // Same buttons as the talk press and as Dash: E, and RB on a pad.
-            // Never left click (it re-captures the cursor and queues attacks) or Space.
-            _advance = new InputAction("DialogueAdvance", InputActionType.Button);
-            _advance.AddBinding("<Keyboard>/e");
-            _advance.AddBinding("<Gamepad>/rightShoulder");
-            // Latched from the callback, like LockOnTargeting's toggle: a polled
-            // WasPressedThisFrame can miss presses processed outside this Update.
-            _advance.performed += OnAdvancePerformed;
-            _advance.Enable();
+            _listening = interactInput;
+            if (_listening != null) _listening.Pressed += OnInteractPressed;
         }
 
         void OnDisable()
         {
-            Abort();
-            if (_advance == null) return;
-            _advance.performed -= OnAdvancePerformed;
-            _advance.Disable();
-            _advance.Dispose();
-            _advance = null;
-            _advancePressed = false;
+            try
+            {
+                Abort();
+            }
+            finally
+            {
+                if (_listening != null) _listening.Pressed -= OnInteractPressed;
+                _listening = null;
+                _advancePressed = false;
+            }
         }
 
-        void OnAdvancePerformed(InputAction.CallbackContext _) => _advancePressed = true;
+        void OnInteractPressed() => _advancePressed = true;
 
         void Update()
         {
@@ -230,7 +232,7 @@ namespace Pickleball.Sandbox.Dialogue
             _advancePressed = false;
 
             if (inputGate != null) inputGate.Claim(this, InputBlock.All);
-            ConversationStarting?.Invoke(talkable);
+            Raise(ConversationStarting, talkable);
             if (State == Phase.Settling && config.SettleSeconds <= 0f) EnterPause();
             return true;
         }
@@ -303,11 +305,20 @@ namespace Pickleball.Sandbox.Dialogue
 
         void EnterPause()
         {
-            Pause.Hold(config.PauseAudio);
+            // Someone else stopped time during the settle (a second director, a
+            // menu): their 0 must never become ours to restore.
+            if (!Pause.Hold(config.PauseAudio))
+            {
+                End(ConversationEndReason.Aborted, releaseNow: false);
+                return;
+            }
             State = Phase.Opening;
             _phaseTime = 0f;
-            Current.NotifyConversationStarted(Partner);
-            ConversationStarted?.Invoke(Current);
+            // The Talkable marks itself in conversation before it raises its
+            // event, so a throwing NPC listener cannot leave it half started.
+            try { Current.NotifyConversationStarted(Partner); }
+            catch (Exception e) { Debug.LogException(e, this); }
+            Raise(ConversationStarted, Current);
         }
 
         void BeginClosing()
@@ -315,35 +326,50 @@ namespace Pickleball.Sandbox.Dialogue
             if (State is not (Phase.Settling or Phase.Opening or Phase.Talking)) return;
             State = Phase.Closing;
             _phaseTime = 0f;
-            ConversationEnding?.Invoke(Current);
+            Raise(ConversationEnding, Current);
         }
 
         /// <summary>
         /// The end sequence: box out (if not already), Talkable told, time
         /// restored, <see cref="ConversationEnded"/>. Input is released now
         /// (<paramref name="releaseNow"/>, for OnDisable) or on the next tick.
+        /// Each step sits in a finally of the step before, so none is skipped.
         /// </summary>
         void End(ConversationEndReason reason, bool releaseNow)
         {
             if (State == Phase.Idle) return;
-            if (State != Phase.Releasing)
+            try
             {
+                if (State == Phase.Releasing) return;
                 var talkable = Current;
-                if (State != Phase.Closing)
+                try
                 {
-                    State = Phase.Closing;
-                    ConversationEnding?.Invoke(talkable);
+                    if (State != Phase.Closing)
+                    {
+                        State = Phase.Closing;
+                        Raise(ConversationEnding, talkable);
+                    }
+                    Runner.Stop();
+                    if (talkable != null)
+                    {
+                        try { talkable.NotifyConversationEnded(reason); }
+                        catch (Exception e) { Debug.LogException(e, this); }
+                    }
                 }
-                Runner.Stop();
-                if (talkable != null) talkable.NotifyConversationEnded(reason);
-                Pause.Release();
-                State = Phase.Releasing;
-                ConversationEnded?.Invoke(talkable);
-                Current = null;
-                Partner = null;
-                _currentHealth = null;
+                finally
+                {
+                    Pause.Release();
+                    State = Phase.Releasing;
+                    Current = null;
+                    Partner = null;
+                    _currentHealth = null;
+                }
+                Raise(ConversationEnded, talkable);
             }
-            if (releaseNow) ReleaseInput();
+            finally
+            {
+                if (releaseNow) ReleaseInput();
+            }
         }
 
         void ReleaseInput()
@@ -351,6 +377,20 @@ namespace Pickleball.Sandbox.Dialogue
             if (inputGate != null) inputGate.Release(this);
             State = Phase.Idle;
             _cooldownUntil = _clock + (config != null ? config.RestartCooldownSeconds : 0f);
+        }
+
+        /// <summary>Invokes a lifecycle event one subscriber at a time, logging and
+        /// skipping any that throws, so one broken listener cannot stop the
+        /// others or the conversation. Lifecycle events only: the invocation list
+        /// allocates, which is fine a few times per conversation.</summary>
+        void Raise(Action<Talkable> handlers, Talkable talkable)
+        {
+            if (handlers == null) return;
+            foreach (var handler in handlers.GetInvocationList())
+            {
+                try { ((Action<Talkable>)handler)(talkable); }
+                catch (Exception e) { Debug.LogException(e, this); }
+            }
         }
 
         void OnLineStarted(int index)

@@ -93,6 +93,18 @@ namespace Pickleball.Sandbox.Dialogue
             return best;
         }
 
+        /// <summary>
+        /// Whether a talk prompt anchored at this viewport point would be on
+        /// screen: in front of the camera and inside the 0–1 rectangle. The
+        /// interactor only claims E for a target that passes, and the prompt view
+        /// only draws one that passes, so E never talks to someone whose prompt
+        /// the player cannot see (an NPC behind the camera).
+        /// </summary>
+        public static bool IsInView(Vector3 viewportPoint)
+            => viewportPoint.z > 0f
+               && viewportPoint.x >= 0f && viewportPoint.x <= 1f
+               && viewportPoint.y >= 0f && viewportPoint.y <= 1f;
+
         /// <summary>Distance in the ground plane, m.</summary>
         public static float FlatDistance(Vector3 a, Vector3 b)
         {

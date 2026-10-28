@@ -115,14 +115,15 @@ namespace Pickleball.UI
             if (pill != null) pill.localScale = Vector3.one * Mathf.Lerp(PopFrom, 1f, eased);
         }
 
-        /// <summary>Moves the pill over the target. False when there is nothing
-        /// to show or the point is behind the camera.</summary>
+        /// <summary>Moves the pill over the target. False when there is nothing to
+        /// show or the anchor is off screen, by the same test the interactor uses
+        /// to decide whether E talks (<see cref="TalkTargetSelector.IsInView"/>).</summary>
         bool Place()
         {
             if (_target == null || pill == null || worldCamera == null || config == null) return false;
             Vector3 world = _target.FocusPosition + Vector3.up * config.PromptHeightOffset;
+            if (!TalkTargetSelector.IsInView(worldCamera.WorldToViewportPoint(world))) return false;
             Vector3 screen = worldCamera.WorldToScreenPoint(world);
-            if (screen.z <= 0f) return false;
 
             var parent = pill.parent as RectTransform;
             if (parent == null) return false;

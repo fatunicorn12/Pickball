@@ -16,9 +16,12 @@ using UnityEngine.UI;
 /// talk into the open scene (ChibiSandbox):
 ///
 /// <list type="bullet">
-/// <item>the player gets a <see cref="PlayerInputGate"/> and a
-/// <see cref="PlayerInteractor"/> (wired to lock-on, locomotion, melee and
-/// Spacetime for its eligibility rules), and the gate is filled into
+/// <item>the player gets a <see cref="PlayerInputGate"/>, an
+/// <see cref="InteractInput"/> (the one owner of the E / RB binding, heard by
+/// the interactor and the director) and a <see cref="PlayerInteractor"/>
+/// (wired to the main camera for its on-screen test, and to lock-on,
+/// locomotion, melee and Spacetime for its eligibility rules), and the gate
+/// is filled into
 /// <see cref="PlayerMovementInput"/>, <see cref="SwordInput"/>,
 /// <see cref="LockOnTargeting"/> and, if it has the field,
 /// <see cref="SpacetimeView"/>;</item>
@@ -31,8 +34,8 @@ using UnityEngine.UI;
 /// CanvasGroups;</item>
 /// <item>every other screen-space root canvas (FightHUD, SwordHUD, …) gets a
 /// CanvasGroup that the box fades out while it is up;</item>
-/// <item>two small sprites are generated into <c>Art/UI</c> (rewritten only if
-/// their bytes change), and <c>ScriptableObjects/Dialogue/DialogueConfig.asset</c>
+/// <item>two small sprites are generated into <c>Art/UI</c> (only if missing),
+/// and <c>ScriptableObjects/Dialogue/DialogueConfig.asset</c>
 /// and <c>TalkableSet.asset</c> are created once and never overwritten.</item>
 /// </list>
 ///
@@ -105,7 +108,8 @@ public static class DialogueSetup
         var talkables = EnsureTalkableSet();
 
         var gate = GetOrAdd<PlayerInputGate>(player.gameObject);
-        var director = EnsureDirector(config, gate);
+        var interact = GetOrAdd<InteractInput>(player.gameObject);
+        var director = EnsureDirector(config, gate, interact);
 
         var lockOn = player.GetComponent<LockOnTargeting>();
         var melee = player.GetComponentInChildren<MeleeCombat>(true);
@@ -113,8 +117,8 @@ public static class DialogueSetup
         var interactor = GetOrAdd<PlayerInteractor>(player.gameObject);
         SetRefs(interactor,
                 ("config", config), ("talkables", talkables), ("director", director),
-                ("inputGate", gate), ("lockOn", lockOn), ("locomotion", player),
-                ("melee", melee), ("spacetime", spacetime));
+                ("inputGate", gate), ("interactInput", interact), ("viewCamera", cam),
+                ("lockOn", lockOn), ("locomotion", player), ("melee", melee), ("spacetime", spacetime));
 
         WireGate(player.gameObject, gate, spacetime);
 
@@ -209,7 +213,7 @@ public static class DialogueSetup
 
     // ------------------------------------------------------------------- scene
 
-    static DialogueDirector EnsureDirector(DialogueConfig config, PlayerInputGate gate)
+    static DialogueDirector EnsureDirector(DialogueConfig config, PlayerInputGate gate, InteractInput interact)
     {
         var director = Object.FindFirstObjectByType<DialogueDirector>();
         if (director == null)
@@ -218,7 +222,7 @@ public static class DialogueSetup
             if (go == null) go = new GameObject(DirectorObjectName);
             director = go.AddComponent<DialogueDirector>();
         }
-        SetRefs(director, ("config", config), ("inputGate", gate));
+        SetRefs(director, ("config", config), ("inputGate", gate), ("interactInput", interact));
         return director;
     }
 
@@ -524,27 +528,26 @@ public static class DialogueSetup
     }
 
     /// <summary>
-    /// Writes a white sprite with the given alpha to <paramref name="path"/>,
-    /// but only if the bytes differ, and fixes its import settings only if they
-    /// differ, so a re-run touches nothing on disk.
+    /// Writes a white sprite with the given alpha to <paramref name="path"/>
+    /// only if no file is there (seeded once, like the config: a committed or
+    /// hand-edited sprite is never overwritten), and fixes its import settings
+    /// only if they differ, so a re-run touches nothing on disk.
     /// </summary>
     static Sprite WriteSprite(string path, int w, int h, Vector4 border, System.Func<float, float, float> alpha)
     {
         ChibiSandboxSetup.EnsureFolderPublic(UiArtDir);
-        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
-        var pixels = new Color32[w * h];
-        for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
-            pixels[y * w + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(alpha(x + 0.5f, y + 0.5f) * 255f));
-        tex.SetPixels32(pixels);
-        byte[] png = tex.EncodeToPNG();
-        Object.DestroyImmediate(tex);
-
         string full = ProjectPath(path);
-        bool write = !File.Exists(full) || !BytesEqual(File.ReadAllBytes(full), png);
-        if (write)
+        if (!File.Exists(full))
         {
-            File.WriteAllBytes(full, png);
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            var pixels = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                pixels[y * w + x] = new Color32(255, 255, 255,
+                                                (byte)Mathf.RoundToInt(alpha(x + 0.5f, y + 0.5f) * 255f));
+            tex.SetPixels32(pixels);
+            File.WriteAllBytes(full, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
             AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
         }
 
@@ -576,14 +579,6 @@ public static class DialogueSetup
             importer.SaveAndReimport();
         }
         return AssetDatabase.LoadAssetAtPath<Sprite>(path);
-    }
-
-    static bool BytesEqual(byte[] a, byte[] b)
-    {
-        if (a.Length != b.Length) return false;
-        for (int i = 0; i < a.Length; i++)
-            if (a[i] != b[i]) return false;
-        return true;
     }
 
     // ---------------------------------------------------------------- helpers

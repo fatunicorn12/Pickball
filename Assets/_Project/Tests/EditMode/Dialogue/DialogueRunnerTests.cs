@@ -120,11 +120,68 @@ namespace Pickleball.Tests.Dialogue
             Assert.That(DialogueRunner.CountVisible("<color=#ff0>A</color><3"), Is.EqualTo(3));
         }
 
+        // TMP counting: only TMP-valid tags are tags; character tags and emoji count once.
+        [TestCase("a < b > c", 9, TestName = "Count_SpacedAngleBracketsAreText")]
+        [TestCase("x<br>y", 3, TestName = "Count_BrIsOneCharacter")]
+        [TestCase("<b>Hey</b>", 3, TestName = "Count_FormattingTagsAreFree")]
+        [TestCase("<#ff0000>red</color>", 3, TestName = "Count_HexColourTagIsFree")]
+        [TestCase("a<nbsp>b<sprite=0>", 4, TestName = "Count_NbspAndSpriteAreCharacters")]
+        [TestCase("Hi \U0001F600!", 5, TestName = "Count_EmojiIsOneCharacter")]
+        [TestCase("<b unclosed", 11, TestName = "Count_UnclosedTagIsText")]
+        [TestCase("<b<i>x", 3, TestName = "Count_AngleBeforeCloseIsText")]
+        public void CountVisible_MatchesTextMeshPro(string text, int expected)
+        {
+            Assert.That(DialogueRunner.CountVisible(text), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void Typewriter_RevealsAnEmojiAsOneStep()
+        {
+            var runner = new DialogueRunner(Timing(cps: 10f));
+            runner.Begin(Definition("\U0001F600\U0001F600"));
+
+            runner.Tick(0.15f);
+            Assert.That(runner.VisibleCharacters, Is.EqualTo(1));
+            runner.Tick(0.1f);
+            Assert.That(runner.State, Is.EqualTo(DialogueRunner.Phase.Revealed));
+            Assert.That(runner.VisibleCharacters, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void Typewriter_BrTakesATurnAndPausesLikeALineBreak()
+        {
+            // "Hi." then <br> (one character, whitespace, so it owes the sentence pause).
+            var runner = new DialogueRunner(Timing(cps: 10f, sentence: 0.5f));
+            runner.Begin(Definition("Hi.<br>Yo"));
+
+            runner.Tick(0.85f);   // the <br> is due at 0.3 + 0.1 + 0.5 = 0.9
+            Assert.That(runner.VisibleCharacters, Is.EqualTo(3));
+            runner.Tick(0.1f);
+            Assert.That(runner.VisibleCharacters, Is.EqualTo(4));
+        }
+
         [Test]
         public void Typewriter_ZeroSpeedShowsEachLineAtOnce()
         {
             var runner = new DialogueRunner(Timing(cps: 0f));
             runner.Begin(Definition("All of it at once."));
+
+            Assert.That(runner.State, Is.EqualTo(DialogueRunner.Phase.Revealed));
+            Assert.That(runner.VisibleCharacters, Is.EqualTo(runner.TotalCharacters));
+        }
+
+        [TestCase(0f)]
+        [TestCase(-5f)]
+        [TestCase(float.NaN)]
+        public void Typewriter_SpeedTunedToZeroOrNaNMidLine_ShowsTheRest(float cps)
+        {
+            var runner = new DialogueRunner(Timing(cps: 10f));
+            runner.Begin(Definition("Typing along."));
+            runner.Tick(0.15f);
+            Assert.That(runner.VisibleCharacters, Is.EqualTo(1));
+
+            runner.Timing = Timing(cps: cps);
+            runner.Tick(0.01f);
 
             Assert.That(runner.State, Is.EqualTo(DialogueRunner.Phase.Revealed));
             Assert.That(runner.VisibleCharacters, Is.EqualTo(runner.TotalCharacters));

@@ -1,14 +1,13 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace Pickleball.Sandbox.Dialogue
 {
     /// <summary>
     /// Lives on the player and decides who the talk prompt is for; a press of
-    /// E (or RB on a pad) then starts that conversation through the
-    /// <see cref="DialogueDirector"/>.
+    /// Interact (<see cref="InteractInput"/>: E, or RB on a pad) then starts that
+    /// conversation through the <see cref="DialogueDirector"/>.
     ///
     /// <b>Targeting.</b> Each frame outside a conversation it copies the enabled
     /// Talkables from the <see cref="TalkableSet"/> (plus the lock-on target's
@@ -16,22 +15,25 @@ namespace Pickleball.Sandbox.Dialogue
     /// <see cref="TalkTargetSelector"/> choose: the lock-on target if it can
     /// talk and is close enough, nobody while locked on to something that cannot
     /// talk (Newton), otherwise the nearest one in front. No scene search and no
-    /// physics query: the set holds a handful of entries.
+    /// physics query: the set holds a handful of entries. A candidate whose
+    /// prompt would be off screen (<see cref="TalkTargetSelector.IsInView"/>,
+    /// the same test the prompt view draws by) is not a target, so E never talks
+    /// to someone whose prompt the player cannot see.
     ///
-    /// <b>Only when free.</b> With <see cref="DialogueConfig.RequireFree"/> there
-    /// is no prompt while airborne (past a short grace), dashing, tethered or on
-    /// the skateboard (<see cref="ChibiLocomotion.IsBusy"/>), swinging the sword
-    /// (<see cref="MeleeCombat.IsAttacking"/>) or in 4D
-    /// (<see cref="SpacetimeView.In4D"/>), because time stops for the talk.
+    /// <b>Only when free</b> (<see cref="TalkEligibility"/>, with
+    /// <see cref="DialogueConfig.RequireFree"/>): no prompt while airborne (past a
+    /// short grace), dashing, tethered or on the skateboard, swinging the sword
+    /// or in 4D; and a press starts a talk only while really grounded, never in
+    /// the grace, because time stops for the talk.
     ///
-    /// <b>E is both Talk and Dash.</b> While it has a target, and for the whole
-    /// conversation and its restart cooldown, it claims
+    /// <b>Interact is both Talk and Dash.</b> While it has a target, and for the
+    /// whole conversation and its restart cooldown, it claims
     /// <see cref="InputBlock.InteractButton"/> on the <see cref="PlayerInputGate"/>,
     /// and the movement input drops the dash while that is claimed. It runs
     /// before the motor (<c>DefaultExecutionOrder(-50)</c>), so the claim is
-    /// already current when the motor reads input: E on the frame a prompt
-    /// appears talks and never dashes, and E on the frame a talk closes neither
-    /// dashes nor reopens it.
+    /// already current when the motor reads input: a press on the frame a prompt
+    /// appears talks and never dashes, and a press on the frame a talk closes
+    /// neither dashes nor reopens it.
     ///
     /// Presentation reads <see cref="CurrentTarget"/> and listens to
     /// <see cref="TargetChanged"/>; this component draws nothing.
@@ -51,6 +53,11 @@ namespace Pickleball.Sandbox.Dialogue
         [Tooltip("The player's input gate, where the Interact claim lives. Empty: E talks AND " +
                  "dashes when a prompt is up.")]
         [SerializeField] private PlayerInputGate inputGate;
+        [Tooltip("The player's Interact button (E / RB). Empty: nothing starts a talk.")]
+        [SerializeField] private InteractInput interactInput;
+        [Tooltip("The camera the prompt is drawn through. A target whose prompt would be off " +
+                 "its screen is not offered. Empty: no on-screen test.")]
+        [SerializeField] private Camera viewCamera;
 
         [Header("Eligibility (all optional)")]
         [Tooltip("Its locked target wins when it has a Talkable on it, a parent or a child; " +
@@ -65,7 +72,7 @@ namespace Pickleball.Sandbox.Dialogue
 
         List<TalkCandidate> _candidates = new(8);
         List<Talkable> _candidateTalkables = new(8);
-        InputAction _talk;
+        InteractInput _listening;
         bool _talkPressed;
         float _airborneFor;
         Health _lastLockTarget;
@@ -74,35 +81,26 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>The character the prompt is for, or null.</summary>
         public Talkable CurrentTarget { get; private set; }
 
-        /// <summary>The tunables this interactor runs on.</summary>
-        public DialogueConfig Config => config;
-
         /// <summary>Raised when <see cref="CurrentTarget"/> changes; the argument may be null.</summary>
         public event Action<Talkable> TargetChanged;
 
         void OnEnable()
         {
-            _talk = new InputAction("Talk", InputActionType.Button);
-            _talk.AddBinding("<Keyboard>/e");
-            _talk.AddBinding("<Gamepad>/rightShoulder");
-            // Latched from the callback (see LockOnTargeting) and consumed every Tick.
-            _talk.performed += OnTalkPerformed;
-            _talk.Enable();
+            _listening = interactInput;
+            if (_listening != null) _listening.Pressed += OnInteractPressed;
         }
 
         void OnDisable()
         {
+            if (_listening != null) _listening.Pressed -= OnInteractPressed;
+            _listening = null;
+            _talkPressed = false;
             SetTarget(null);
             if (inputGate != null) inputGate.Release(this);
-            _talkPressed = false;
-            if (_talk == null) return;
-            _talk.performed -= OnTalkPerformed;
-            _talk.Disable();
-            _talk.Dispose();
-            _talk = null;
         }
 
-        void OnTalkPerformed(InputAction.CallbackContext _) => _talkPressed = true;
+        // Latched here, consumed every Tick.
+        void OnInteractPressed() => _talkPressed = true;
 
         void Update()
         {
@@ -114,14 +112,16 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>
         /// One frame: pick the target, keep the Interact claim in step, and start
         /// a conversation when <paramref name="talkPressed"/>. A press with
-        /// nobody to talk to is dropped, not remembered for later.
+        /// nobody to talk to, or while not free to start, is dropped, not
+        /// remembered for later.
         /// </summary>
         public void Tick(float unscaledDeltaTime, bool talkPressed)
         {
             UpdateGrounding(unscaledDeltaTime);
             SetTarget(MaySearch() ? FindTarget() : null);
 
-            if (talkPressed && CurrentTarget != null && director.TryStart(CurrentTarget, transform))
+            if (talkPressed && CurrentTarget != null && MayStartNow()
+                && director.TryStart(CurrentTarget, transform))
                 SetTarget(null);
 
             UpdateClaim();
@@ -131,16 +131,20 @@ namespace Pickleball.Sandbox.Dialogue
         {
             if (config == null || director == null || !director.CanStartConversation) return false;
             if (inputGate != null && inputGate.IsBlocked(InputBlock.Movement)) return false;
-            if (!config.RequireFree) return true;
-            if (locomotion != null && (locomotion.IsBusy || _airborneFor > config.GroundedGraceSeconds)) return false;
-            if (melee != null && melee.IsAttacking) return false;
-            if (spacetime != null && spacetime.In4D) return false;
-            return true;
+            return TalkEligibility.MayOffer(config.RequireFree, Grounded, _airborneFor,
+                                            config.GroundedGraceSeconds, Busy, Attacking, In4D);
         }
+
+        bool MayStartNow() => TalkEligibility.MayStart(config.RequireFree, Grounded, Busy, Attacking, In4D);
+
+        bool Grounded => locomotion == null || locomotion.IsGrounded;
+        bool Busy => locomotion != null && locomotion.IsBusy;
+        bool Attacking => melee != null && melee.IsAttacking;
+        bool In4D => spacetime != null && spacetime.In4D;
 
         void UpdateGrounding(float dt)
         {
-            if (locomotion == null || locomotion.IsGrounded) _airborneFor = 0f;
+            if (Grounded) _airborneFor = 0f;
             else _airborneFor += dt > 0f ? dt : 0f;
         }
 
@@ -196,8 +200,16 @@ namespace Pickleball.Sandbox.Dialogue
 
         void Add(Talkable t)
         {
-            _candidates.Add(new TalkCandidate(t.FocusPosition, t.CanTalk));
+            Vector3 focus = t.FocusPosition;
+            _candidates.Add(new TalkCandidate(focus, t.CanTalk && PromptInView(focus)));
             _candidateTalkables.Add(t);
+        }
+
+        bool PromptInView(Vector3 focus)
+        {
+            if (viewCamera == null) return true;
+            Vector3 anchor = focus + Vector3.up * config.PromptHeightOffset;
+            return TalkTargetSelector.IsInView(viewCamera.WorldToViewportPoint(anchor));
         }
 
         /// <summary>The Talkable on, above or below the lock-on target. Looked

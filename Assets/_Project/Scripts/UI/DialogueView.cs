@@ -40,7 +40,10 @@ namespace Pickleball.UI
         [SerializeField] private Image box;
         [Tooltip("The speaker name tab; hidden when the speaker has no name.")]
         [SerializeField] private Image nameTab;
+        [Tooltip("The speaker's name, inside the tab, in the accent colour.")]
         [SerializeField] private TMP_Text nameText;
+        [Tooltip("The line being typed. Revealed through maxVisibleCharacters, never by " +
+                 "rebuilding the string.")]
         [SerializeField] private TMP_Text bodyText;
         [Tooltip("The ▼ shown once the line is fully revealed.")]
         [SerializeField] private Graphic continueMark;

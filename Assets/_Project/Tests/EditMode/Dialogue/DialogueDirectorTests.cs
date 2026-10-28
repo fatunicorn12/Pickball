@@ -1,8 +1,10 @@
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Pickleball.Sandbox;
 using Pickleball.Sandbox.Dialogue;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Pickleball.Tests.Dialogue
 {
@@ -312,6 +314,92 @@ namespace Pickleball.Tests.Dialogue
             Assert.That(Time.timeScale, Is.EqualTo(1f));
             Assert.That(_npc.LastEndReason, Is.EqualTo(ConversationEndReason.Aborted));
             Assert.That(_gate.Blocked, Is.EqualTo(InputBlock.None));
+        }
+
+        // ------------------------------------------------- exception safety
+
+        [Test]
+        public void End_ThrowingListeners_CannotLeaveTheGameFrozenOrBlocked()
+        {
+            Time.timeScale = 0.8f;
+            bool laterListenerRan = false;
+            _director.ConversationEnding += _ => throw new System.InvalidOperationException("boom ending");
+            _director.ConversationEnded += _ => throw new System.InvalidOperationException("boom ended");
+            _director.ConversationEnded += _ => laterListenerRan = true;
+            LogAssert.Expect(LogType.Exception, new Regex("boom ending"));
+            LogAssert.Expect(LogType.Exception, new Regex("boom ended"));
+
+            StartAndOpen();
+            ReadToTheEnd();
+            _director.Tick(Close + 0.01f, false);
+
+            Assert.That(Time.timeScale, Is.EqualTo(0.8f), "time restored");
+            Assert.That(laterListenerRan, Is.True, "one broken listener does not stop the others");
+            Assert.That(_npc.IsInConversation, Is.False);
+            Assert.That(_director.Current, Is.Null);
+
+            _director.Tick(0.01f, false);
+            Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Idle));
+            Assert.That(_gate.Blocked, Is.EqualTo(InputBlock.None), "input released");
+        }
+
+        [Test]
+        public void OnDisable_ThrowingListeners_StillUnwindEverything()
+        {
+            Time.timeScale = 0.9f;
+            _director.ConversationEnding += _ => throw new System.InvalidOperationException("boom ending");
+            _director.ConversationEnded += _ => throw new System.InvalidOperationException("boom ended");
+            _npc.ConversationEnded += _ => throw new System.InvalidOperationException("boom npc");
+            LogAssert.Expect(LogType.Exception, new Regex("boom ending"));
+            LogAssert.Expect(LogType.Exception, new Regex("boom npc"));
+            LogAssert.Expect(LogType.Exception, new Regex("boom ended"));
+            StartAndOpen();
+
+            Lifecycle(_director, "OnDisable");   // what a script reload runs first
+
+            Assert.That(Time.timeScale, Is.EqualTo(0.9f));
+            Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Idle));
+            Assert.That(_gate.Blocked, Is.EqualTo(InputBlock.None));
+            Assert.That(_npc.IsInConversation, Is.False);
+            Assert.That(_npc.LastEndReason, Is.EqualTo(ConversationEndReason.Aborted));
+        }
+
+        [Test]
+        public void Start_AThrowingStartListener_DoesNotStopTheConversation()
+        {
+            _director.ConversationStarting += _ => throw new System.InvalidOperationException("boom starting");
+            _director.ConversationStarted += _ => throw new System.InvalidOperationException("boom started");
+            LogAssert.Expect(LogType.Exception, new Regex("boom starting"));
+            LogAssert.Expect(LogType.Exception, new Regex("boom started"));
+
+            StartAndOpen();
+
+            Assert.That(_npc.IsInConversation, Is.True);
+            Assert.That(_director.LineIndex, Is.EqualTo(0));
+        }
+
+        // ----------------------------------------------------- two directors
+
+        [Test]
+        public void Settle_TimeStoppedBySomeoneElse_AbortsInsteadOfRecordingZero()
+        {
+            int npcStarted = 0;
+            _npc.ConversationStarted += _ => npcStarted++;
+            _director.TryStart(_npc, _player);
+
+            Time.timeScale = 0f;                       // a second director, a menu
+            _director.Tick(Settle + 0.01f, false);
+
+            Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Releasing));
+            Assert.That(npcStarted, Is.EqualTo(0));
+            Assert.That(Time.timeScale, Is.EqualTo(0f), "their pause is left alone");
+            _director.Tick(0.01f, false);
+            Assert.That(_gate.Blocked, Is.EqualTo(InputBlock.None));
+
+            Time.timeScale = 1f;                       // they let go
+            _director.Tick(0.5f, false);
+            _director.Abort();
+            Assert.That(Time.timeScale, Is.EqualTo(1f), "nothing of ours was waiting to restore 0");
         }
     }
 }
