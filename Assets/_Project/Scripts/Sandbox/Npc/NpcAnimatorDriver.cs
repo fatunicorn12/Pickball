@@ -10,7 +10,12 @@ namespace Pickleball.Sandbox.Npc
     /// Presentation only (CodingStandards §1). It listens to the
     /// <see cref="Talkable"/> on the same object (never to the dialogue
     /// director) and to its <see cref="Health"/>, and changes nothing but the
-    /// Animator and this transform's yaw.
+    /// Animator, this transform's yaw and, once dead, the model's height
+    /// (the <see cref="NpcDeathLift"/> that keeps the body on the ground).
+    ///
+    /// After a conversation the NPC keeps facing the player while they stay
+    /// within the config's restReturnDistance, and turns back to the facing it
+    /// was placed with once they walk off.
     ///
     /// <b>Conversations run with <c>Time.timeScale</c> at 0.</b> On
     /// ConversationStarted the Animator is switched to
@@ -30,8 +35,13 @@ namespace Pickleball.Sandbox.Npc
     /// <see cref="NpcAnimatorParameters"/>.
     ///
     /// Hot-reload safe: events are subscribed in OnEnable and released in
-    /// OnDisable, runtime helpers are rebuilt lazily, and OnEnable picks up a
-    /// conversation (or a death) that is already under way.
+    /// OnDisable (which also restores the update mode and drops the death
+    /// lift), runtime helpers are rebuilt lazily, and OnEnable re-syncs a
+    /// conversation that is under way, or one that ended while disabled;
+    /// a death is re-synced on the next Tick.
+    ///
+    /// Time is only read in Update and passed to <see cref="Tick"/>; the
+    /// event handlers use the clock Tick was last given.
     /// </summary>
     [DisallowMultipleComponent]
     public class NpcAnimatorDriver : MonoBehaviour
@@ -58,7 +68,16 @@ namespace Pickleball.Sandbox.Npc
 
         bool _hasRestYaw;
         float _restYaw;
-        float _restReturnAt;
+        // Who the NPC keeps watching after a conversation, until they walk off.
+        Transform _watching;
+
+        // The clocks Tick was last given, so the event handlers never read
+        // Time directly and tests that inject time stay in control of them.
+        float _unscaledNow;
+
+        // How far the model is currently raised by the death lift, m. Undone in
+        // OnDisable, so a re-enable or script reload never stacks it twice.
+        float _appliedDeathLift;
 
         RuntimeAnimatorController _scannedController;
         bool _hasParameters;
@@ -124,8 +143,11 @@ namespace Pickleball.Sandbox.Npc
 
             // A script reload mid-conversation re-runs OnEnable with fresh
             // state; pick the conversation back up rather than idling through it.
+            // And the other way round: re-enabled after a conversation ended
+            // while disabled (its Ended never reached us), stop acting it out.
             // (Death is re-synced in Tick, after every Health has run Awake.)
             if (talkable != null && talkable.IsInConversation) OnConversationStarted(talkable);
+            else Tracker.EndConversation();
         }
 
         void OnDisable()
@@ -139,6 +161,7 @@ namespace Pickleball.Sandbox.Npc
             }
             if (health != null) health.Died -= OnDied;
             RestoreUpdateMode();
+            ApplyDeathLift(0f);
         }
 
         void OnDestroy()
@@ -148,23 +171,24 @@ namespace Pickleball.Sandbox.Npc
             else DestroyImmediate(_defaultConfig);
         }
 
-        // Scaled time is read only for the turn back to rest, which happens
-        // after the conversation, when time runs again. Everything that runs
-        // while paused (gesture timing, the turn toward the partner) uses the
-        // unscaled pair.
-        void Update() => Tick(Time.unscaledTime, Time.unscaledDeltaTime, Time.time, Time.deltaTime);
+        // The only place this component reads the clocks. Scaled delta time is
+        // used only after a conversation (watching the player walk off, turning
+        // back to rest), when time runs again; everything that runs while the
+        // game is paused uses the unscaled pair.
+        void Update() => Tick(Time.unscaledTime, Time.unscaledDeltaTime, Time.deltaTime);
 
         /// <summary>
         /// One frame: re-sync death, push the Animator parameters, advance the
-        /// idle variants and turn. Public so EditMode tests can drive time
-        /// explicitly (RuntimeConventions: inject time).
+        /// idle variants, lift a dead body onto the ground and turn. Public so
+        /// EditMode tests can drive time explicitly (RuntimeConventions: inject
+        /// time); the event handlers use the clock given here last.
         /// </summary>
         /// <param name="unscaledNow">Unscaled time, s: gesture timing.</param>
         /// <param name="unscaledDt">Unscaled frame time, s: turning while talking (time is paused).</param>
-        /// <param name="scaledNow">Game time, s: the delay before turning back.</param>
-        /// <param name="scaledDt">Game frame time, s: turning back to rest.</param>
-        public void Tick(float unscaledNow, float unscaledDt, float scaledNow, float scaledDt)
+        /// <param name="scaledDt">Game frame time, s: watching and turning back after a conversation.</param>
+        public void Tick(float unscaledNow, float unscaledDt, float scaledDt)
         {
+            _unscaledNow = unscaledNow;
             var cfg = Config;
             var tracker = Tracker;
             tracker.MinGestureSeconds = cfg.MinGestureSeconds;
@@ -179,16 +203,18 @@ namespace Pickleball.Sandbox.Npc
                 animator.SetInteger(NpcAnimatorParameters.EmoteHash, (int)tracker.Emote);
                 animator.SetBool(NpcAnimatorParameters.DeadHash, tracker.Dead);
                 UpdateIdleVariant(cfg);
+                if (tracker.Dead) UpdateDeathLift(cfg);
             }
 
-            UpdateFacing(cfg, scaledNow, unscaledDt, scaledDt);
+            UpdateFacing(cfg, unscaledDt, scaledDt);
         }
 
         // ---------------------------------------------------------------- events
 
-        void OnConversationStarted(Talkable _)
+        void OnConversationStarted(Talkable source)
         {
             Tracker.BeginConversation();
+            if (source != null && source.Partner != null) _watching = source.Partner;
             UseUnscaledTime();
         }
 
@@ -198,7 +224,7 @@ namespace Pickleball.Sandbox.Npc
             // CurrentLine is set before LineStarted fires, and is the default
             // line (emote Talk) for an index the definition does not have.
             var emote = source != null ? source.CurrentLine.Emote : DialogueEmote.Talk;
-            Tracker.BeginLine(emote, Time.unscaledTime);
+            Tracker.BeginLine(emote, _unscaledNow);
             UseUnscaledTime();
         }
 
@@ -208,14 +234,12 @@ namespace Pickleball.Sandbox.Npc
         // gesture, so there is nothing to skip on an abort. The controller
         // cross-fades straight from whatever was playing to idle (or Death
         // wins, if the abort was a kill).
+        // After the end, the NPC keeps watching the partner (_watching, set at
+        // the start) until they walk off; see UpdateFacing.
         void OnConversationEnded(Talkable _)
         {
             Tracker.EndConversation();
             RestoreUpdateMode();
-            // Scaled on purpose: Ended fires while time is still paused, so
-            // Time.time is frozen here and the delay counts from the moment
-            // play resumes, not from the end of the dialogue box.
-            _restReturnAt = Time.time + Config.RestReturnDelay;
         }
 
         void OnDied(Health _) => Tracker.Die();
@@ -316,32 +340,72 @@ namespace Pickleball.Sandbox.Npc
             _idleVariantCount = count;
         }
 
+        // ----------------------------------------------------------------- death
+
+        /// <summary>Eases the model up over the death clip (NpcDeathLift), so
+        /// the body ends on the ground rather than sunk into it.</summary>
+        void UpdateDeathLift(NpcAnimationConfig cfg)
+        {
+            var info = animator.GetCurrentAnimatorStateInfo(0);
+            float t = info.fullPathHash == DeathStateHash ? info.normalizedTime : 0f;
+            ApplyDeathLift(NpcDeathLift.At(t, cfg.DeathGroundLift, cfg.DeathLiftStart));
+        }
+
+        static readonly int DeathStateHash = NpcAnimatorParameters.FullPathHash(NpcAnimatorParameters.DeathState);
+
+        void ApplyDeathLift(float lift)
+        {
+            if (animator == null || Mathf.Approximately(lift, _appliedDeathLift)) return;
+            animator.transform.localPosition += Vector3.up * (lift - _appliedDeathLift);
+            _appliedDeathLift = lift;
+        }
+
         // ---------------------------------------------------------------- facing
 
-        void UpdateFacing(NpcAnimationConfig cfg, float scaledNow, float unscaledDt, float scaledDt)
+        /// <summary>
+        /// While talking: face the partner, on unscaled time (the game is
+        /// paused). Afterwards: keep watching them while they stay within
+        /// restReturnDistance, then turn back to the placed facing. Dead NPCs
+        /// don't turn.
+        /// </summary>
+        void UpdateFacing(NpcAnimationConfig cfg, float unscaledDt, float scaledDt)
         {
             if (Tracker.Dead) return;
 
             float target, rate, dt;
-            var partner = talkable != null ? talkable.Partner : null;
             if (Tracker.Talking)
             {
+                var partner = talkable != null ? talkable.Partner : null;
                 if (partner == null || !NpcFacing.TryYawTowards(transform.position, partner.position, out target))
                     return;
                 rate = cfg.TurnRate;
                 dt = unscaledDt;
             }
-            else if (cfg.ReturnToRestFacing && _hasRestYaw && scaledNow >= _restReturnAt)
+            else if (_watching != null && WithinWatchRange(cfg))
             {
+                if (!NpcFacing.TryYawTowards(transform.position, _watching.position, out target)) return;
+                rate = cfg.TurnRate;
+                dt = scaledDt;
+            }
+            else
+            {
+                _watching = null;
+                if (!cfg.ReturnToRestFacing || !_hasRestYaw) return;
                 target = _restYaw;
                 rate = cfg.RestTurnRate;
                 dt = scaledDt;
             }
-            else return;
 
             float yaw = transform.eulerAngles.y;
             if (Mathf.Abs(Mathf.DeltaAngle(yaw, target)) < 0.01f) return;
             transform.rotation = Quaternion.Euler(0f, NpcFacing.StepYaw(yaw, target, rate, cfg.MaxTurnSpeed, dt), 0f);
+        }
+
+        bool WithinWatchRange(NpcAnimationConfig cfg)
+        {
+            Vector3 d = _watching.position - transform.position;
+            d.y = 0f;
+            return d.sqrMagnitude <= cfg.RestReturnDistance * cfg.RestReturnDistance;
         }
     }
 }

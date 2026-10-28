@@ -82,7 +82,7 @@ namespace Pickleball.Tests.Npc
 
         void TickFrames(int frames, float unscaledDt, float scaledDt)
         {
-            for (int i = 0; i < frames; i++) _driver.Tick(i * unscaledDt, unscaledDt, 0f, scaledDt);
+            for (int i = 0; i < frames; i++) _driver.Tick(i * unscaledDt, unscaledDt, scaledDt);
         }
 
         [Test]
@@ -176,6 +176,36 @@ namespace Pickleball.Tests.Npc
         }
 
         [Test]
+        public void DeathMidTalk_StopsTheGestureAndSurvivesTheAbort()
+        {
+            _talkable.NotifyConversationStarted(_partner);
+            _driver.Tick(10f, 1f / 60f, 0f);
+            _talkable.NotifyLineStarted(0);                  // gesture timed from the injected clock (10 s)
+            Assert.That(_driver.IsSpeakingAt(10.1f), Is.True);
+
+            _health.Damage(1000f, Vector3.zero);
+            Assert.That(_driver.IsDead, Is.True);
+            Assert.That(_driver.IsSpeakingAt(10.1f), Is.False, "death outranks the line's gesture");
+            Assert.That(_animator.updateMode, Is.EqualTo(AnimatorUpdateMode.UnscaledTime),
+                        "still paused: the corpse keeps animating until the talk ends");
+
+            _talkable.NotifyConversationEnded(ConversationEndReason.Aborted);
+            Assert.That(_animator.updateMode, Is.EqualTo(AnimatorUpdateMode.Fixed));
+            Assert.That(_driver.IsDead, Is.True);
+            Assert.That(_driver.IsTalking, Is.False);
+        }
+
+        [Test]
+        public void ReEnableAfterTheTalkEndedWhileDisabled_StopsTalking()
+        {
+            _talkable.NotifyConversationStarted(_partner);
+            Invoke(_driver, "OnDisable");
+            _talkable.NotifyConversationEnded();             // never reaches the disabled driver
+            Invoke(_driver, "OnEnable");
+            Assert.That(_driver.IsTalking, Is.False);
+        }
+
+        [Test]
         public void DoesNotTurnOnceDead()
         {
             _health.Damage(1000f, Vector3.zero);
@@ -185,15 +215,28 @@ namespace Pickleball.Tests.Npc
         }
 
         [Test]
-        public void TurnsBackToRestAfterTheDelay()
+        public void KeepsWatchingThePartnerWhileTheyStayClose()
         {
             _talkable.NotifyConversationStarted(_partner);
             TickFrames(90, 1f / 60f, 0f);
             _talkable.NotifyConversationEnded();
 
-            // Well past the return delay, on game time.
-            const float dt = 1f / 60f;
-            for (int i = 0; i < 300; i++) _driver.Tick(0f, dt, Time.time + 100f + i * dt, dt);
+            // The partner steps round to +Z, still within the watch distance (4 m).
+            _partner.position = new Vector3(0f, 0f, 3f);
+            TickFrames(300, 1f / 60f, 1f / 60f);
+            Assert.That(Mathf.DeltaAngle(_driver.transform.eulerAngles.y, 0f), Is.EqualTo(0f).Within(1f),
+                        "keeps facing the player standing 3 m away, not its rest facing");
+        }
+
+        [Test]
+        public void TurnsBackToRestOnceThePartnerWalksOff()
+        {
+            _talkable.NotifyConversationStarted(_partner);    // partner 5 m due +X: yaw 90
+            TickFrames(90, 1f / 60f, 0f);
+            _talkable.NotifyConversationEnded();
+
+            // 5 m is beyond the 4 m watch distance: back to the rest facing (0).
+            TickFrames(400, 1f / 60f, 1f / 60f);
             Assert.That(Mathf.DeltaAngle(_driver.transform.eulerAngles.y, 0f), Is.EqualTo(0f).Within(1f));
         }
     }

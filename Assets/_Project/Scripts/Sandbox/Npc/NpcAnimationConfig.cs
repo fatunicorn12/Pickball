@@ -24,13 +24,14 @@ namespace Pickleball.Sandbox.Npc
                  "180° about-face reads as a pivot, not a snap. 0 = no cap.")]
         [SerializeField, Min(0f)] private float maxTurnSpeed = 300f;
 
-        [Tooltip("After a conversation, turn back to the facing the NPC was placed with. " +
-                 "Off: it keeps facing wherever the player last stood.")]
+        [Tooltip("After a conversation, turn back to the facing the NPC was placed with once " +
+                 "the player has walked away. Off: it keeps facing wherever the player last stood.")]
         [SerializeField] private bool returnToRestFacing = true;
 
-        [Tooltip("Seconds after a conversation ends before the NPC turns back. Turning away " +
-                 "the instant the box closes feels rude.")]
-        [SerializeField, Min(0f)] private float restReturnDelay = 2f;
+        [Tooltip("After a conversation the NPC keeps turning to watch the player while they " +
+                 "stay within this distance, m, and turns back to its rest facing once they " +
+                 "are further. Turning away while the player still stands there feels rude.")]
+        [SerializeField, Min(0f)] private float restReturnDistance = 4f;
 
         [Tooltip("How fast the NPC turns back to its rest facing, 1/s (exponential). Slower " +
                  "than the turn toward the player, so it drifts back to what it was doing.")]
@@ -40,6 +41,18 @@ namespace Pickleball.Sandbox.Npc
         [Tooltip("A line's gesture plays at least this long, s (unscaled), even if the " +
                  "player skips the typing. Below ~0.3 a skipped line shows no gesture at all.")]
         [SerializeField, Min(0f)] private float minGestureSeconds = 0.8f;
+
+        [Header("Death")]
+        [Tooltip("How far the model is eased up over the death clip, m, so the body ends lying " +
+                 "on the ground instead of in it (Mixamo deaths are made for a thinner body). " +
+                 "RE-TUNE THIS FOR EVERY NEW DEATH CLIP: measure it with Tools ▸ Pickleball ▸ " +
+                 "Diagnostics ▸ Report Birdy Poses (the 'death sink' line). 0 = no lift.")]
+        [SerializeField, Min(0f)] private float deathGroundLift = 0.19f;
+
+        [Tooltip("Normalised time in the death clip at which the lift starts easing in (it is " +
+                 "complete at the clip's end). Set it to where the body starts to go down, so " +
+                 "the standing part of the death does not float. Re-tune per death clip.")]
+        [SerializeField, Range(0f, 1f)] private float deathLiftStart = 0.45f;
 
         [Header("Idling")]
         [Tooltip("With several idle clips: chance, after each loop of the main idle, that it " +
@@ -81,8 +94,12 @@ namespace Pickleball.Sandbox.Npc
         public float MaxTurnSpeed => maxTurnSpeed;
         /// <summary>Whether the NPC turns back to its placed facing after talking.</summary>
         public bool ReturnToRestFacing => returnToRestFacing;
-        /// <summary>Delay before turning back, s (scaled time).</summary>
-        public float RestReturnDelay => restReturnDelay;
+        /// <summary>Distance beyond which the NPC stops watching the player and turns back, m.</summary>
+        public float RestReturnDistance => restReturnDistance;
+        /// <summary>How far the model is eased up by the end of the death clip, m.</summary>
+        public float DeathGroundLift => deathGroundLift;
+        /// <summary>Normalised death-clip time at which the lift starts.</summary>
+        public float DeathLiftStart => deathLiftStart;
         /// <summary>Turn rate back to the rest facing, 1/s.</summary>
         public float RestTurnRate => restTurnRate;
         /// <summary>Minimum gesture length per line, s (unscaled).</summary>
