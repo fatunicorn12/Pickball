@@ -12,8 +12,15 @@ using Object = UnityEngine.Object;
 
 /// <summary>
 /// A trial of Quaternius's Universal Animation Library (UAL) as the source of
-/// Birdy's clips. It is kept apart from Birdy's live setup: it never touches
-/// BirdyNpcSetup, Animation/Birdy/, Birdy.controller or Birdy.prefab.
+/// Birdy's clips, and the maker of the one UAL clip Birdy ships: his death.
+/// It never touches BirdyNpcSetup, Birdy.controller or Birdy.prefab.
+///
+/// <b>Adopted: the death only.</b> Rendered side by side on Birdy, Mixamo reads
+/// better for the idles and the three talk emotes, and UAL1 Death01 beats both
+/// Mixamo deaths. So the Death row is copied straight into Birdy's live clip
+/// folder, Animation/Birdy/Death.anim, where BirdyNpcSetup picks it up like any
+/// other clip; every other row stays in Animation/Quaternius/Birdy/ for the
+/// trial controller.
 ///
 /// Tools ▸ Pickleball ▸ Setup Birdy UAL Trial
 ///
@@ -36,7 +43,8 @@ using Object = UnityEngine.Object;
 ///    BirdyNpcSetup.ImportClip gives Mixamo clips: Loop Time and Loop Pose on
 ///    except for death, and root rotation, height and XZ baked into the pose
 ///    (height based upon the feet).
-/// 3. Copies each mapped clip to Animation/Quaternius/Birdy/&lt;Role&gt;.anim. A
+/// 3. Copies each mapped clip to Animation/Quaternius/Birdy/&lt;Role&gt;.anim
+///    (the death to Animation/Birdy/Death.anim, above). A
 ///    UAL FBX holds dozens of takes, but BirdyNpcSetup.ImportClip only ever
 ///    uses a file's first take, so the clips are copied out rather than the
 ///    FBX dropped into Animation/Birdy/.
@@ -58,6 +66,10 @@ public static class BirdyUalTrialSetup
     const string Ual1Path = Root + "/UAL1_Standard.fbx";
     const string Ual2Path = Root + "/UAL2_Standard.fbx";
     const string ClipDir = Root + "/Birdy";
+
+    /// <summary>Birdy's live clip folder, which BirdyNpcSetup scans. Only the
+    /// death is copied there (see the class summary).</summary>
+    const string LiveClipDir = "Assets/_Project/Animation/Birdy";
     const string ControllerPath = Root + "/Birdy_UAL.controller";
 
     /// <summary>The live controller the trial mirrors. Read only.</summary>
@@ -97,10 +109,11 @@ public static class BirdyUalTrialSetup
     ///   Talk_Thinking  UAL2 Idle_TalkingPhone_Loop: one wing tip at the side of
     ///                  the head, the other on the hip; reads as "let me think".
     ///   Death          UAL1 Death01: from a plain stand, a stagger, then a fall
-    ///                  onto the back with the feet up. Without a lift the body
-    ///                  and helmet end 11 cm into the floor; the config's
-    ///                  death lift (tuned for the fallback death) needs about
-    ///                  0.10 m from t = 0.35 if this clip is adopted.
+    ///                  onto the back with the feet up. Adopted: copied to
+    ///                  Animation/Birdy/Death.anim, Birdy's live death. Without
+    ///                  a lift the body and head end 11 cm into the floor; the
+    ///                  config's death lift is tuned for it (0.10 m from t = 0.35
+    ///                  to 0.6), and NpcRotor knocks the rotor off at t = 0.4.
     /// </summary>
     static readonly (string anim, NpcClipRole role, string source, string take)[] Clips =
     {
@@ -408,6 +421,7 @@ public static class BirdyUalTrialSetup
     static Dictionary<NpcClipRole, List<AnimationClip>> ExtractClips()
     {
         ChibiSandboxSetup.EnsureFolderPublic(ClipDir);
+        ChibiSandboxSetup.EnsureFolderPublic(LiveClipDir);
         var result = new Dictionary<NpcClipRole, List<AnimationClip>>();
         var lines = new List<string>();
         foreach (var (anim, role, source, take) in Clips)
@@ -419,7 +433,7 @@ public static class BirdyUalTrialSetup
                 Debug.LogError($"Setup Birdy UAL Trial: clip '{take}' not imported from {source}.");
                 return null;
             }
-            var copy = CopyClip(clip, source, $"{ClipDir}/{anim}.anim", anim, out bool written);
+            var copy = CopyClip(clip, source, ClipPath(anim, role), anim, out bool written);
             if (!result.TryGetValue(role, out var list)) result[role] = list = new List<AnimationClip>();
             list.Add(copy);
             lines.Add($"  {anim,-16} <- {Path.GetFileNameWithoutExtension(source)} {take} " +
@@ -428,6 +442,11 @@ public static class BirdyUalTrialSetup
         Debug.Log("Birdy UAL clips:\n" + string.Join("\n", lines));
         return result;
     }
+
+    /// <summary>Where a mapped clip is copied: the death into Birdy's live
+    /// clip folder, the rest beside the trial controller.</summary>
+    static string ClipPath(string anim, NpcClipRole role)
+        => role == NpcClipRole.Death ? $"{LiveClipDir}/{anim}.anim" : $"{ClipDir}/{anim}.anim";
 
     /// <summary>
     /// Copies an imported clip into a standalone .anim at <paramref name="path"/>,

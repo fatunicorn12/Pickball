@@ -22,6 +22,8 @@ namespace Pickleball.Tests.Npc
         [TestCase("Death_FallingFlatImpact.fbx", NpcClipRole.Death)]
         [TestCase("Assets/_Project/Animation/Birdy/Death.fbx", NpcClipRole.Death)]
         [TestCase(@"Assets\_Project\Animation\Birdy\Talk_Excited.fbx", NpcClipRole.TalkExcited)]
+        [TestCase("Assets/_Project/Animation/Birdy/Death.anim", NpcClipRole.Death)]
+        [TestCase("Idle_FoldArms.ANIM", NpcClipRole.Idle)]
         public void TryGetRole_ReadsThePrefix(string file, NpcClipRole expected)
         {
             Assert.That(NpcClipRoles.TryGetRole(file, out var role), Is.True);
@@ -31,7 +33,8 @@ namespace Pickleball.Tests.Npc
         [TestCase("Talk_Wave.fbx")]
         [TestCase("Walking.fbx")]
         [TestCase("Idle.fbx.meta")]
-        [TestCase("Idle.anim")]
+        [TestCase("Idle.anim.meta")]
+        [TestCase("Idle.controller")]
         [TestCase("MyIdle.fbx")]
         [TestCase("")]
         [TestCase(null)]

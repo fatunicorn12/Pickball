@@ -12,7 +12,9 @@ namespace Pickleball.Sandbox.Npc
     /// <c>Pickleball.Runtime</c> alone) can cover it; the setup menus are its
     /// only callers. Nothing here touches the AssetDatabase.
     ///
-    /// File prefixes (case-insensitive, <c>.fbx</c> only):
+    /// File prefixes (case-insensitive), on an <c>.fbx</c> (a Mixamo download,
+    /// whose first take is the clip) or an <c>.anim</c> (a clip copied out of a
+    /// library FBX that holds many takes, such as Quaternius UAL):
     /// <c>Idle*</c>, <c>Talk_Talk*</c>, <c>Talk_Excited*</c>,
     /// <c>Talk_Thinking*</c>, <c>Death*</c>. No prefix is a prefix of
     /// another, so a file has at most one role.
@@ -39,8 +41,8 @@ namespace Pickleball.Sandbox.Npc
 
         /// <summary>
         /// The role a clip file plays, from its name. False for anything that
-        /// is not an <c>.fbx</c> or carries no known prefix (a stray
-        /// <c>Talk_Wave.fbx</c> is ignored, not guessed at).
+        /// is not an <c>.fbx</c> or <c>.anim</c>, or carries no known prefix (a
+        /// stray <c>Talk_Wave.fbx</c> is ignored, not guessed at).
         /// </summary>
         /// <param name="fileName">File name, with or without a directory.</param>
         public static bool TryGetRole(string fileName, out NpcClipRole role)
@@ -50,7 +52,7 @@ namespace Pickleball.Sandbox.Npc
 
             int slash = Math.Max(fileName.LastIndexOf('/'), fileName.LastIndexOf('\\'));
             string name = slash >= 0 ? fileName.Substring(slash + 1) : fileName;
-            if (!name.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!IsClipFile(name)) return false;
 
             foreach (var candidate in All)
             {
@@ -60,6 +62,13 @@ namespace Pickleball.Sandbox.Npc
             }
             return false;
         }
+
+        /// <summary>Whether a file name is a clip file the roles apply to: an
+        /// <c>.fbx</c> or an <c>.anim</c>.</summary>
+        public static bool IsClipFile(string fileName)
+            => !string.IsNullOrEmpty(fileName) &&
+               (fileName.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase) ||
+                fileName.EndsWith(".anim", StringComparison.OrdinalIgnoreCase));
 
         /// <summary>The clip role that delivers <paramref name="emote"/>.</summary>
         public static NpcClipRole TalkRole(DialogueEmote emote) => emote switch

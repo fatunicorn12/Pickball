@@ -18,8 +18,22 @@ MonoBehaviour:
   restReturnDelay: 2
   restTurnRate: 2.5
   minGestureSeconds: 0.8
-  deathGroundLift: 0.08
-  deathLiftStart: 0.6
+  deathGroundLift: 0.1
+  deathLiftStart: 0.35
+  deathLiftEnd: 0.6
+  rotorIdleSpin: 180
+  rotorExcitedSpin: 900
+  rotorSpinResponse: 3
+  rotorPopAt: 0.4
+  rotorPopSpin: 720
+  rotorFlightSeconds: 0.6
+  rotorPopHeight: 0.45
+  rotorTumbleTurns: 1
+  rotorLandDistance: 0.55
+  rotorLandSide: 0.15
+  rotorBounceHeight: 0.05
+  rotorBounceSeconds: 0.2
+  rotorSpinDownSeconds: 1.5
   mainIdleChance: 0.6
   talkBlend: 0.2
   settleBlend: 0.35

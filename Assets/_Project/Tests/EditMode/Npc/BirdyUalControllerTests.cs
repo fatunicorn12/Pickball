@@ -27,6 +27,9 @@ namespace Pickleball.Tests.Npc
         const string LiveControllerPath = "Assets/_Project/Animation/Controllers/Birdy.controller";
         const string TrialControllerPath = "Assets/_Project/Animation/Quaternius/Birdy_UAL.controller";
         const string TrialClipDir = "Assets/_Project/Animation/Quaternius/Birdy/";
+
+        /// <summary>The adopted UAL death lives with Birdy's live clips (BirdyUalTrialSetup).</summary>
+        const string LiveDeathPath = "Assets/_Project/Animation/Birdy/Death.anim";
         const float Dt = 1f / 60f;
 
         readonly List<Object> _spawned = new();
@@ -87,7 +90,10 @@ namespace Pickleball.Tests.Npc
                 var clip = cs.state.motion as AnimationClip;
                 Assert.That(clip, Is.Not.Null, $"{cs.state.name} has no clip");
                 Assert.That(clip.humanMotion, Is.True, $"{cs.state.name}: {clip.name} is not a humanoid clip");
-                Assert.That(AssetDatabase.GetAssetPath(clip), Does.StartWith(TrialClipDir), cs.state.name);
+                if (cs.state.name == NpcAnimatorParameters.DeathState)
+                    Assert.That(AssetDatabase.GetAssetPath(clip), Is.EqualTo(LiveDeathPath), "the adopted UAL death");
+                else
+                    Assert.That(AssetDatabase.GetAssetPath(clip), Does.StartWith(TrialClipDir), cs.state.name);
                 Assert.That(cs.state.speed, Is.EqualTo(1f), $"{cs.state.name} plays a fallback speed");
                 Assert.That(clip.isLooping, Is.EqualTo(cs.state.name != NpcAnimatorParameters.DeathState), cs.state.name);
             }

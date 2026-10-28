@@ -14,13 +14,19 @@ off about Newton.
   `ScriptableObjects/Dialogue/Birdy_Intro.asset`, and the shared
   `ScriptableObjects/Dialogue/TalkableSet.asset` (owned by DialogueSetup).
 - **Art:** `Art/Characters/Birdy/` (`Birdy.fbx`, `Birdy.mat`, `Birdy_BaseColor.jpg`,
-  `Birdy_Normal.jpg`); clips in `Animation/Birdy/`; controller
-  `Animation/Controllers/Birdy.controller`; prefab `Prefabs/Npc/Birdy.prefab`.
+  `Birdy_Normal.jpg`); clips in `Animation/Birdy/` (the death is a Quaternius UAL `.anim`, from
+  `Animation/Quaternius/`); controller `Animation/Controllers/Birdy.controller`; prefab
+  `Prefabs/Npc/Birdy.prefab`.
 - **Setup:** `Scripts/Editor/BirdyNpcSetup.cs`: **Tools ▸ Pickleball ▸ Setup Birdy NPC**,
   **Rebuild Birdy Animator**, **Diagnostics ▸ Report Birdy Poses**; and
-  `Scripts/Editor/BirdyModelPostprocessor.cs` (import-time skin fix, Birdy.fbx only).
-- **Tests:** `Tests/EditMode/Npc/` (the `BirdyControllerTests` drive the shipped controller and
-  prefab, category `Assets`), plus `Tests/EditMode/Combat/XpExemptionTests.cs`.
+  `Scripts/Editor/BirdyModelPostprocessor.cs` (import-time skin fix and the rotor's bone,
+  Birdy.fbx only); `Scripts/Editor/BirdyUalTrialSetup.cs`: **Setup Birdy UAL Trial** (makes
+  the death clip, and an all-UAL trial controller).
+- **Tests:** `Tests/EditMode/Npc/`, plus `Tests/EditMode/Combat/XpExemptionTests.cs`. Three
+  suites drive shipped assets (category `Assets`):
+  - `BirdyControllerTests`: the shipped controller and prefab.
+  - `BirdyRotorTests`: the rotor's spin and fall through the runtime components.
+  - `BirdyUalControllerTests`: the trial controller.
 
 ## 1. Purpose and player-facing feel
 
@@ -35,12 +41,20 @@ for a moment (`minGestureSeconds`), so skipping never reads as Birdy freezing. A
 conversation Birdy keeps watching you while you stay within 4 m, and turns back to the way it
 was facing once you walk off.
 
-Birdy has 40 HP. The sword can kill it; it plays its death once (a stagger and a fall onto its
-back) and stays down, the model is eased up a little over the fall so the body rests on the
-ground (the rotor and tail, which stick out behind, still dip into it), its collider switches
-off so the body is not an invisible pillar, and the Talkable stops offering a conversation
-(`Talkable.CanTalk` checks the `Health` on the same object). Killing Birdy pays no XP
-(`Health.grantsXp` is off on its prefab).
+Birdy's rotor turns lazily while he idles and listens, and whirs on an Excited line.
+
+Birdy has 40 HP. The sword can kill it.
+- **The death.** It plays once and stays down: a stagger, then a fall onto his back, ending
+  feet-up like a cartoon dead bird.
+- **The rotor.** Just before his head hits the ground, it is knocked off. It somersaults once
+  through the air, lands upright on the ground beyond his head with a little hop, and winds
+  down to a stop.
+- **Grounding.** The model is eased up a little over the fall so the body rests on the ground.
+  The tail, which sticks out behind, still dips into it.
+- **Afterwards.** The collider switches off so the body is not an invisible pillar, and the
+  Talkable stops offering a conversation (`Talkable.CanTalk` checks the `Health` on the same
+  object).
+- **No XP.** Killing Birdy pays no XP (`Health.grantsXp` is off on its prefab).
 
 Birdy is 1.14 m tall in its idle, rotor included. The chibi measures 1.56 m in its bind pose,
 so Birdy's rotor comes up to about the chibi's chin.
@@ -51,6 +65,7 @@ so Birdy's rotor comes up to about the chibi's chin.
 DialogueDirector ──Notify…──▶ Talkable ──ConversationStarted / LineStarted / LineRevealed / ConversationEnded──▶ NpcAnimatorDriver ──▶ Animator (Birdy.controller)
                                                                                                                 │      ├─▶ root yaw (faces Partner, then watches / returns to rest)
                                                                                                                 │      └─▶ model height (death lift)
+NpcAnimatorDriver (IsTalking, CurrentEmote, IsSpeakingAt, IsDead, DeathProgress) ──read in LateUpdate──▶ NpcRotor ──▶ Rotor bone (spin; knocked off on death)
 MeleeCombat ──IDamageable.TakeHit──▶ Health ──Died──▶ NpcAnimatorDriver (Death) · NpcBody (collider off) · Talkable.CanTalk = false
 CombatXpSource ──skips Health.GrantsXp == false (Birdy)
 LockOnTargeting ──FindObjectsByType<Health>──▶ Health (Birdy is lockable)
@@ -61,7 +76,7 @@ Prefab layout (`Prefabs/Npc/Birdy.prefab`):
 
 | Object | Components | Why |
 |---|---|---|
-| `Birdy` (root) | `CapsuleCollider`, `Health` (40 HP, no grey pool, `grantsXp` off), `Talkable` (focus = Head bone, registry = `TalkableSet`), `NpcAnimatorDriver`, `NpcBody` | Talkable and Health must share the root: `CanTalk` only checks a Health on its own object, and lock-on locks the Health's object. The capsule is solid because the blade sweep and lock-on's line of sight ignore triggers. |
+| `Birdy` (root) | `CapsuleCollider`, `Health` (40 HP, no grey pool, `grantsXp` off), `Talkable` (focus = Head bone, registry = `TalkableSet`), `NpcAnimatorDriver`, `NpcBody`, `NpcRotor` (rotor = the `Rotor` bone, rotorRenderer = `tripo_part_1`) | Talkable and Health must share the root: `CanTalk` only checks a Health on its own object, and lock-on locks the Health's object. The capsule is solid because the blade sweep and lock-on's line of sight ignore triggers. |
 | `BirdyModel` | `Animator` (avatar, `Birdy.controller`, root motion off, `CullUpdateTransforms`) | The model under the root, as for Newton, so it can be nudged (and lifted on death) without moving the collider. |
 
 Runtime classes:
@@ -70,11 +85,14 @@ Runtime classes:
 |---|---|---|
 | `NpcAnimatorDriver` | MonoBehaviour, presentation | Subscribes to the Talkable and Health in `OnEnable`, unsubscribes in `OnDisable`. Switches the Animator to `UnscaledTime` on the first ConversationStarted and restores the saved mode on ConversationEnded **and** in `OnDisable`. Pushes the parameters every frame, rolls idle variants, turns the root, applies the death lift. Reads the clocks only in `Update`; `Tick(unscaledNow, unscaledDt, scaledDt)` is the test seam, and the event handlers use the clock it was last given. `OnEnable` re-syncs a running conversation, or one that ended while disabled. |
 | `NpcBody` | MonoBehaviour, gameplay | Disables the blocking collider on `Health.Died`. |
+| `NpcRotor` | MonoBehaviour, presentation | Owns the `Rotor` bone, which no clip animates. It runs in `LateUpdate`, after the Animator has posed the head. **Alive:** it sets only the bone's local rotation (rest pose times the spin about its up), on unscaled time while talking. **Dead:** at `rotorPopAt` of the death it knocks the rotor off and sets its world pose from `NpcRotorFlight` every frame. The landing spot follows the head until touchdown, then stays put: `rotorLandDistance` beyond where the mast sat on the head, along the fall (hips to head, level), `rotorLandSide` to the side. The ground under it is found by a short downward ray that ignores Birdy, moving bodies and character controllers, falling back to the height of the feet. Once flown, its renderer updates off screen, since the mesh bounds follow the body. `OnDisable` puts the rotor back on the head; a re-enabled dead Birdy re-knocks it, straight to rest if the death has finished. `Tick(scaledDt, unscaledDt, unscaledNow)` is the test seam. |
+| `NpcRotorFlight` | plain class | The knocked-off rotor's path. An arc from the head to the spot, with whole somersaults (`rotorTumbleTurns`), upright by 80% of the flight, a hop on landing, and a spin that winds down to zero. Exact at both ends; pure function of time and the landing spot. |
+| `NpcRotorSpin` | static | The living spin's rules: idle or Excited target, exponential frame-rate-independent easing, angle wrap. |
 | `NpcTalkTracker` | plain class | The conversation rules: talking, speaking (with the minimum gesture time), emote, dead (permanent, outranks everything). |
 | `NpcFacing` | static | Yaw toward a point; exponential, capped, frame-rate independent step. |
-| `NpcDeathLift` | static | How far to raise the model at a normalised time of the death clip: none before `deathLiftStart`, smoothstep to `deathGroundLift` at the end. |
+| `NpcDeathLift` | static | How far to raise the model at a normalised time of the death clip: none before `deathLiftStart`, smoothstep to `deathGroundLift` by `deathLiftEnd`, held after. The driver times it by its `DeathProgress` (the Death state's normalised time). |
 | `IdleVariantPicker` | plain class | Main idle repeats with `mainIdleChance`, else a random fidget; fidgets return to the main idle. |
-| `NpcClipRoles`, `NpcClipRole` | static, enum | File-prefix → role rules and the talk fallback chain. Only the setup menu calls them; they live in the runtime assembly so EditMode tests can reach them. |
+| `NpcClipRoles`, `NpcClipRole` | static, enum | File-prefix → role rules (on an `.fbx` or an `.anim`) and the talk fallback chain. Only the setup menu calls them; they live in the runtime assembly so EditMode tests can reach them. |
 | `NpcAnimatorParameters` | static | The parameter and state names shared by the setup menu and the driver. |
 | `NpcAnimationConfig` | ScriptableObject | Every tunable (section 3). |
 
@@ -122,8 +140,18 @@ time and would freeze while the conversation pauses the game.
      - Report Birdy Poses' "arm-chain weight share" line reads 0% for every non-wing part.
    - *The rotor bent across the face.* It was skinned about 97% to Head and the rest to the arm
      twist bones, giving up to 0.37 m of drift. The rotor part (average Head weight ≥ 0.9) is made
-     100% Head, and every other vertex with Head weight ≥ 0.9 too. Rotor drift relative to the
-     head is now 0.0 cm in every state.
+     100% Head, and every other vertex with Head weight ≥ 0.9 too.
+   - *The rotor has its own bone.* On the head it could only follow the head, and lying on his
+     back turns the head's up horizontal, so in the death the blades stood upright out of the
+     floor.
+     - A `Rotor` transform is added under `Head`, and every rotor vertex is skinned 100% to it.
+     - Its origin is the bottom of the mast on the spin axis. Its up is the spin axis: the
+       normal of the blade disc, found from the vertices (principal axes). The disc is tilted
+       11.6° from the head's up, so the axis is measured, not assumed.
+     - The blade radius is 0.42 m.
+     - Resting at its origin with up pointing up, no part of the rotor is below the ground.
+     - Nothing in the clips drives the bone; `NpcRotor` does. Rotor drift relative to the head is
+       0.0 cm in every state, because in the Editor the bone stays at its rest pose on the head.
 5. **Rig.** `globalScale` is solved so the model is `TargetHeight` (1.15 m) tall: the renderer
    bounds measure 0.986 m at scale 1, so the scale is **1.166**. Humanoid, *Create From This
    Model*, with the shared Tripo bone map (`ChibiSandboxSetup.SetupRigPublic`, the same map as
@@ -182,8 +210,12 @@ contains "Academy", which keeps Birdy out of TrainingStage.
 
 ### Clips
 
-Clips are Mixamo FBX (*FBX for Unity, Without Skin, 30 fps*, like `Animation/Chibi/`) in
-`Animation/Birdy/`, named by role prefix (case-insensitive):
+Clips live in `Animation/Birdy/`, named by role prefix (case-insensitive). Each is either:
+- a Mixamo FBX (*FBX for Unity, Without Skin, 30 fps*, like `Animation/Chibi/`), whose first
+  take is the clip; or
+- an `.anim` copied out of a clip library whose FBX holds many takes (Quaternius UAL).
+
+The prefixes:
 
 | Prefix | Role | Loops |
 |---|---|---|
@@ -193,16 +225,22 @@ Clips are Mixamo FBX (*FBX for Unity, Without Skin, 30 fps*, like `Animation/Chi
 | `Talk_Thinking*` | the Thinking emote | yes |
 | `Death*` | death, played once and held | no |
 
-Import settings, written by the menu: Humanoid, avatar *Create From This Model* (the Mixamo
-rig), one clip named after the file, Loop Time and Loop Pose on except for death, and root
-rotation, height and XZ all **baked into the pose** (based upon *Original*, height based upon
-*Feet*). Birdy never travels and its Animator has root motion off, so nothing drifts, and the
-death lands on the ground instead of at standing height.
+Import settings for an FBX, written by the menu:
+- Humanoid, avatar *Create From This Model* (the Mixamo rig).
+- One clip, named after the file.
+- Loop Time and Loop Pose on, except for death.
+- Root rotation, height and XZ all **baked into the pose** (based upon *Original*, height based
+  upon *Feet*). Birdy never travels and its Animator has root motion off, so nothing drifts,
+  and the death lands on the ground instead of at standing height.
+
+An `.anim` carries the same settings, written by whatever made it. The menu only checks them,
+warning if the clip isn't humanoid or its Loop Time is wrong for its role. It never rewrites
+them, so two menus can't fight over one file.
 
 **Shipped clips.** Mixamo offered a primary and an alternative for each role. Both were rendered
 on Birdy through the shipped controller (contact sheets at 0.1 / 0.3 / 0.5 / 0.7 / 0.9 of the
 clip, plus soles, hand-to-head and hand-to-body distances), and only the winner was kept, saved
-under the role name:
+under the role name. The death was then replaced by Quaternius UAL *Death01* (below):
 
 | File | Mixamo clip | Length | Why this one |
 |---|---|---|---|
@@ -212,7 +250,7 @@ under the role name:
 | `Talk_Talk.fbx` | *Talking, General Conversation* | 10.3 s | Primary. Varied gestures over a long loop, so repeats aren't obvious. The alternative, *Asking A Question With Two Hands*, is one gesture and then stands still for half the loop. |
 | `Talk_Excited.fbx` | *Excited, Super Excited* | 6.6 s | Primary. Big waves while staying grounded. The alternative, *Joyful Jump*, lifts the soles 0.35 m off the ground mid-line. |
 | `Talk_Thinking.fbx` | *Thinking While Standing* | 4.2 s | Primary. A hand to the chin reads as thinking at a glance. The alternative, *Thoughtful Head Shake*, is a subtle shake that reads as idling. |
-| `Death.fbx` | *Standing React Death Backward* | 3.6 s | Primary. Starts from a neutral stance, so the cut from idle or talk is clean, and falls onto the back. The alternative, *Falling Back Death*, starts fists-up (a fighting pose) and brings the hands to within 1 cm of the body axis, so the wings cut into the belly. |
+| `Death.anim` | Quaternius UAL1 *Death01* | 2.4 s | From a plain stand, a stagger and a quick fall onto the back, ending feet-up like a cartoon dead bird. It beat both Mixamo deaths. *Standing React Death Backward* swings the rotor wildly mid-fall and takes 3.6 s. *Falling Back Death* starts fists-up (a fighting pose) and brings the hands to within 1 cm of the body axis, so the wings cut into the belly. |
 
 Measured through the Animator with foot IK:
 - **Soles** stay within −3 … +2 mm in every idle and talk state, so `ModelYOffset` (0.008 m)
@@ -222,6 +260,20 @@ Measured through the Animator with foot IK:
   part carries arm-chain weight, so the accessory rebinding holds under the real clips.
 
 The rejected alternatives are not in the repo.
+
+**Quaternius UAL (CC0).** `Animation/Quaternius/` holds UAL1 and UAL2 Standard (OpenGameArt,
+CC0 1.0, licences beside the FBX). **Tools ▸ Pickleball ▸ Setup Birdy UAL Trial**
+(`BirdyUalTrialSetup`) does three things:
+- imports both FBX as humanoids with an explicit bone map;
+- copies the mapped takes to `Animation/Quaternius/Birdy/*.anim`;
+- builds `Animation/Quaternius/Birdy_UAL.controller`, an all-UAL controller with the live
+  layout, used by nothing but `BirdyUalControllerTests`.
+
+On Birdy, Mixamo reads better for idle, look-around and the three talk emotes, but UAL *Death01*
+beats the Mixamo deaths. So the trial copies that one take straight into
+`Animation/Birdy/Death.anim`, Birdy's live death, which the trial controller also plays. The
+copy is redone only when its source changes (a hash in the `.anim`'s `.meta` userData).
+`Death.anim` is committed, so Setup Birdy NPC doesn't need the trial menu to have run.
 
 **Fallbacks.** A role with no clip in `Animation/Birdy/` uses `Animation/Birdy/Fallback/`. Every
 role has a real clip now, so these are unused, but they stay as a safety net. The menu copies
@@ -233,7 +285,8 @@ chibi's files):
 
 There are no talk fallbacks: a talk emote with no clip of its own plays the Talk clip, and with
 no Talk clip either, the main idle sped up (Talk ×1.2, Excited ×1.5) or slowed (Thinking ×0.8).
-Only the first clip per talk emote and the first death clip are used.
+Only the first clip per talk emote and the first death clip are used (an `.fbx` and an `.anim`
+of the same role count as two clips, so keep one).
 
 ## 3. How to tune
 
@@ -246,8 +299,15 @@ Only the first clip per talk emote and the first death clip are used.
 | `returnToRestFacing` | bool | Turn back to the placed facing once the player walks off |
 | `restReturnDistance` | m | While the player stays within this after a conversation, the NPC keeps watching them |
 | `restTurnRate` | 1/s | Speed of the turn back (slower than the turn in) |
-| `deathGroundLift` | m | How far the model is eased up by the end of the death. **Re-tune per death clip** (Report Birdy Poses, "death sink") |
-| `deathLiftStart` | normalised | Where in the death clip the lift starts; set to where the body goes down. Re-tune per death clip |
+| `deathGroundLift` | m | How far the model is eased up over the death. **Re-tune per death clip** (Report Birdy Poses, "death sink") |
+| `deathLiftStart`, `deathLiftEnd` | normalised | Where in the death clip the lift starts (the body starts going down) and is complete (the body has landed; a lift still rising after that floats the corpse up). Re-tune per death clip |
+| `rotorIdleSpin`, `rotorExcitedSpin` | °/s | Rotor spin while idle, listening or on a calm line (180), and while an Excited line plays (900) |
+| `rotorSpinResponse` | 1/s | How fast the spin follows those (3 ≈ a second to change) |
+| `rotorPopAt` | normalised | Where in the death clip the rotor is knocked off: just before the head hits the ground. **Re-tune per death clip** (Report Birdy Poses, "rotor fall": its lowest point in flight must not be below 0) |
+| `rotorPopSpin`, `rotorSpinDownSeconds` | °/s, s | Spin in the air, and how long it takes to wind down after landing |
+| `rotorFlightSeconds`, `rotorPopHeight`, `rotorTumbleTurns` | s, m, turns | The flight: time in the air, height of the arc, whole somersaults |
+| `rotorLandDistance`, `rotorLandSide` | m | Landing spot: how far beyond where the mast sat on the head, along the fall, and to the side. Must clear the head by more than the blade radius (0.42 m) |
+| `rotorBounceHeight`, `rotorBounceSeconds` | m, s | The hop on landing; 0 height = none |
 | `minGestureSeconds` | s (unscaled) | Shortest gesture per line, even if the line is skipped |
 | `mainIdleChance` | 0–1 | Chance the main idle repeats instead of a fidget |
 | `talkBlend`, `settleBlend`, `idleBlend`, `deathBlend` | s | Cross-fades baked into the controller |
@@ -257,29 +317,38 @@ Only the first clip per talk emote and the first death clip are used.
 The blend, exit-time and fallback-speed fields are baked into the controller: run
 **Rebuild Birdy Animator** after changing them. The rest are read live.
 
-The shipped death lift is **0.08 m from t = 0.6**, tuned for *Standing React Death Backward* by
-looking at its end pose rendered at 0, 0.05, 0.08, 0.10, 0.12, 0.15, 0.2 and 0.3 m.
+The shipped death lift is **0.10 m from t = 0.35 to 0.6**, tuned for UAL *Death01* by looking at
+its end pose rendered at 0, 0.06, 0.08, 0.10, 0.12 and 0.14 m, with the rotor hidden since it has
+flown off by then.
 - **Without a lift**, measured per mesh part through the Animator at the clip's end:
 
   | Part | Depth into the floor |
   |---|---|
-  | rotor and tail (which stick out behind) | 34 cm |
-  | lower body | 14 cm |
-  | radio | 11 cm |
-  | head | 9 cm |
+  | tail (which sticks out behind) | 31 cm |
+  | radio | 18 cm |
+  | lower body | 11 cm |
+  | head | 11 cm |
+  | harness | 7 cm |
   | helmet | 6 cm |
-  | wings | 2–6 cm |
+  | wings | 5–6 cm |
 
-  The feet rest at the floor.
-- **Lifting by the lowest point** (0.34 m) floats the whole bird in mid-air with its feet up,
-  which is plainly worse.
-- **At 0.08 m** the round lower body sits 6 cm into the floor and reads as resting on it, the head
-  is at the floor, and the feet are raised about 9 cm, like legs kicked up after a fall onto the
-  back. The rotor and tail stay 26 cm in: the rotor plane stands upright with its blades half in
+  The feet are up, 1–4 cm off the floor.
+- **At 0.10 m** the round lower body and the head rest on the floor (1 cm in), the wings lie on it,
+  and the feet are up about 12 cm. The radio box (8 cm in) and the tail (21 cm in) stay hidden in
   the floor.
-- **At 0.10 m and above**, the radio box shows under the body and the shadow separates.
-- **The body starts going down at t ≈ 0.6** (lower body −6 cm). A leg slam at t ≈ 0.8 still dips
-  a foot 13 cm into the floor for a moment, with the lift half in.
+- **At 0.08 m** the body visibly sinks. **At 0.12 m and above**, the tail's fan shows under the
+  body.
+- **Timing.** The body goes down between t ≈ 0.35 and 0.5 and lies still from about 0.65, so the
+  lift runs from 0.35 to 0.6. Ending at 1, as for the Mixamo deaths, would raise a still body by
+  6 cm over its last second.
+
+The rotor is knocked off at **t = 0.4**, just before the head hits the ground, while its lowest
+point is still 0.24 m up. At 0.45 it would already be 5 cm in, and at 0.5 it is 36 cm in.
+Report Birdy Poses' "rotor fall" line measures the result:
+- lowest point in flight +0.000 m;
+- at rest +0.000 m, upright to 0.0°;
+- 0.81 m (level) from the head bone;
+- 31 cm from the nearest body vertex.
 
 In `BirdyNpcSetup` (code constants, since they define the asset):
 - `TargetHeight` (1.15 m) and `MaxHealth` (40).
@@ -307,7 +376,11 @@ never overwritten.
 3. Run **Tools ▸ Pickleball ▸ Rebuild Birdy Animator** (or Setup Birdy NPC). A role that now has
    a real clip stops using its fallback.
 4. Run **Diagnostics ▸ Report Birdy Poses**. Re-tune `ModelYOffset` against the idle's soles,
-   and `deathGroundLift` / `deathLiftStart` against a new death's "death sink" line.
+   `deathGroundLift` / `deathLiftStart` / `deathLiftEnd` against a new death's "death sink"
+   line, and `rotorPopAt` against its "rotor fall" line.
+
+A clip from a library FBX with many takes (like Quaternius UAL) goes in as an `.anim` with the
+role prefix. Copy it out the way `BirdyUalTrialSetup` does, with its settings already right.
 
 **Add another NPC in 7 steps:**
 1. Put its model in `Art/Characters/<Name>/` (a Tripo humanoid takes the same bone map). If its
@@ -333,25 +406,28 @@ until then it falls back to Talk.
 
 ## 5. Known limitations and open questions
 
-- **Human clips on a bird.** The clips are Mixamo's, made for a thin human, so:
+- **Human clips on a bird.** The clips are Mixamo's and Quaternius's, made for a thin human, so:
   - In *Thinking While Standing* the raised wing crosses the chest and passes close to the beak
     (hand 15 cm from the head bone), with a slight overlap.
-  - The death can't be fully grounded (next point).
-  - There are no beak, rotor-spin or wing-flap motions. The rotor is rigid to the head and never
-    turns.
+  - The death can't be fully grounded (see "The death is only approximately grounded").
+  - There are no beak or wing-flap motions. The rotor's spin is procedural (`NpcRotor`).
+- **The rotor's landing ignores what is there.** It lands on the floor under its spot (the
+  first static collider within half a metre of his feet's height), even if that spot is inside a
+  wall or on a table edge. The spot is about 1.3 m behind where Birdy stood, and his talk ring
+  keeps the ground around him level, so it hasn't shown.
 - **White slivers at the wing roots** when the wings fold. The harness tears are gone: the
   accessories no longer follow the arms (import step 4). What remains is the seam where each
   wing plank meets the body, at the front and back of the shoulder. The wings are flat planks
   hinged at the shoulder, so folding them opens that joint. Narrowing the fold (40°, tried at 25°)
   doesn't close it. It needs modelled geometry or blended weights across the seam (in Blender).
 - **The tail follows the left leg.** `tripo_part_3` (the tail) is weighted 61% to `L_CalfTwist01`.
-  It barely shows in the idles and talks. In the death's stagger (t ≈ 0.5–0.6, before the lift
-  starts) the left leg steps back and pushes the tail 12–15 cm into the floor.
+  It barely shows in the idles and talks. In the death it goes into the floor from the start of
+  the fall (t ≈ 0.35) and stays there.
 - **The death is only approximately grounded.** One lift for the whole model can't ground a body
-  whose rotor and tail sink 34 cm while its feet stay at the floor (section 3). The shipped
-  0.08 m leaves the rotor and tail 26 cm in, with the rotor blades standing upright out of the
-  floor. Two things would fix it: a death that lands on the side or front, or tilting the rotor
-  flat to the ground once Birdy is down.
+  whose tail sinks 31 cm while its belly and head sink 11 cm (section 3). The shipped 0.10 m
+  leaves the tail 21 cm and the radio 8 cm in the floor, hidden under the body. The rotor no
+  longer counts: it is knocked off before the head lands. The tail would need its own bone, like
+  the rotor, to fold up against the floor.
 - **Lock-on treats Birdy like an enemy.** `LockOnTargeting` takes any live `Health`, with no
   priority for hostiles, so Tab can pick Birdy in the Newton fight, and when Newton dies the lock
   hands over to Birdy if Birdy is on screen. Both need changes in `LockOnTargeting`.
@@ -381,13 +457,24 @@ until then it falls back to Talk.
   Birdy there would vanish. They would also frame a friendly NPC as an enemy.
 - **One clip per talk emote and one death.** Extra `Talk_*` or `Death*` clips are ignored, not
   randomised.
+- **The UAL `.anim` copies can churn.** `BirdyUalTrialSetup` keys each copy on its source FBX's
+  dependency hash.
+  - Bumping any model postprocessor's version changes that hash for every FBX. The next run of the
+    trial menu then rewrites every `.anim` and its `.meta` userData, `Animation/Birdy/Death.anim`
+    included. The clips come out the same; only the userData changes.
+  - The committed hashes are for `BirdyModelPostprocessor` v3, so the menu currently writes
+    nothing.
+- **The rotor never turns in the Editor.** `NpcRotor` runs in `LateUpdate`, so in Edit mode the
+  rotor sits still at its rest pose on the head (as Report Birdy Poses measures it), and the fall
+  is only seen in Play mode or through its `Tick`.
 - **The controller rebuild is not byte-stable.** Setup Birdy NPC skips the rebuild when the
   inputs' hash (kept in the controller's `.meta` userData) matches, so an unchanged re-run has no
   diff. **Rebuild Birdy Animator** always rewrites the controller, giving every state new file IDs
   but the same states, parameters and transitions. Nothing references the states by file ID.
-- **Adding `BirdyModelPostprocessor` reimports models once.** Unity treats a new model
-  postprocessor as a dependency of model imports, so the first Editor to load it reimports the
-  project's FBX files once. It only changes Birdy.fbx.
+- **Adding or bumping `BirdyModelPostprocessor` reimports models once.** Unity treats a model
+  postprocessor and its version as a dependency of every model import. So the first Editor to
+  load a new one, or a new `GetVersion` (v3 here, for the rotor bone), reimports the project's FBX
+  files once. It only changes Birdy.fbx.
 - **Rest facing is captured in `OnEnable`.** A script reload mid-conversation makes the facing at
   that moment the new rest facing.
 - **Single-NPC setup script.** The import, rig, clip and prefab steps are generic but live in

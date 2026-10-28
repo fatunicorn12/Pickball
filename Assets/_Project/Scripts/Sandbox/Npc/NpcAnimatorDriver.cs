@@ -99,6 +99,14 @@ namespace Pickleball.Sandbox.Npc
         /// <summary>Whether a line's gesture plays at <paramref name="unscaledNow"/> (seconds of unscaled time).</summary>
         public bool IsSpeakingAt(float unscaledNow) => Tracker.IsSpeaking(unscaledNow);
 
+        /// <summary>
+        /// Normalised time into the Death state, as of the last Tick: 0 until
+        /// the cross-fade into it has finished, then 0–1 over the clip, and
+        /// past 1 while its last frame holds. What <see cref="NpcDeathLift"/>
+        /// and <see cref="NpcRotor"/> time the fall by.
+        /// </summary>
+        public float DeathProgress { get; private set; }
+
         NpcTalkTracker Tracker => _tracker ??= new NpcTalkTracker();
 
         NpcAnimationConfig Config
@@ -348,7 +356,8 @@ namespace Pickleball.Sandbox.Npc
         {
             var info = animator.GetCurrentAnimatorStateInfo(0);
             float t = info.fullPathHash == DeathStateHash ? info.normalizedTime : 0f;
-            ApplyDeathLift(NpcDeathLift.At(t, cfg.DeathGroundLift, cfg.DeathLiftStart));
+            DeathProgress = Mathf.Max(DeathProgress, t);
+            ApplyDeathLift(NpcDeathLift.At(DeathProgress, cfg.DeathGroundLift, cfg.DeathLiftStart, cfg.DeathLiftEnd));
         }
 
         static readonly int DeathStateHash = NpcAnimatorParameters.FullPathHash(NpcAnimatorParameters.DeathState);
