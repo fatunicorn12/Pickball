@@ -17,6 +17,9 @@ namespace Pickleball.Sandbox
     ///  - The lock drops by itself when the target dies, goes too far away, or
     ///    stays out of sight for a moment. A target that dies hands the lock to
     ///    the next enemy in view, if there is one.
+    ///  - While the <see cref="PlayerInputGate"/> blocks <see cref="InputBlock.LockOn"/>
+    ///    (any claimant: a conversation, an aim), the lock is released and no
+    ///    marker shows. Breath of the Wild: talking ends targeting.
     ///
     /// Any <see cref="Health"/> that is not the player's own is a candidate, so a
     /// new enemy is targetable without any extra wiring. This component only
@@ -63,8 +66,9 @@ namespace Pickleball.Sandbox
         [Tooltip("Where targets are judged from. Defaults to the main camera.")]
         [SerializeField] private Transform aimSource;
         [SerializeField] private SandboxOrbitCamera cameraRig;
-        [Tooltip("Optional. While LockOn is blocked (a conversation, aiming) the toggle and " +
-                 "target flicks are dropped, not saved for later; the lock itself is kept.")]
+        [Tooltip("Optional. While LockOn is blocked (a conversation, an aim) the toggle and " +
+                 "target flicks are dropped, not saved for later, a held lock is released and " +
+                 "no hint shows.")]
         [SerializeField] private PlayerInputGate inputGate;
         [Tooltip("Chest height on the player, for line-of-sight checks.")]
         [SerializeField] private float eyeHeight = 1.2f;
@@ -175,6 +179,12 @@ namespace Pickleball.Sandbox
                     cameraRig.RecenterBehind(transform.forward);
             }
 
+            // Any LockOn claim ends targeting (BotW: starting a conversation
+            // does). Let go the way a toggle does, so the camera leaves lock
+            // mode; the ring's release fade runs on unscaled time, so it
+            // finishes even once a conversation stops time.
+            if (blocked && IsLocked) Release();
+
             if (IsLocked)
             {
                 ValidateLock();
@@ -182,7 +192,7 @@ namespace Pickleball.Sandbox
             }
             if (blocked) { _flickAccum = 0f; _flickAge = 0f; _stickArmed = false; }
 
-            UpdateReticle();
+            UpdateReticle(blocked);
         }
 
         // ------------------------------------------------------------- locking
@@ -393,8 +403,11 @@ namespace Pickleball.Sandbox
 
         // ------------------------------------------------------------- reticle
 
-        void UpdateReticle()
+        void UpdateReticle(bool blocked)
         {
+            // No hint while blocked: a press could not lock it.
+            if (blocked) { Reticle.Hide(); return; }
+
             Transform cam = aimSource;
             if (IsLocked)
             {

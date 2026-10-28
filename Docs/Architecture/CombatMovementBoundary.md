@@ -57,6 +57,12 @@ or a finisher.
 right-stick look, and `LockOnTargeting` reads them as left/right target hops. The lock's aim point
 is measured once, at lock time, so the camera doesn't "breathe".
 
+**The input gate ends targeting (Breath of the Wild).** While any claimant on `PlayerInputGate`
+blocks `LockOn` (a conversation, an aim), `LockOnTargeting` drops the toggle and flicks, releases
+a held lock through `Release()` as a second Tab would, and shows no hint until the last claim
+lifts; `TetherSystem` hides its marker while `Movement` is blocked. The reticle fades on unscaled
+time, so the ring is gone inside a talk's 0.25 s settle, and Tab locks again once the claim lifts.
+
 **Grounding is deliberately asymmetric.** Landing refills the air chain at once (commit
 `1e38c1c`); leaving the ground waits `airborneGraceSeconds`. Since `6991c60`, one pure
 `GroundContact` gives the graced answer, and that answer both picks a new swing's ground/air
