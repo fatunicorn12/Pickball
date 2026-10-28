@@ -49,7 +49,8 @@ namespace Pickleball.Sandbox.Movement.States
         public override MoveKind Next(MovementMotor m)
         {
             if (_timeLeft > 0f) return MoveKind.Dash;
-            return m.IsGrounded ? m.LandingMove() : MoveKind.Fall;
+            return DashExitRule.ReturnsToGround(m.IsGrounded, m.FloorWithinProbe())
+                ? m.LandingMove() : MoveKind.Fall;
         }
 
         public override void Tick(MovementMotor m, float dt)
