@@ -39,9 +39,13 @@ scripts:
 4. **Setup Lock-On**
 5. **Setup World Look**
 6. **Clean World**
-7. **Spacetime ▸ Add To Sandbox** (only if Spacetime is enabled), then save the scene.
-8. **Build Training Stage**. It copies ChibiSandbox.
-9. **Spacetime ▸ Create Spacetime Lab Scene**
+7. **Spacetime ▸ Add To Sandbox** (only if Spacetime is enabled).
+8. **Setup Dialogue**. After Lock-On (it gates the lock toggle and uses the lock for talk
+   targeting), Newton Fight (the box goes inside FightHUD) and Spacetime (it gates the T toggle).
+   NPC setups that call `DialogueSetup.MakeTalkable` can run before or after it. Then save the
+   scene.
+9. **Build Training Stage**. It copies ChibiSandbox.
+10. **Spacetime ▸ Create Spacetime Lab Scene**
 
 Setup Chibi Sandbox already runs the player-level setups as part of its build:
 - `MovementSetup.WirePlayer` and `EnsureConfigs`
