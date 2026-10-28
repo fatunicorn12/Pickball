@@ -2296,6 +2296,14 @@ MonoBehaviour:
   minPitch: -25
   maxPitch: 65
   followSmoothTime: 0.18
+  maxVerticalLag: 1
+  occlusionEnabled: 1
+  occlusionRadius: 0.3
+  occlusionMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  occlusionMinDistance: 2
+  occlusionReturnSpeed: 5
   stickYawSpeed: 200
   stickPitchSpeed: 120
   stickDeadzone: 0.15
@@ -35929,6 +35937,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 3883458126653099587, guid: cbcbcf9b829536745a0def211ea4e083, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1195753252314885926}
+    - targetCorrespondingSourceObject: {fileID: 3883458126653099587, guid: cbcbcf9b829536745a0def211ea4e083, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1195753252314885928}
     - targetCorrespondingSourceObject: {fileID: 1093931610088010614, guid: cbcbcf9b829536745a0def211ea4e083, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2085243038}
@@ -36031,6 +36042,8 @@ MonoBehaviour:
   regainGrace: 2.5
   regainDecay: 14
   regainPerDamageDealt: 0.9
+  hitGraceSeconds: 0.5
+  hitGraceMinDamage: 2
 --- !u!114 &1195753252314885903
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -36314,6 +36327,20 @@ MonoBehaviour:
   padPreviousBinding: <Gamepad>/dpad/up
   padNextBinding: <Gamepad>/dpad/down
   padCycleOnlyWhileAiming: 1
+--- !u!114 &1195753252314885928
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1291333408}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bcce4086cf4ce7842b17fc4f3b06523a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.HurtFlash
+  flashColor: {r: 1, g: 0.25, b: 0.2, a: 1}
+  flashSeconds: 0.18
 --- !u!1001 &2685157860003053257
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -36659,6 +36686,8 @@ MonoBehaviour:
   regainGrace: 2.5
   regainDecay: 14
   regainPerDamageDealt: 0.9
+  hitGraceSeconds: 0
+  hitGraceMinDamage: 2
 --- !u!114 &5358166292882913619
 MonoBehaviour:
   m_ObjectHideFlags: 0
