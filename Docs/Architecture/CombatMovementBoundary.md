@@ -83,15 +83,9 @@ anything new.
 | `SandboxOrbitCamera` | Mouse look (polled) | Right stick look, D-pad Up/Down zoom (polled) |
 | `SpacetimeView` | T | D-pad Left (both bound **only while Spacetime is enabled**) |
 | `TrainingStage` | Backspace respawn; Shift+Backspace also revokes abilities (polled) | — |
-| `PlayerInteractor` / `DialogueDirector` | **E Interact**: talk while a talk prompt is showing, and advance text during a conversation | **RB**, the same (all pad buttons are taken) |
+| `InteractInput` (read by `PlayerInteractor`, `DialogueDirector`) | **E Interact**: talk while a talk prompt is showing, and advance text during a conversation | **RB**, the same (all pad buttons are taken) |
 
 Mount moved from West to D-pad Right in `ddb5c9d`, which resolved the "pad clash" with attack.
-
-E / RB are both Dash and Interact. `PlayerInteractor` claims `InputBlock.InteractButton` on the
-player's `PlayerInputGate` while a talk prompt is showing (and through a conversation and its
-cooldown); `PlayerMovementInput` then drops `DashPressed` and nothing else. During a conversation
-the director claims every flag, so movement, `SwordInput`, `LockOnTargeting` and `SpacetimeView`
-drop their presses. See `Docs/Systems/Dialogue.md`.
 
 ## Testing implications
 
