@@ -45,6 +45,7 @@ scripts:
    NPC setups that call `DialogueSetup.MakeTalkable` can run before or after it. Then save the
    scene.
    - **Setup Birdy NPC** right after it, with ChibiSandbox open (places Birdy under `AcademyNpcs`, which Build Training Stage strips; works before Setup Dialogue too), then save.
+   - **Setup Birdy UAL Trial** only to re-make Birdy's death clip (`Animation/Birdy/Death.anim`, copied from the Quaternius UAL FBX) or the all-UAL trial controller. Both are committed, so normally skip it. If it does run, run **Setup Birdy NPC** after it.
 9. **Build Training Stage**. It copies ChibiSandbox.
 10. **Spacetime ▸ Create Spacetime Lab Scene**
 

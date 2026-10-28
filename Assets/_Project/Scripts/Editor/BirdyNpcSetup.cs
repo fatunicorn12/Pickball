@@ -32,11 +32,12 @@ using Object = UnityEngine.Object;
 /// Birdy: an existing instance is kept where it is. The scene is marked dirty
 /// and never saved.
 ///
-/// Clips: drop Mixamo FBX (FBX for Unity, Without Skin, 30 fps) into
-/// Animation/Birdy/ named by role prefix (Idle*, Talk_Talk*, Talk_Excited*,
-/// Talk_Thinking*, Death*; see NpcClipRoles) and re-run either menu. A role
-/// with no clip there falls back to Animation/Birdy/Fallback/, and a talk
-/// emote with no clip at all falls back to Talk, then to the idle.
+/// Clips: drop Mixamo FBX (FBX for Unity, Without Skin, 30 fps), or an .anim
+/// copied out of a clip library, into Animation/Birdy/ named by role prefix
+/// (Idle*, Talk_Talk*, Talk_Excited*, Talk_Thinking*, Death*; see
+/// NpcClipRoles) and re-run either menu. A role with no clip there falls back
+/// to Animation/Birdy/Fallback/, and a talk emote with no clip at all falls
+/// back to Talk, then to the idle.
 /// </summary>
 public static class BirdyNpcSetup
 {
@@ -124,7 +125,7 @@ public static class BirdyNpcSetup
     const float WingFoldDegrees = 40f;
 
     /// <summary>The rotor mesh part, for the rotor-drift line of Report Birdy Poses.</summary>
-    const string RotorPartName = "tripo_part_1";
+    const string RotorPartName = BirdyModelPostprocessor.RotorPart;
 
     /// <summary>Modest: a basic sword combo (10+12+14+20) downs him, a single
     /// stray hit does not.</summary>
@@ -671,8 +672,9 @@ public static class BirdyNpcSetup
     {
         var found = new Dictionary<NpcClipRole, List<string>>();
         if (!Directory.Exists(dir)) return found;
-        foreach (var file in Directory.GetFiles(dir, "*.fbx", SearchOption.TopDirectoryOnly))
+        foreach (var file in Directory.GetFiles(dir, "*", SearchOption.TopDirectoryOnly))
         {
+            if (!NpcClipRoles.IsClipFile(file)) continue;
             string path = file.Replace('\\', '/');
             if (!NpcClipRoles.TryGetRole(path, out var role))
             {
@@ -693,9 +695,26 @@ public static class BirdyNpcSetup
     /// travels, and root motion is off on his Animator), with the height
     /// feet-based so a death ends on the ground rather than at standing
     /// height. Settings are written only where they differ.
+    ///
+    /// An .anim is a clip copied out of a library FBX by its own setup (the
+    /// death is Quaternius UAL Death01, copied by BirdyUalTrialSetup), which
+    /// owns its settings. It is only checked here, never rewritten, so the two
+    /// menus can't fight over it.
     /// </summary>
     static AnimationClip ImportClip(string path, bool loop)
     {
+        if (path.EndsWith(".anim", StringComparison.OrdinalIgnoreCase))
+        {
+            var anim = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);
+            if (anim == null) return null;
+            if (!anim.humanMotion)
+                Debug.LogWarning($"Birdy clips: {path} is not a humanoid clip, so it won't retarget onto Birdy.");
+            if (AnimationUtility.GetAnimationClipSettings(anim).loopTime != loop)
+                Debug.LogWarning($"Birdy clips: {path} has Loop Time {(loop ? "off" : "on")}, but its role " +
+                                 $"wants it {(loop ? "on" : "off")}. Fix it where the clip is made.");
+            return anim;
+        }
+
         var imp = AssetImporter.GetAtPath(path) as ModelImporter;
         if (imp == null) return null;
 
@@ -961,7 +980,7 @@ public static class BirdyNpcSetup
 
     /// <summary>
     /// Prefabs/Npc/Birdy.prefab: root (capsule, Health, Talkable,
-    /// NpcAnimatorDriver, NpcBody) over the model (Animator). Talkable and
+    /// NpcAnimatorDriver, NpcBody, NpcRotor) over the model (Animator). Talkable and
     /// Health share the root, because CanTalk only checks a Health on its own
     /// object and lock-on locks the Health's object.
     ///
@@ -1068,6 +1087,22 @@ public static class BirdyNpcSetup
             bso.FindProperty("blocker").objectReferenceValue = capsule;
             bso.FindProperty("health").objectReferenceValue = health;
             bso.ApplyModifiedPropertiesWithoutUndo();
+
+            // The rotor's own bone comes from BirdyModelPostprocessor.
+            var rotorBone = FindDeep(model.transform, BirdyModelPostprocessor.RotorBone);
+            var rotorMesh = model.GetComponentsInChildren<SkinnedMeshRenderer>(true)
+                                 .FirstOrDefault(s => s.name == BirdyModelPostprocessor.RotorPart);
+            if (rotorBone == null)
+                Debug.LogWarning($"Birdy: no '{BirdyModelPostprocessor.RotorBone}' bone under the head, so the " +
+                                 "rotor won't spin or fall off. Reimport Birdy.fbx (BirdyModelPostprocessor adds it).");
+            var rotorSpin = GetOrAdd<NpcRotor>(root);
+            var rso = new SerializedObject(rotorSpin);
+            rso.FindProperty("rotor").objectReferenceValue = rotorBone;
+            rso.FindProperty("rotorRenderer").objectReferenceValue = rotorMesh;
+            rso.FindProperty("driver").objectReferenceValue = driver;
+            rso.FindProperty("animator").objectReferenceValue = animator;
+            rso.FindProperty("config").objectReferenceValue = config;
+            rso.ApplyModifiedPropertiesWithoutUndo();
 
             var saved = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath, out bool ok);
             if (!ok)
@@ -1629,6 +1664,7 @@ public static class BirdyNpcSetup
                 // with the configured lift, and where the sink begins.
                 float amount = config != null ? config.DeathGroundLift : 0f;
                 float start = config != null ? config.DeathLiftStart : 0f;
+                float end = config != null ? config.DeathLiftEnd : 1f;
                 float worstRaw = float.PositiveInfinity, worstLifted = float.PositiveInfinity, endRaw = 0f;
                 float firstSink = -1f, maxHover = 0f;
                 var profile = new List<string>();
@@ -1638,7 +1674,7 @@ public static class BirdyNpcSetup
                     anim.Play(cs.state.nameHash, 0, t);
                     anim.Update(0f);
                     float raw = Measure(0f).body;
-                    float lifted = raw + NpcDeathLift.At(t, amount, start);
+                    float lifted = raw + NpcDeathLift.At(t, amount, start, end);
                     worstRaw = Mathf.Min(worstRaw, raw);
                     worstLifted = Mathf.Min(worstLifted, lifted);
                     if (firstSink < 0f && raw < -0.02f) firstSink = t;
@@ -1649,11 +1685,12 @@ public static class BirdyNpcSetup
                     profile.Add($"{t:0.00}:{raw:+0.00;-0.00}");
                 }
                 lines.Add($"  death sink: raw lowest {worstRaw:+0.000;-0.000} m (end {endRaw:+0.000;-0.000}), " +
-                          $"first below -2 cm at t={firstSink:0.00}; with lift {amount:0.000} m from t={start:0.00}: " +
-                          $"lowest {worstLifted:+0.000;-0.000} m, end {endRaw + NpcDeathLift.At(1f, amount, start):+0.000;-0.000} m, " +
+                          $"first below -2 cm at t={firstSink:0.00}; with lift {amount:0.000} m from t={start:0.00} to {end:0.00}: " +
+                          $"lowest {worstLifted:+0.000;-0.000} m, end {endRaw + NpcDeathLift.At(1f, amount, start, end):+0.000;-0.000} m, " +
                           $"largest lift over a non-sunk body {maxHover:0.000} m");
                 lines.Add("  death profile (t:raw soles) " + string.Join(" ", profile));
             }
+            lines.Add(RotorFall(prefab, baked));
             handler.Dispose();
             Debug.Log(string.Join("\n", lines));
         }
@@ -1662,6 +1699,101 @@ public static class BirdyNpcSetup
             Object.DestroyImmediate(baked);
             Object.DestroyImmediate(go);
             Object.DestroyImmediate(bind);
+        }
+    }
+
+    /// <summary>
+    /// A whole death through the runtime components (Health, NpcAnimatorDriver,
+    /// NpcRotor) on a throwaway copy at 60 fps of explicit time, as at runtime:
+    /// a second of idle spin, a kill, then frames until the knocked-off rotor
+    /// has settled and the clip has ended. Reports when the rotor was knocked
+    /// off, its lowest point while flying and at rest, how upright it rests,
+    /// how far it is from the head, and its clearance from the body. The copy
+    /// is far below the scene, so the landing's ground probe finds no floor and
+    /// uses the height of the feet, which is what the numbers are relative to.
+    /// </summary>
+    static string RotorFall(GameObject prefab, Mesh baked)
+    {
+        var go = Object.Instantiate(prefab);
+        go.hideFlags = HideFlags.HideAndDontSave;
+        try
+        {
+            var feet = new Vector3(0f, -1000f, 0f);
+            go.transform.SetPositionAndRotation(feet, Quaternion.identity);
+            var anim = go.GetComponentInChildren<Animator>();
+            var health = go.GetComponent<Health>();
+            var driver = go.GetComponent<NpcAnimatorDriver>();
+            var spinner = go.GetComponent<NpcRotor>();
+            var rotorMesh = go.GetComponentsInChildren<SkinnedMeshRenderer>().FirstOrDefault(s => s.name == RotorPartName);
+            if (anim == null || health == null || driver == null || spinner == null || spinner.Rotor == null || rotorMesh == null)
+                return "  rotor fall: skipped (no Animator, Health, NpcAnimatorDriver, NpcRotor or rotor bone)";
+            anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            anim.Rebind();
+            anim.Update(0f);
+            health.ResetToFull();
+
+            Vector3[] World(SkinnedMeshRenderer smr)
+            {
+                smr.BakeMesh(baked, true);
+                var m = Matrix4x4.TRS(smr.transform.position, smr.transform.rotation, Vector3.one);
+                var verts = baked.vertices;
+                for (int v = 0; v < verts.Length; v++) verts[v] = m.MultiplyPoint3x4(verts[v]);
+                return verts;
+            }
+            float Lowest(Vector3[] verts)
+            {
+                float lo = float.PositiveInfinity;
+                foreach (var v in verts) lo = Mathf.Min(lo, v.y);
+                return lo - feet.y;
+            }
+
+            const float dt = 1f / 60f;
+            float now = 0f;
+            void Frame()
+            {
+                now += dt;
+                driver.Tick(now, dt, dt);
+                anim.Update(dt);
+                spinner.Tick(dt, dt, now);
+            }
+            for (int i = 0; i < 60; i++) Frame();
+            float idleSpin = spinner.SpinSpeed;
+            health.Damage(health.Max * 10f, go.transform.position, recoverable: false);
+
+            float knockedAt = -1f, lowestInFlight = float.PositiveInfinity;
+            for (int i = 0; i < 60 * 10 && (!spinner.IsSettled || driver.DeathProgress < 1f); i++)
+            {
+                Frame();
+                if (!spinner.HasFlown) continue;
+                if (knockedAt < 0f) knockedAt = driver.DeathProgress;
+                if (!spinner.IsSettled) lowestInFlight = Mathf.Min(lowestInFlight, Lowest(World(rotorMesh)));
+            }
+            if (!spinner.HasFlown) return $"  rotor fall: never knocked off (death progress {driver.DeathProgress:0.00})";
+
+            var rotorVerts = World(rotorMesh);
+            var body = new List<Vector3>();
+            foreach (var smr in go.GetComponentsInChildren<SkinnedMeshRenderer>())
+            {
+                if (smr == rotorMesh) continue;
+                var verts = World(smr);
+                for (int v = 0; v < verts.Length; v += 4) body.Add(verts[v]);
+            }
+            float clearance = float.PositiveInfinity;
+            foreach (var r in rotorVerts)
+                foreach (var b in body)
+                    clearance = Mathf.Min(clearance, (r - b).sqrMagnitude);
+            clearance = Mathf.Sqrt(clearance);
+            var head = anim.GetBoneTransform(HumanBodyBones.Head);
+            Vector3 toHead = spinner.Rotor.position - head.position;
+            toHead.y = 0f;
+            return $"  rotor fall: idle spin {idleSpin:0} °/s; knocked off at death t={knockedAt:0.00}; " +
+                   $"lowest point in flight {lowestInFlight:+0.000;-0.000} m, at rest {Lowest(rotorVerts):+0.000;-0.000} m; " +
+                   $"rests {Vector3.Angle(spinner.Rotor.up, Vector3.up):0.0}° from upright, {toHead.magnitude:0.00} m " +
+                   $"(level) from the head bone, {clearance * 100f:0.0} cm from the body (every 4th body vertex)";
+        }
+        finally
+        {
+            Object.DestroyImmediate(go);
         }
     }
 

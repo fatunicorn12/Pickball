@@ -38,9 +38,21 @@ using UnityEngine;
 /// 4. Any other vertex with Head weight of at least
 ///    <see cref="RigidVertexThreshold"/> becomes 100% Head.
 ///
+/// <b>The rotor has its own bone.</b> On the head it can't do anything but
+/// follow the head: in the death, lying on his back turns the head's up
+/// horizontal and stood the blades upright out of the floor.
+/// 5. A <see cref="RotorBone"/> transform is added under Head and every vertex
+///    of <see cref="RotorPart"/> is weighted 100% to it, so
+///    <c>NpcRotor</c> can spin it and, in the death, knock it off. The bone's
+///    origin is the bottom of the mast on the spin axis, and its local up is
+///    the spin axis: the normal of the blade disc (its least-spread direction),
+///    found from the vertices. The disc is tilted about 16° back from the
+///    head's up, so the axis is measured, not assumed. Resting at its origin
+///    with up pointing up, no part of the rotor is below the ground.
+///
 /// Deterministic: it rewrites weights computed fresh from the FBX on every
-/// import, so reimporting gives the same mesh. Bump <see cref="GetVersion"/>
-/// when the rules change so Unity reimports the model.
+/// import, so reimporting gives the same mesh and the same rotor bone. Bump
+/// <see cref="GetVersion"/> when the rules change so Unity reimports the model.
 /// </summary>
 public class BirdyModelPostprocessor : AssetPostprocessor
 {
@@ -49,6 +61,12 @@ public class BirdyModelPostprocessor : AssetPostprocessor
     const string HeadBone = "Head";
     const float RigidPartThreshold = 0.9f;
     const float RigidVertexThreshold = 0.9f;
+
+    /// <summary>The rotor's mesh part (mast, hub and the two blades).</summary>
+    public const string RotorPart = "tripo_part_1";
+
+    /// <summary>Name of the bone added under Head that the rotor is skinned to.</summary>
+    public const string RotorBone = "Rotor";
 
     /// <summary>Share of a part's weight on the arm chain above which its
     /// arm weights are moved to the spine.</summary>
@@ -70,7 +88,7 @@ public class BirdyModelPostprocessor : AssetPostprocessor
     /// Forearm, Hand, or one of their twist bones.</summary>
     public static bool IsArmChain(string boneName) => boneName != null && ArmChain.IsMatch(boneName);
 
-    public override uint GetVersion() => 2;
+    public override uint GetVersion() => 3;
 
     void OnPostprocessModel(GameObject root)
     {
@@ -112,9 +130,14 @@ public class BirdyModelPostprocessor : AssetPostprocessor
         int rigidParts = 0, rigidVerts = 0;
         foreach (var smr in smrs) MakeHeadRigid(smr, ref rigidParts, ref rigidVerts);
 
+        var rotorSmr = smrs.FirstOrDefault(s => s.name == RotorPart);
+        string rotor = rotorSmr != null && transforms.TryGetValue(HeadBone, out var head)
+            ? AddRotorBone(rotorSmr, head)
+            : $"no {RotorPart} or {HeadBone}; no rotor bone";
+
         Debug.Log($"BirdyModelPostprocessor: {rigidParts} part(s) made rigid to {HeadBone}, " +
                   $"{rigidVerts} vertex weight(s) set to 100% {HeadBone}; accessories rebound off the " +
-                  $"wings: {(report.Count > 0 ? string.Join("; ", report) : "none")}.");
+                  $"wings: {(report.Count > 0 ? string.Join("; ", report) : "none")}; {rotor}.");
     }
 
     // ------------------------------------------------------------- weights
@@ -307,5 +330,90 @@ public class BirdyModelPostprocessor : AssetPostprocessor
         if (w.boneIndex2 == head) h += w.weight2;
         if (w.boneIndex3 == head) h += w.weight3;
         return h;
+    }
+
+    /// <summary>
+    /// Adds <see cref="RotorBone"/> under <paramref name="head"/> at the
+    /// bottom of the rotor's mast, its up along the spin axis, and skins every
+    /// rotor vertex 100% to it (rule 5). Returns a line for the import log.
+    /// </summary>
+    static string AddRotorBone(SkinnedMeshRenderer smr, Transform head)
+    {
+        var mesh = smr.sharedMesh;
+        var toWorld = smr.transform.localToWorldMatrix;
+        var verts = mesh.vertices;
+        if (verts.Length == 0) return "rotor has no vertices; no rotor bone";
+        for (int v = 0; v < verts.Length; v++) verts[v] = toWorld.MultiplyPoint3x4(verts[v]);
+
+        // The blade disc's two widest directions, then its normal: the spin axis.
+        AxesOf(verts, out var wide, out var across);
+        var axis = Vector3.Cross(wide, across).normalized;
+        if (Vector3.Dot(axis, head.up) < 0f) axis = -axis;
+        across = Vector3.Cross(axis, wide).normalized;
+
+        // The hub: the middle of the blades' span in the disc's plane (the two
+        // blades are symmetric about it), at the lowest point along the axis.
+        float wMin = float.PositiveInfinity, wMax = float.NegativeInfinity;
+        float aMin = float.PositiveInfinity, aMax = float.NegativeInfinity, hMin = float.PositiveInfinity;
+        foreach (var p in verts)
+        {
+            float w = Vector3.Dot(p, wide), a = Vector3.Dot(p, across), h = Vector3.Dot(p, axis);
+            wMin = Mathf.Min(wMin, w); wMax = Mathf.Max(wMax, w);
+            aMin = Mathf.Min(aMin, a); aMax = Mathf.Max(aMax, a);
+            hMin = Mathf.Min(hMin, h);
+        }
+        var origin = wide * ((wMin + wMax) * 0.5f) + across * ((aMin + aMax) * 0.5f) + axis * hMin;
+        var forward = Vector3.ProjectOnPlane(Vector3.forward, axis);
+        if (forward.sqrMagnitude < 1e-6f) forward = across;
+
+        var bone = new GameObject(RotorBone).transform;
+        bone.SetParent(head, false);
+        bone.SetPositionAndRotation(origin, Quaternion.LookRotation(forward.normalized, axis));
+
+        // The import hierarchy is in the bind pose (see Write), so the bind
+        // pose is read off the transforms.
+        var bones = smr.bones.ToList();
+        var bindposes = mesh.bindposes.ToList();
+        bones.Add(bone);
+        bindposes.Add(bone.worldToLocalMatrix * toWorld);
+        int index = bones.Count - 1;
+        var weights = new BoneWeight[verts.Length];
+        for (int v = 0; v < weights.Length; v++) weights[v] = new BoneWeight { boneIndex0 = index, weight0 = 1f };
+        mesh.bindposes = bindposes.ToArray();
+        smr.bones = bones.ToArray();
+        mesh.boneWeights = weights;
+
+        float radius = 0f;
+        foreach (var p in verts) radius = Mathf.Max(radius, Vector3.ProjectOnPlane(p - origin, axis).magnitude);
+        return $"{RotorPart} skinned to a new {RotorBone} bone under {HeadBone} " +
+               $"(axis {Vector3.Angle(axis, head.up):0.0}° from the head's up, blade radius {radius:0.00} m)";
+    }
+
+    /// <summary>The two directions of largest spread of a point cloud (its
+    /// principal axes), by power iteration from a fixed start so every import
+    /// gives the same answer.</summary>
+    static void AxesOf(Vector3[] points, out Vector3 first, out Vector3 second)
+    {
+        var mean = Vector3.zero;
+        foreach (var p in points) mean += p;
+        mean /= points.Length;
+        var c = new float[3, 3];
+        foreach (var p in points)
+        {
+            var d = p - mean;
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++) c[i, j] += d[i] * d[j];
+        }
+        Vector3 Times(Vector3 x) => new(c[0, 0] * x.x + c[0, 1] * x.y + c[0, 2] * x.z,
+                                        c[1, 0] * x.x + c[1, 1] * x.y + c[1, 2] * x.z,
+                                        c[2, 0] * x.x + c[2, 1] * x.y + c[2, 2] * x.z);
+        first = new Vector3(1f, 0.3f, 0.2f).normalized;
+        for (int k = 0; k < 200; k++) first = Times(first).normalized;
+        second = Vector3.Cross(first, new Vector3(0.2f, 1f, 0.3f)).normalized;
+        for (int k = 0; k < 200; k++)
+        {
+            second = Times(second);
+            second = (second - Vector3.Dot(second, first) * first).normalized;
+        }
     }
 }

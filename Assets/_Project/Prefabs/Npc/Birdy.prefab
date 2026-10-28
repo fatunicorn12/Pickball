@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 595919318577739616}
   - component: {fileID: 1992986681497550689}
   - component: {fileID: 8741833845793711788}
+  - component: {fileID: 8714373987602508617}
   m_Layer: 0
   m_Name: Birdy
   m_TagString: Untagged
@@ -124,6 +125,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Npc.NpcBody
   blocker: {fileID: 3190275392814831240}
   health: {fileID: 7925941899759377404}
+--- !u!114 &8714373987602508617
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4786146758449009371}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51cfe6d89fcf65140b44bff7b7ff9ca5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Npc.NpcRotor
+  rotor: {fileID: 457401727406924462}
+  rotorRenderer: {fileID: 5234891298432230500}
+  driver: {fileID: 1992986681497550689}
+  animator: {fileID: 5671116965527945345}
+  config: {fileID: 11400000, guid: 55c721466bb669143b86ada9a9d3b42a, type: 2}
 --- !u!1001 &2294952881972624656
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -189,6 +207,11 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 1adc40262a2435942b1f4978cf935cb2, type: 3}
+--- !u!4 &457401727406924462 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1837551172332937150, guid: 1adc40262a2435942b1f4978cf935cb2, type: 3}
+  m_PrefabInstance: {fileID: 2294952881972624656}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &1753015167697935099 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 1adc40262a2435942b1f4978cf935cb2, type: 3}
@@ -197,6 +220,11 @@ Transform:
 --- !u!4 &2155353633252063607 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -9065722096572005273, guid: 1adc40262a2435942b1f4978cf935cb2, type: 3}
+  m_PrefabInstance: {fileID: 2294952881972624656}
+  m_PrefabAsset: {fileID: 0}
+--- !u!137 &5234891298432230500 stripped
+SkinnedMeshRenderer:
+  m_CorrespondingSourceObject: {fileID: -2918510014456227468, guid: 1adc40262a2435942b1f4978cf935cb2, type: 3}
   m_PrefabInstance: {fileID: 2294952881972624656}
   m_PrefabAsset: {fileID: 0}
 --- !u!95 &5671116965527945345 stripped

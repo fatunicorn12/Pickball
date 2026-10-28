@@ -42,6 +42,22 @@ namespace Pickleball.Tests.Npc
         }
 
         [Test]
+        public void CompleteFromTheEndTimeOn()
+        {
+            Assert.That(NpcDeathLift.At(0.35f, 0.1f, 0.35f, 0.6f), Is.EqualTo(0f));
+            Assert.That(NpcDeathLift.At(0.475f, 0.1f, 0.35f, 0.6f), Is.EqualTo(0.05f).Within(1e-6f), "half way");
+            Assert.That(NpcDeathLift.At(0.6f, 0.1f, 0.35f, 0.6f), Is.EqualTo(0.1f).Within(1e-6f));
+            Assert.That(NpcDeathLift.At(0.9f, 0.1f, 0.35f, 0.6f), Is.EqualTo(0.1f).Within(1e-6f), "holds after");
+        }
+
+        [Test]
+        public void EndBeforeStartSnapsAtTheStart()
+        {
+            Assert.That(NpcDeathLift.At(0.39f, 0.1f, 0.4f, 0.2f), Is.EqualTo(0f));
+            Assert.That(NpcDeathLift.At(0.4f, 0.1f, 0.4f, 0.2f), Is.EqualTo(0.1f));
+        }
+
+        [Test]
         public void StartAtOneSnapsAtTheEnd()
         {
             Assert.That(NpcDeathLift.At(0.99f, 0.1f, 1f), Is.EqualTo(0f));
