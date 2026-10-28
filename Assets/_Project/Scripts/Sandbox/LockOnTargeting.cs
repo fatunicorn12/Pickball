@@ -63,6 +63,9 @@ namespace Pickleball.Sandbox
         [Tooltip("Where targets are judged from. Defaults to the main camera.")]
         [SerializeField] private Transform aimSource;
         [SerializeField] private SandboxOrbitCamera cameraRig;
+        [Tooltip("Optional. While LockOn is blocked (a conversation, aiming) the toggle and " +
+                 "target flicks are dropped, not saved for later; the lock itself is kept.")]
+        [SerializeField] private PlayerInputGate inputGate;
         [Tooltip("Chest height on the player, for line-of-sight checks.")]
         [SerializeField] private float eyeHeight = 1.2f;
 
@@ -164,9 +167,9 @@ namespace Pickleball.Sandbox
 
         void Update()
         {
-            if (_togglePressed)
+            bool blocked = inputGate != null && inputGate.IsBlocked(InputBlock.LockOn);
+            if (PlayerInputGate.TakeLatched(ref _togglePressed, inputGate, InputBlock.LockOn))
             {
-                _togglePressed = false;
                 if (IsLocked) Release();
                 else if (!TryLock(FindBest(null, 0)) && cameraRig != null)
                     cameraRig.RecenterBehind(transform.forward);
@@ -175,8 +178,9 @@ namespace Pickleball.Sandbox
             if (IsLocked)
             {
                 ValidateLock();
-                if (IsLocked) HandleSwitch();
+                if (IsLocked && !blocked) HandleSwitch();
             }
+            if (blocked) { _flickAccum = 0f; _flickAge = 0f; _stickArmed = false; }
 
             UpdateReticle();
         }
