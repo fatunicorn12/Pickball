@@ -19,9 +19,12 @@ and the views `UI/DialogueView.cs` and `UI/InteractPromptView.cs`. Setup:
 - **Finding someone to talk to.** A small "[E] Talk" pill floats above the NPC's head when you
   are within about 2.4 m, roughly facing them (70° either side of your body's facing), and the
   pill would be on screen. If you are locked on (Tab / RT) to a character that can talk, it gets
-  the prompt from up to 4.5 m whatever way you face. If you are locked on to something that
-  can't talk (Newton), no NPC gets a prompt and E stays Dash for the whole fight. The pill shows
-  **RB** instead of **E** once you last pressed a pad button.
+  the prompt whatever way you face, but from no further: as in BotW, locking on doesn't let you
+  talk across the field, you walk up first (and the talk shot is built for walk-up distances).
+  If you are locked on to something that can't talk (Newton), no NPC gets a prompt and E stays
+  Dash for the whole fight. The pill shows **RB** instead of **E** once you last pressed a pad
+  button. Over an NPC that lock-on can target, the pill sits beside the lock-on hint ring rather
+  than on top of it.
 - **Only when free.** No prompt while airborne (past a 0.15 s grace for ground-check flicker),
   dashing, tethered, on the skateboard, swinging the sword or in 4D. A press starts a talk only
   while really grounded, so the first instant of a jump can't freeze you in mid-air.
@@ -37,21 +40,25 @@ and the views `UI/DialogueView.cs` and `UI/InteractPromptView.cs`. Setup:
   out far enough that no part of your body or cloak covers any part of the NPC, and when the NPC
   is very close it comes forward toward a side two-shot instead. If a wall, slope or prop would
   hide the NPC from over the left shoulder, or crowd the camera into your back, and the right
-  does better, the shot goes over the right, mirrored. Text types at 45 characters a
-  second with short pauses after commas and full stops. The first press shows the whole line,
+  does better, the shot goes over the right, mirrored. The NPC turns to face you; if he is still
+  turning round when the text is due, the first line waits (up to a second) until he is within
+  20° of you. Text types at 45 characters a second with short pauses after commas and full stops. The first press shows the whole line,
   the next goes to the next line; a pulsing ▼ marks a finished line. A hurried double-tap can't
   skip a line unread (0.12 s lockout after each change).
 - **Looking around.** Once the shot has settled, the mouse (while the cursor is captured) or the
   right stick swings the camera round the NPC, at the same speed and sensitivity as the normal
   camera, while the world stays frozen. The NPC's head stays where the shot put it on screen
-  however you turn: all the way round, up to 60° above it and 10° below. The camera comes in at
-  once in front of walls and terrain, eases back out after, and slides round your body rather
-  than through it. It doesn't fight you: steer behind yourself and your body hides the NPC.
+  however you turn: all the way round, from level with its head up to 60° above it. The camera
+  comes in at once in front of walls and terrain and eases back out after; where there is no
+  room at all (the NPC's back to a wall) it stops turning, like a third-person camera against a
+  wall, and never goes into the wall or the NPC. It slides round your body rather than through
+  it. It doesn't fight you: steer behind yourself and your body hides the NPC.
   Advancing a line keeps your view, and the end swings back from wherever you left it. Moving
   the mouse or stick never advances a line.
 - **Ending.** After the last line the box fades, the camera swings back to exactly where it
-  was, time resumes, and a frame later your controls return. For 0.35 s afterwards E can neither
-  reopen the talk nor dash.
+  was, time resumes, and a frame later your controls return. E then has to be left alone for
+  0.35 s before it can open a talk again: every press inside that window restarts it, so mashing
+  E to skip text never reopens the conversation from the first line. E doesn't dash meanwhile.
 - **The pause is total.** Newton, apples, wells, beams, damage ticks and your own animation all
   freeze. Only the NPC (whose animator runs in unscaled time), the camera and the UI move.
 
@@ -110,7 +117,8 @@ fades, camera swings back, time still 0) → after 0.35 s `Talkable.NotifyConver
 → time scale restored to the **previous** value → `ConversationEnded` (camera puts the recorded
 pose and FOV back exactly) → the camera re-enables the orbit camera on its first `LateUpdate`
 whose `Time.deltaTime > 0`, because the orbit camera's `SmoothDampAngle` divides by zero at
-dt 0 once converged → next frame the gate claim is released → 0.35 s restart cooldown. The
+dt 0 once converged → next frame the gate claim is released → the restart cooldown, a 0.35 s
+debounce (any Interact press inside it restarts it). The
 interactor keeps `InteractButton` claimed for the whole conversation and cooldown.
 
 **Execution order.**
@@ -191,8 +199,12 @@ spin never turns back the short way; pitch is the camera's elevation above the f
 never snaps). Both follow the input with exponential damping over **unscaled** time; a zero step
 changes nothing (no `SmoothDamp`, so no divide by zero at dt 0). Each frame while it moves, a
 sphere sweep (`cameraCollisionRadius`, `cameraObstructionMask`, the player and NPC ignored) from
-the focus along the orbit direction gives the clear distance; the camera comes in to it at once
-and eases out over `lookPullOutSeconds`, never closer than `minCameraDistance`. It is then
+the focus along the orbit direction gives the clear distance; the camera comes in to it at once,
+however close (collision wins), and eases out over `lookPullOutSeconds`. Where the clear distance
+would bring it nearer the NPC's head than `minCameraDistance` (or the NPC's half-width plus the
+camera radius, if larger), the step is refused: the camera keeps whichever of the yaw and pitch
+halves still fits, else neither, and drops the rest of the blocked turn so pushing into the wall
+builds no backlog and turning back answers at once. It is then
 pushed out of the player's capsule (feet to Head bone, the framing clearance radius) so it slides
 round him, and `DialogueFraming.Compose` re-aims it and re-picks the field of view, so the NPC's
 head stays at the shot's screen point with no roll. Once settled nothing is recomputed. Mouse
@@ -235,14 +247,15 @@ reference to it.
 
 | Feel | Fields |
 |---|---|
-| Prompt appears too far / too close, or too fussy about facing | `talkRange`, `facingConeDegrees`, `lockedTalkRange`, `maxHeightDifference` |
+| Prompt appears too far / too close, or too fussy about facing | `talkRange` (also the lock-on range), `facingConeDegrees`, `maxHeightDifference` |
 | Prompt flickers between two NPCs or at the edge | `stickyMargin`, `stickyConeDegrees` |
 | Allow talking mid-air or mid-move | `requireFree`, `groundedGraceSeconds` (the grace only keeps the prompt up) |
 | Player freezes mid-stride / takes too long to stop | `settleSeconds` |
 | Player doesn't (or shouldn't) turn to face the NPC | `turnToFaceNpc` (the turn happens during `settleSeconds`; speed is `MovementConfig.lockAttackTurnTime`) |
 | Text speed and rhythm | `charactersPerSecond` (0 = instant), `commaPauseSeconds`, `sentencePauseSeconds` |
+| NPC starts talking with his back half turned, or the first line waits too long | `waitForNpcFacingDegrees`, `waitForNpcFacingSeconds` |
 | Presses feel ignored, or lines get skipped | `advanceLockoutSeconds`, `textStartDelaySeconds` |
-| E reopens the talk too easily | `restartCooldownSeconds` |
+| E reopens the talk too easily, or too slowly after a deliberate press | `restartCooldownSeconds` (a debounce: presses inside it restart it) |
 | Camera position | `pushInDistance`, `cameraHeight` (above the Head bone; near 0 is level), `sideOffset` (sign = shoulder), `maxSideOffset`, `playerFocusHeight` (pivot only without a Head bone) |
 | Player's body or cloak still covers the NPC, or the camera swings too wide | `playerClearanceMargin` (added to the controller radius), `playerFallbackRadius`, `npcHalfWidth`, `maxSideOffset` |
 | Where the NPC sits on screen, how big | `npcHeadScreenHeight`, `npcFeetScreenHeight`, `npcScreenSide`, `minFieldOfView`, `maxFieldOfView` |
@@ -251,7 +264,7 @@ reference to it.
 | Looking around: on or off, feel | `lookEnabled`, `lookMouseSensitivity`, `lookStickYawSpeed`, `lookStickPitchSpeed`, `lookStickDeadzone`, `lookStickExponent`, `lookInvertStickY` |
 | Looking around: how far up and down, how floaty | `lookMinPitch`, `lookMaxPitch` (camera elevation above the NPC's head), `lookSmoothTime`, `lookPullOutSeconds` |
 | Box look | `boxColour`, `nameTabColour`, `nameColour`, `textColour`, `continueColour`, `boxFadeInSeconds`, `boxFadeOutSeconds`, `boxScaleFrom`, `continuePulseHz`, `continueBob` |
-| Prompt look | `promptHeightOffset`, `promptFadeSeconds`, `promptLabel`, `keyboardKeyLabel`, `gamepadKeyLabel` |
+| Prompt look | `promptHeightOffset`, `promptHintClearance` (sideways, clear of the lock-on hint), `promptFadeSeconds`, `promptLabel`, `keyboardKeyLabel`, `gamepadKeyLabel` |
 | Silence during talk | `pauseAudio` (dialogue sounds need `AudioSource.ignoreListenerPause`) |
 
 Box geometry (60% of a 1920-wide reference, 232 tall, 52 above the bottom; font sizes) is laid
@@ -326,14 +339,29 @@ overload) plus a choice list in `DialogueView`; the director and camera need no 
   stays free: mouse look is off, and a click neither re-captures it nor advances a line (the
   orbit camera, which owns capture, is disabled). The stick still looks. Re-capturing from the
   dialogue would need `SandboxOrbitCamera` to expose its capture (and mark `JustRelocked`).
-- **Looking around ignores the NPC's body.** The sweep skips the NPC, so with a very low pitch
-  limit the ground can pull the camera in close to the NPC's legs; the default −10° keeps clear.
+- **Escape during a talk.** The orbit camera is off, so it never sees the Escape and still
+  believes it owns the cursor afterwards, while the Editor has freed it. When the dialogue hands
+  the orbit camera back it captures the cursor again to match, so mouse look and clicks behave
+  as in normal play (the camera has no way to be told it lost the cursor). The OS cursor can't be
+  checked headless; this wants one look in the Editor.
+- **Looking around ignores the NPC's body below its head.** The sweep skips the NPC; the
+  minimum distance keeps the camera off its head and shoulders, and the 0° default pitch floor
+  keeps it from dropping to the legs. A much lower `lookMinPitch` can bring it close to them.
+- **Talks aborted during the settle never reach the Talkable.** The Talkable is told only when
+  time stops, so if the NPC dies (or is disabled) inside the 0.25 s settle, its listeners hear
+  nothing and `Talkable.LastEndReason` keeps the previous talk's value. The camera snaps back.
+- **Locked on to a friendly NPC from further than `talkRange`, E dashes** (toward them), as for
+  any lock target. Walk closer and the prompt appears.
+- **The frozen pose can point the drawn sword at the NPC**, and a talk started while aiming
+  blends back to the aim view before the orbit camera eases out of it. Both belong to their
+  owners (sword presentation; `SandboxOrbitCamera`, which needs a pose query).
 - **Tall NPCs are cut off by the box.** The field of view stops at `maxFieldOfView`; a
   human-height NPC's legs go under the box, as in BotW.
 - **A press in the airborne grace does nothing**: the prompt (and its claim on E) stays up for
   0.15 s after leaving the ground, but the press neither talks nor dashes.
-- **Escape** doesn't free the cursor during a talk (the orbit camera owns it and is disabled).
-- **Lock-on fallback.** Locked on to a talkable NPC that is out of `lockedTalkRange`, the prompt
+- **Escape** doesn't free the cursor during a talk in a build (the orbit camera owns it and is
+  disabled); in the Editor it does, see above.
+- **Lock-on fallback.** Locked on to a talkable NPC that is out of `talkRange`, the prompt
   falls back to walk-up selection (another NPC nearby can get it).
 - **MeleeCombat start buffer.** A swing pressed just *before* a talk and still buffered
   (`MeleeCombat.cs` ~248, `Time.time <= _startBufferedUntil`) can start during the pause,

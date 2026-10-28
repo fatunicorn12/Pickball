@@ -281,6 +281,33 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
+        public void Look_AWallRightBehindTheNpc_StopsTheTurn_NeverEntersIt()
+        {
+            // The wall's face is 0.35 m behind the NPC: no room to swing round behind it.
+            var wall = NewHost("TightWall", new Vector3(0f, 1.5f, 2.6f));
+            wall.AddComponent<BoxCollider>().size = new Vector3(8f, 6f, 0.5f);
+            _director.TryStart(_npc, _player);
+            Frames();
+            float minDistance = Mathf.Max(_config.MinCameraDistance, _config.NpcHalfWidth + _config.CameraCollisionRadius);
+
+            _dialogueCamera.Look(new Vector2(180f, 0f));
+            for (int i = 0; i < 120; i++)
+            {
+                _dialogueCamera.Tick(0f, 0.016f);
+                Vector3 p = _camera.transform.position;
+                Assert.That(p.z, Is.LessThan(2.35f - _config.CameraCollisionRadius + 0.01f), $"frame {i}: never in the wall");
+                Assert.That(Vector3.Distance(p, _npc.FocusPosition), Is.GreaterThanOrEqualTo(minDistance - 1e-3f),
+                            $"frame {i}: never in the NPC");
+            }
+
+            // The blocked turn left no backlog: turning back responds at once.
+            Vector3 stopped = _camera.transform.position;
+            _dialogueCamera.Look(new Vector2(-20f, 0f));
+            for (int i = 0; i < 5; i++) _dialogueCamera.Tick(0f, 0.016f);
+            Assert.That(Vector3.Distance(_camera.transform.position, stopped), Is.GreaterThan(0.05f));
+        }
+
+        [Test]
         public void End_BlendsBackFromWhereThePlayerLeftTheCamera()
         {
             _director.TryStart(_npc, _player);

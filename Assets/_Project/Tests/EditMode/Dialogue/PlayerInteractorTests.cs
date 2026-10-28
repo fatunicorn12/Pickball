@@ -127,9 +127,6 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
-        [Ignore("Known bug DLG-R2-1: mashing E to skip text reopens the same conversation 0.35 s after it " +
-                "closes (playtest: 3 conversations in 7 s at 15 Hz and at 6.7 Hz). " +
-                "See Pickball-playtest/reports/R-dialogue-birdnpc.md.")]
         public void MashingE_ThroughTheEnd_DoesNotReopenTheTalk()
         {
             NpcAt(new Vector3(0f, 0f, 1.5f));
@@ -196,7 +193,7 @@ namespace Pickleball.Tests.Dialogue
         public void LockedOnToATalker_ItWins_EvenBehindThePlayer()
         {
             NpcAt(new Vector3(0f, 0f, 1.5f));
-            var behind = NpcAt(new Vector3(0f, 0f, -3f));
+            var behind = NpcAt(new Vector3(0f, 0f, -2f));
             var health = behind.gameObject.AddComponent<Health>();
             health.ResetToFull();
             LockOn(health);
@@ -204,6 +201,25 @@ namespace Pickleball.Tests.Dialogue
             _interactor.Tick(Frame, false);
 
             Assert.That(_interactor.CurrentTarget, Is.SameAs(behind));
+        }
+
+        [Test]
+        public void LockedOnToATalker_FurtherThanWalkingUpReaches_IsNotATarget()
+        {
+            // BotW: locking on lifts the facing cone, not the range. From 3 m the
+            // talk shot would be a distant two-shot, so you walk up first.
+            var far = NpcAt(new Vector3(0f, 0f, 3f));
+            var health = far.gameObject.AddComponent<Health>();
+            health.ResetToFull();
+            LockOn(health);
+
+            _interactor.Tick(Frame, false);
+            Assert.That(_interactor.CurrentTarget, Is.Null, "3 m is past the 2.4 m talk range");
+            Assert.That(_gate.IsBlocked(InputBlock.InteractButton), Is.False);
+
+            far.transform.position = new Vector3(0f, 0f, 2.2f);
+            _interactor.Tick(Frame, false);
+            Assert.That(_interactor.CurrentTarget, Is.SameAs(far), "within walking-up range it talks");
         }
 
         void LockOn(Health target)

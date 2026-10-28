@@ -21,7 +21,11 @@ namespace Pickleball.Sandbox.Dialogue
     /// than recording 0 as the value to restore.</item>
     /// <item>The Talkable is told and <see cref="ConversationStarted"/> fires;
     /// the box fades in. <b>Opening</b> lasts
-    /// <see cref="DialogueConfig.TextStartDelaySeconds"/> and ignores presses.</item>
+    /// <see cref="DialogueConfig.TextStartDelaySeconds"/> and ignores presses.
+    /// It runs longer while the NPC is still turning toward the player and is
+    /// more than <see cref="DialogueConfig.WaitForNpcFacingDegrees"/> off (at
+    /// most <see cref="DialogueConfig.WaitForNpcFacingSeconds"/> more), so
+    /// nobody starts talking with their back half turned.</item>
     /// </list>
     /// <b>Talking.</b> A <see cref="DialogueRunner"/> types each line in unscaled
     /// time. Interact (E / RB, from <see cref="InteractInput"/>) shows the whole
@@ -37,9 +41,10 @@ namespace Pickleball.Sandbox.Dialogue
     /// <item><see cref="ConversationEnded"/>: the camera puts its pose back and
     /// returns to the orbit camera (on the first frame time actually moves).</item>
     /// <item><b>Releasing</b>: the input claim is dropped one frame later, then
-    /// <see cref="DialogueConfig.RestartCooldownSeconds"/> must pass before a new
-    /// talk can start, so the press that closed the box can neither dash nor
-    /// reopen it.</item>
+    /// <see cref="DialogueConfig.RestartCooldownSeconds"/> of quiet must pass
+    /// before a new talk can start. It is a debounce: every Interact press inside
+    /// it starts it again, so neither the press that closed the box nor a player
+    /// mashing E to skip text can reopen the conversation.</item>
     /// </list>
     ///
     /// <b>Exception safety.</b> The end path never stops half way. Lifecycle
@@ -111,6 +116,7 @@ namespace Pickleball.Sandbox.Dialogue
         float _cooldownUntil;
         Health _currentHealth;
         TalkFacing _facing;
+        float _npcYawLastTick;
 
         /// <summary>Current phase.</summary>
         public Phase State { get; private set; } = Phase.Idle;
@@ -251,6 +257,11 @@ namespace Pickleball.Sandbox.Dialogue
             float dt = unscaledDeltaTime > 0f ? unscaledDeltaTime : 0f;
             _clock += dt;
 
+            // Debounce: a press while cooling down restarts the cooldown, so only
+            // a press after a quiet spell can open a new talk.
+            if (advancePressed && IsCoolingDown && config != null)
+                _cooldownUntil = _clock + config.RestartCooldownSeconds;
+
             if (State is (Phase.Settling or Phase.Opening or Phase.Talking) && !CurrentStillTalking())
             {
                 End(ConversationEndReason.Aborted, releaseNow: false);
@@ -268,7 +279,10 @@ namespace Pickleball.Sandbox.Dialogue
 
                 case Phase.Opening:
                     _phaseTime += dt;
+                    bool npcTurning = NpcStillTurningAway();
                     if (_phaseTime < config.TextStartDelaySeconds) return;
+                    if (npcTurning && _phaseTime < config.TextStartDelaySeconds + config.WaitForNpcFacingSeconds)
+                        return;
                     State = Phase.Talking;
                     Runner.Timing = config.Typewriter;
                     if (!Runner.Begin(Current.Dialogue)) BeginClosing();
@@ -306,6 +320,25 @@ namespace Pickleball.Sandbox.Dialogue
             return _currentHealth == null || !_currentHealth.IsDead;
         }
 
+        /// <summary>True while the NPC is still turning (its yaw moved since the last
+        /// tick) and is more than <see cref="DialogueConfig.WaitForNpcFacingDegrees"/>
+        /// off facing the player. An NPC that doesn't turn never holds the text up.</summary>
+        bool NpcStillTurningAway()
+        {
+            if (Current == null || Partner == null) return false;
+            Transform npc = Current.transform;
+            float yaw = npc.eulerAngles.y;
+            bool turning = Mathf.Abs(Mathf.DeltaAngle(_npcYawLastTick, yaw)) > 0.01f;
+            _npcYawLastTick = yaw;
+            if (!turning) return false;
+            Vector3 toPartner = Partner.position - npc.position;
+            Vector3 forward = npc.forward;
+            toPartner.y = 0f;
+            forward.y = 0f;
+            if (toPartner.sqrMagnitude < 1e-4f || forward.sqrMagnitude < 1e-6f) return false;
+            return Vector3.Angle(forward, toPartner) > config.WaitForNpcFacingDegrees;
+        }
+
         void EnterPause()
         {
             // The motor stops with time: the turn is over, hand facing back.
@@ -319,6 +352,7 @@ namespace Pickleball.Sandbox.Dialogue
             }
             State = Phase.Opening;
             _phaseTime = 0f;
+            _npcYawLastTick = Current != null ? Current.transform.eulerAngles.y : 0f;
             // The Talkable marks itself in conversation before it raises its
             // event, so a throwing NPC listener cannot leave it half started.
             try { Current.NotifyConversationStarted(Partner); }
