@@ -32,6 +32,25 @@ namespace Pickleball.Sandbox
         [SerializeField] private float minPitch = -25f;
         [SerializeField] private float maxPitch = 65f;
         [SerializeField] private float followSmoothTime = 0.18f;
+        [Tooltip("Furthest the smoothed camera may trail its goal vertically, in metres. " +
+                 "Follow smoothing lags a fast jump or fall; without a cap the player " +
+                 "leaves the frame (on-screen y reached 0.00 at 0.18 s). Negative = no cap.")]
+        [SerializeField] private float maxVerticalLag = 1f;
+
+        [Header("Occlusion")]
+        [Tooltip("Pull the camera in when geometry sits between the player and it.")]
+        [SerializeField] private bool occlusionEnabled = true;
+        [Tooltip("Radius of the sphere swept from the follow point to the camera.")]
+        [SerializeField, Min(0.01f)] private float occlusionRadius = 0.3f;
+        [Tooltip("Layers that block the camera. Triggers, the player and anything " +
+                 "with a Health (bosses, dummies) are always ignored.")]
+        [SerializeField] private LayerMask occlusionMask = ~0;
+        [Tooltip("Closest the camera may be pulled to the follow point. Keep it big " +
+                 "enough that the player stays framed with his back to a wall; the lens " +
+                 "may then poke into that wall, which beats losing the player.")]
+        [SerializeField, Min(0f)] private float occlusionMinDistance = 2f;
+        [Tooltip("Metres per second the camera eases back out once the view is clear.")]
+        [SerializeField, Min(0f)] private float occlusionReturnSpeed = 5f;
 
         [Header("Gamepad")]
         [Tooltip("Right-stick turn rate at full tilt, in degrees per second.")]
@@ -282,6 +301,7 @@ namespace Pickleball.Sandbox
         void OnEnable()
         {
             _velocity = Vector3.zero;
+            _occlusionClip = 0f;
             _yawVelocity = _pitchVelocity = 0f;
         }
 
@@ -397,6 +417,40 @@ namespace Pickleball.Sandbox
             return raw / mag * Mathf.Pow(t, stickExponent);
         }
 
+        float _occlusionClip;
+        static readonly RaycastHit[] OcclusionHits = new RaycastHit[8];
+
+        /// <summary>Pulls <paramref name="pos"/> in along the focus-to-camera line
+        /// when a collider is in the way, smoothing the return.</summary>
+        Vector3 ApplyOcclusion(Vector3 focus, Vector3 pos, float dt)
+        {
+            if (!occlusionEnabled) return pos;
+            Vector3 arm = pos - focus;
+            float length = arm.magnitude;
+            if (length < 1e-3f) return pos;
+            Vector3 dir = arm / length;
+
+            float hitDistance = -1f;
+            int n = Physics.SphereCastNonAlloc(focus, occlusionRadius, dir, OcclusionHits, length,
+                                               occlusionMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                var hit = OcclusionHits[i];
+                if (hit.collider == null || IsIgnoredBlocker(hit.collider)) continue;
+                if (hitDistance < 0f || hit.distance < hitDistance) hitDistance = hit.distance;
+            }
+
+            float free = CameraOcclusion.FreeLength(length, hitDistance, occlusionMinDistance);
+            _occlusionClip = CameraOcclusion.NextClip(_occlusionClip, length, free, occlusionReturnSpeed, dt);
+            return focus + dir * Mathf.Max(0f, length - _occlusionClip);
+        }
+
+        bool IsIgnoredBlocker(Collider c)
+        {
+            if (target != null && c.transform.IsChildOf(target.root)) return true;
+            return c.GetComponentInParent<Health>() != null;
+        }
+
         void LateUpdate()
         {
             UpdateAim(Time.unscaledDeltaTime);
@@ -444,8 +498,16 @@ namespace Pickleball.Sandbox
             // "right" stays screen-right at any yaw and pitch.
             if (_aimBlend > 0f) wanted += rot * (aimShoulderOffset * _aimBlend);
 
-            transform.position = Vector3.SmoothDamp(transform.position, wanted, ref _velocity,
-                                                    Mathf.Lerp(followSmoothTime, aimFollowSmoothTime, _aimBlend));
+            // Occlusion shortens the GOAL along the true focus-to-goal ray before
+            // smoothing. (Casting along the smoothed position instead aims at a
+            // stale spot after a teleport and pins the camera to the player.)
+            wanted = ApplyOcclusion(focus, wanted, Time.unscaledDeltaTime);
+
+            Vector3 smoothed = Vector3.SmoothDamp(transform.position, wanted, ref _velocity,
+                                                  Mathf.Lerp(followSmoothTime, aimFollowSmoothTime, _aimBlend));
+            float lagged = CameraOcclusion.ClampLag(smoothed.y, wanted.y, maxVerticalLag);
+            if (!Mathf.Approximately(lagged, smoothed.y)) { smoothed.y = lagged; _velocity.y = 0f; }
+            transform.position = smoothed;
             transform.rotation = rot;
 
             // Shake is applied after the follow so it never feeds back into the
