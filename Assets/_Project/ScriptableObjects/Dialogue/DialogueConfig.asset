@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: abe9ce412fd64dbe8e9c17b73a5cacf4, type: 3}
+  m_Name: DialogueConfig
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Dialogue.DialogueConfig
+  talkRange: 2.4
+  facingConeDegrees: 70
+  lockedTalkRange: 4.5
+  maxHeightDifference: 1.6
+  stickyMargin: 0.35
+  stickyConeDegrees: 12
+  requireFree: 1
+  groundedGraceSeconds: 0.15
+  restartCooldownSeconds: 0.35
+  settleSeconds: 0.25
+  charactersPerSecond: 45
+  commaPauseSeconds: 0.08
+  sentencePauseSeconds: 0.22
+  advanceLockoutSeconds: 0.12
+  textStartDelaySeconds: 0.2
+  pauseAudio: 1
+  playerFocusHeight: 1.35
+  pushInDistance: 1.7
+  cameraHeight: 0.1
+  sideOffset: -0.8
+  playerClearanceMargin: 0.3
+  playerFallbackRadius: 0.4
+  npcHalfWidth: 0.3
+  maxSideOffset: 2
+  npcHeadScreenHeight: 0.62
+  npcFeetScreenHeight: 0.31
+  npcScreenSide: 0.15
+  minFieldOfView: 40
+  maxFieldOfView: 55
+  blendInSeconds: 0.45
+  closeSeconds: 0.35
+  cameraCollisionRadius: 0.2
+  minCameraDistance: 0.4
+  cameraObstructionMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  boxFadeInSeconds: 0.18
+  boxFadeOutSeconds: 0.15
+  boxScaleFrom: 0.94
+  boxColour: {r: 0.04, g: 0.045, b: 0.06, a: 0.8}
+  nameTabColour: {r: 0.04, g: 0.045, b: 0.06, a: 0.9}
+  nameColour: {r: 1, g: 0.8, b: 0.36, a: 1}
+  textColour: {r: 0.97, g: 0.97, b: 0.95, a: 1}
+  continueColour: {r: 1, g: 0.8, b: 0.36, a: 1}
+  continuePulseHz: 1.6
+  continueBob: 5
+  promptHeightOffset: 0.45
+  promptFadeSeconds: 0.12
+  promptLabel: Talk
+  keyboardKeyLabel: E
+  gamepadKeyLabel: RB
