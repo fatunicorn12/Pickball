@@ -136,8 +136,9 @@ Aborted. A subscriber that changes anything for a conversation must undo it in i
 `OnDisable` too.
 
 **The input gate** is general, not dialogue-specific. An owner claims a set of `InputBlock` flags
-(`Movement`, `Sword`, `LockOn`, `Camera`, `Spacetime`, `InteractButton`); each reader checks only
-its own flag. Claims from different owners never clear each other. Callback-latched presses go
+(`Movement`, `Sword`, `LockOn`, `Camera`, `Spacetime`, `InteractButton`, `Spell`); each reader
+checks only its own flag. Claims from different owners never clear each other: the talk's `All`
+outlives the spell's own `Sword | LockOn` aiming claim (`AimInputClaims`), and the other way round. Callback-latched presses go
 through `PlayerInputGate.TakeLatched`, which **drops** a press made while blocked instead of
 saving it for the release. The readers' gate fields are optional; empty keeps the old behaviour.
 
@@ -146,8 +147,9 @@ saving it for the release. The readers' gate fields are optional; empty keeps th
 | `PlayerMovementInput.Read` | `Movement` | returns an empty intent |
 | `PlayerMovementInput.Read` | `InteractButton` | `DashPressed` is false (E / RB talk instead) |
 | `SwordInput.OnPerformed` | `Sword` | the press is dropped, never queued on `MeleeCombat` |
-| `LockOnTargeting` | `LockOn` | a claim releases any lock through `Release()` and the ring hides (the lock-on change, `c6c54ea`); toggles and flicks are dropped while blocked |
+| `LockOnTargeting` | `LockOn` | a claim releases any lock through `Release()` and the ring hides (the lock-on fix); toggles and flicks are dropped while blocked |
 | `SpacetimeView.Update` | `Spacetime` | T / d-pad left dropped |
+| `SpellInput` | `Spell` | aim and fire read as released, so a talk started while aiming ends the aim; the orbit camera eases out of its aim view once it is handed back |
 | — | `Camera` | no reader yet: the dialogue camera disables `SandboxOrbitCamera` and reads look input itself |
 
 **The camera shot** (`DialogueFraming`, pure and tested). Pivot: the player's humanoid Head
