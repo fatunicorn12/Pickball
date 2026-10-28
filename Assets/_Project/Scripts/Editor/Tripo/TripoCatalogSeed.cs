@@ -112,10 +112,10 @@ namespace Pickleball.EditorTools.Tripo
                 triangleBudget: 500, triangleCap: 2000, textureMaxSize: 512,
                 TripoColliderShape.None, castShadows: true, smoothness: 0.6f);
 
-            // The Singularity: abstract final boss, animated in code (no rig). Sized by
-            // its whole silhouette, ring and shards included: the black core is ~0.6 of
-            // it, so 5 m puts the plan's 3 m core inside. The texture drives a soft
-            // emission. 2048 like the characters: a hero asset.
+            // The Singularity: abstract final boss, animated in code (no rig). v3 is a
+            // spiky dark star with no ring, sized by its whole silhouette, spikes
+            // included, so 5 m keeps the plan's ~3 m core inside. The texture drives a
+            // soft emission. 2048 like the characters: a hero asset.
             yield return new TripoAssetSpec("BS-01", "Singularity", TripoCategory.Bosses,
                 TripoSizeAxis.LargestExtent, 5f, TripoPivot.Centre,
                 triangleBudget: 6000, triangleCap: 10000, textureMaxSize: 2048,
@@ -142,7 +142,33 @@ namespace Pickleball.EditorTools.Tripo
                 triangleBudget: 10000, triangleCap: 15000, textureMaxSize: 2048,
                 TripoColliderShape.None, castShadows: true, smoothness: 0.15f,
                 rig: TripoRig.Humanoid);
+
+            // The other six guardians: same Tripo rig (65 mixamorig bones) and the same
+            // row as Pythagoras; only the height differs, from the plan (section 5).
+            yield return Guardian("GD-02", "Hypatia", 2.1f);
+            yield return Guardian("GD-03", "Fibonacci", 2.0f);
+            yield return Guardian("GD-04", "AlKhwarizmi", 2.2f);
+            yield return Guardian("GD-05", "Euler", 2.1f);
+            yield return Guardian("GD-06", "Galois", 2.0f);
+            yield return Guardian("GD-07", "Riemann", 2.2f);
+
+            // Fibonacci rabbit: a 0.45 m swarm enemy (plan EN-01), 2K texture imported at
+            // 512. Tripo's "Other" rig is 19 mostly unnamed bones, so no avatar: the
+            // skinned mesh imports in its bind pose and code hops the whole body.
+            // Exported side-on (facing -X): turned 90° to face +Z.
+            yield return new TripoAssetSpec("EN-01", "FibonacciRabbit", TripoCategory.Enemies,
+                TripoSizeAxis.LargestHorizontal, 0.45f, TripoPivot.BottomCentre,
+                triangleBudget: 2500, triangleCap: 3000, textureMaxSize: 512,
+                TripoColliderShape.None, castShadows: true, smoothness: 0.2f,
+                modelRotation: new Vector3(0f, 90f, 0f));
         }
+
+        static TripoAssetSpec Guardian(string id, string name, float height) =>
+            new(id, name, TripoCategory.Characters,
+                TripoSizeAxis.Height, height, TripoPivot.BottomCentre,
+                triangleBudget: 10000, triangleCap: 15000, textureMaxSize: 2048,
+                TripoColliderShape.None, castShadows: true, smoothness: 0.15f,
+                rig: TripoRig.Humanoid);
 
         /// <summary>Batch 1: the Newton fight (plan priority 1, NF-01 to NF-07).</summary>
         public static IEnumerable<TripoAssetSpec> NewtonFight()
