@@ -28,8 +28,10 @@ namespace Pickleball.Sandbox.Magic
     ///    the crosshair.
     ///  - <b>Channel</b> (Heal): fire held, standing still, for the spell's time;
     ///    the rules are <see cref="SpellChannel"/>'s. Any movement input, a jump,
-    ///    a dash or tether (or any busy move), being hurt, letting go, or the
-    ///    gate blocking Spell cancels it. It never claims the input gate: the
+    ///    a dash or tether (or any busy move), a real hit (not a chip tick), being
+    ///    carried off the spot, letting go, or the gate blocking Spell cancels it.
+    /// Strike and Zone need floor under the crosshair (<see cref="AimPlaceable"/>);
+    /// without it a press is refused before any mana is spent. It never claims the input gate: the
     ///    player stays free to move, and moving is how they cancel.
     /// Each spell has its own cooldown (<see cref="SpellCooldowns"/>), so
     /// switching never resets one.
@@ -135,6 +137,9 @@ namespace Pickleball.Sandbox.Magic
         RaycastHit[] _aimHits;
         Vector3 _aimPoint;
         Transform _aimTarget;
+        Vector3 _groundPoint;
+        bool _groundOk;
+        float _lastHealed;
         int _aimFrame = -1;
         bool _aimResolved;
         bool _aimLatched;
@@ -204,10 +209,30 @@ namespace Pickleball.Sandbox.Magic
             }
         }
 
+        /// <summary>True while aiming a spell that can land where it is aimed. Always
+        /// true for orbs and channels. A ground spell (Strike, Zone) needs floor
+        /// under the crosshair within range (<see cref="GroundProbe.TryGroundTarget"/>);
+        /// a Thunderbolt on an enemy always has it. A press while this is false is
+        /// refused, free, with <see cref="CastFailed"/>.</summary>
+        public bool AimPlaceable
+        {
+            get
+            {
+                if (!IsAiming) return false;
+                if (!NeedsGround(spell)) return true;
+                RefreshAim();
+                return _groundOk;
+            }
+        }
+
+        /// <summary>Health the last completed channel actually restored (at most its
+        /// heal amount, less when little was missing).</summary>
+        public float LastHealed => _lastHealed;
+
         /// <summary>True when a fire press now would cast: aiming, off cooldown,
-        /// the delivery's prefab (or, for a channel, health) present and the cost
-        /// affordable.</summary>
-        public bool CanCast => IsAiming && CooldownRemaining <= 0f && HasPayload(spell)
+        /// the delivery's prefab (or, for a channel, health) present, somewhere to
+        /// land (<see cref="AimPlaceable"/>) and the cost affordable.</summary>
+        public bool CanCast => IsAiming && CooldownRemaining <= 0f && HasPayload(spell) && AimPlaceable
                                && mana != null && mana.CanAfford(Cost);
 
         /// <summary>1 right after a cast of the selected spell, falling to 0 when
@@ -345,6 +370,14 @@ namespace Pickleball.Sandbox.Magic
                 return;
             }
 
+            // No floor under the crosshair (the sky, a pit): refused before any
+            // spend, so it costs nothing, with the same feedback as low mana.
+            if (NeedsGround(spell) && !_groundOk)
+            {
+                if (pressed) CastFailed?.Invoke();
+                return;
+            }
+
             if (mana == null)
             {
                 WarnNoMana();
@@ -377,7 +410,11 @@ namespace Pickleball.Sandbox.Magic
         {
             Vector3 origin = CastOriginPosition;
             Vector3 viewForward = aimCamera != null ? aimCamera.transform.forward : transform.forward;
-            Vector3 direction = OrbMath.LaunchDirection(origin, _aimPoint, viewForward, spell.MinAimDistance);
+            // On a target, fly at its body whatever the distance: the near-aim
+            // fallback (camera forward) points at the floor at point-blank range.
+            Vector3 direction = _aimTarget != null
+                ? OrbMath.TargetLaunchDirection(origin, CentreOf(_aimTarget), viewForward)
+                : OrbMath.LaunchDirection(origin, _aimPoint, viewForward, spell.MinAimDistance);
 
             var orb = Instantiate(spell.OrbPrefab, origin, Quaternion.LookRotation(direction));
             orb.Launch(origin, direction, spell, Owner, _aimTarget);
@@ -385,24 +422,44 @@ namespace Pickleball.Sandbox.Magic
 
         void CallStrike()
         {
-            Vector3 point = _aimTarget != null ? GroundProbe.FeetOf(_aimTarget) : GroundUnder(_aimPoint);
-            var strike = Instantiate(spell.StrikePrefab, point, Quaternion.identity);
-            strike.Begin(point, _aimTarget, spell, Owner);
+            var strike = Instantiate(spell.StrikePrefab, _groundPoint, Quaternion.identity);
+            strike.Begin(_groundPoint, _aimTarget, spell, Owner);
         }
 
         void PlaceZone()
         {
-            Vector3 aim = _aimTarget != null ? GroundProbe.FeetOf(_aimTarget) : _aimPoint;
-            Vector3 point = GroundUnder(aim);
-            var zone = Instantiate(spell.ZonePrefab, point, Quaternion.identity);
-            zone.Place(point, spell, Owner);
+            var zone = Instantiate(spell.ZonePrefab, _groundPoint, Quaternion.identity);
+            zone.Place(_groundPoint, spell, Owner);
         }
 
-        Vector3 GroundUnder(Vector3 point)
+        static bool NeedsGround(SpellDefinition which)
+            => which != null && (which.Delivery == SpellDelivery.Strike || which.Delivery == SpellDelivery.Zone);
+
+        static Vector3 CentreOf(Transform target)
+            => target.TryGetComponent(out Collider col) && col.enabled ? col.bounds.center : target.position;
+
+        /// <summary>
+        /// Where this frame's ground spell would land (<see cref="_groundPoint"/>)
+        /// and whether it may (<see cref="_groundOk"/>). A Thunderbolt on an enemy
+        /// lands on its feet (it follows the enemy anyway). Otherwise the floor
+        /// under the crosshair, or under the enemy's feet for a zone, within the
+        /// probe depth and the spell's range; none means refuse, never mid-air.
+        /// </summary>
+        void ResolveGround()
         {
+            _groundOk = false;
+            _groundPoint = _aimPoint;
+            if (!NeedsGround(spell)) return;
+            if (spell.Delivery == SpellDelivery.Strike && _aimTarget != null)
+            {
+                _groundPoint = GroundProbe.FeetOf(_aimTarget);
+                _groundOk = true;
+                return;
+            }
             if (_aimHits == null) _aimHits = new RaycastHit[AimHitCapacity];
-            GroundProbe.TrySnap(point, spell.GroundProbeDistance, spell.HitMask, Owner, _aimHits, out Vector3 ground);
-            return ground;
+            Vector3 aim = _aimTarget != null ? GroundProbe.FeetOf(_aimTarget) : _aimPoint;
+            _groundOk = GroundProbe.TryGroundTarget(aim, Owner.position, spell.MaxRange, spell.GroundProbeDistance,
+                                                    spell.HitMask, Owner, _aimHits, out _groundPoint);
         }
 
         /// <summary>Whether <paramref name="which"/> has what its delivery needs to
@@ -445,7 +502,8 @@ namespace Pickleball.Sandbox.Magic
                 }
                 if (mana == null) WarnNoMana();
 
-                var refused = Channel.TryBegin(signals, spell.ChannelSeconds, Cost, spell.ChannelManaTiming, mana);
+                var refused = Channel.TryBegin(signals, spell.ChannelSeconds, Cost, spell.ChannelManaTiming, mana,
+                                               spell.ChannelMaxDrift);
                 if (refused != ChannelStopReason.None)
                 {
                     ChannelCancelled?.Invoke(spell, refused);
@@ -460,7 +518,13 @@ namespace Pickleball.Sandbox.Magic
             switch (Channel.Tick(dt, signals, mana))
             {
                 case ChannelStep.Completed:
-                    if (health != null) health.Heal(spell.HealAmount);
+                    _lastHealed = 0f;
+                    if (health != null)
+                    {
+                        float before = health.Current;
+                        health.Heal(spell.HealAmount);
+                        _lastHealed = Mathf.Max(0f, health.Current - before);
+                    }
                     Cooldowns.Start(spell, spell.Cooldown);
                     ChannelCompleted?.Invoke(spell);
                     Cast?.Invoke(spell);
@@ -486,6 +550,7 @@ namespace Pickleball.Sandbox.Magic
                 Airborne = locomotion != null && !locomotion.IsGrounded,
                 HealthUnavailable = health == null || health.IsDead,
                 HealthFull = health != null && spell.RefuseAtFullHealth && health.Current >= health.Max,
+                Position = Owner.position,
             };
             if (movementInput != null && movementInput.isActiveAndEnabled)
                 signals.AddIntent(movementInput.Read(), spell.ChannelMoveDeadzone);
@@ -514,7 +579,13 @@ namespace Pickleball.Sandbox.Magic
             if (_subscribedHealth != null) _subscribedHealth.Hurt += OnHurt;
         }
 
-        void OnHurt(float amount, Vector3 at) => _hurtPending = true;
+        // One rule (SpellChannel.HitInterrupts): a real hit interrupts, a chip
+        // tick below the spell's channelInterruptDamage does not.
+        void OnHurt(float amount, Vector3 at)
+        {
+            float min = spell != null ? spell.ChannelInterruptDamage : 0f;
+            if (SpellChannel.HitInterrupts(amount, min)) _hurtPending = true;
+        }
 
         // --------------------------------------------------------------- aim
 
@@ -530,9 +601,11 @@ namespace Pickleball.Sandbox.Magic
             if (!aiming)
             {
                 _aimTarget = null;
+                _groundOk = false;
                 return;
             }
             ResolveAim();
+            ResolveGround();
         }
 
         /// <summary>

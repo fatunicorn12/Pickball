@@ -200,5 +200,28 @@ namespace Pickleball.Tests.Magic
         static bool IsFinite(Vector3 v) =>
             !float.IsNaN(v.x) && !float.IsNaN(v.y) && !float.IsNaN(v.z)
             && !float.IsInfinity(v.x) && !float.IsInfinity(v.y) && !float.IsInfinity(v.z);
+
+        // ------------------------------------------- target launch (QA F-9)
+
+        [Test]
+        public void TargetLaunch_PointBlank_FliesAtTheTargetNotTheFloor()
+        {
+            var hand = new Vector3(0.3f, 1.3f, 0.45f);
+            var body = new Vector3(0.1f, 0.8f, 1.5f);           // 1.2 m away: inside minAimDistance
+            var cameraForward = new Vector3(0f, -0.6f, 0.8f);   // looking down at it
+            Vector3 dir = OrbMath.TargetLaunchDirection(hand, body, cameraForward);
+            Assert.That(Vector3.Angle(dir, body - hand), Is.LessThan(0.01f));
+            Assert.That(dir.magnitude, Is.EqualTo(1f).Within(1e-5f));
+            Assert.That(OrbMath.LaunchDirection(hand, body, cameraForward, 1.5f),
+                        Is.EqualTo(cameraForward.normalized), "the old rule: camera forward, into the floor");
+        }
+
+        [Test]
+        public void TargetLaunch_TargetOnTheHand_FallsBackToTheView()
+        {
+            var hand = new Vector3(1f, 2f, 3f);
+            Assert.That(OrbMath.TargetLaunchDirection(hand, hand, Vector3.right), Is.EqualTo(Vector3.right));
+            Assert.That(OrbMath.TargetLaunchDirection(hand, hand, Vector3.zero), Is.EqualTo(Vector3.forward));
+        }
     }
 }

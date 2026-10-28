@@ -24,8 +24,15 @@ namespace Pickleball.Sandbox.Magic
         /// the body (<c>ChibiLocomotion.IsBusy</c>).</summary>
         public bool Busy;
 
-        /// <summary>Damage was taken since the last frame.</summary>
+        /// <summary>A hit that interrupts was taken since the last frame: one of at
+        /// least the spell's <c>channelInterruptDamage</c>
+        /// (<see cref="SpellChannel.HitInterrupts"/>). Smaller ticks are not hurts.</summary>
         public bool Hurt;
+
+        /// <summary>Where the caster's body is this frame. The channel remembers it
+        /// at the start and cancels as <see cref="ChannelStopReason.Displaced"/>
+        /// once the body is further than its drift limit from there.</summary>
+        public UnityEngine.Vector3 Position;
 
         /// <summary>The input gate blocks <c>InputBlock.Spell</c>.</summary>
         public bool Blocked;

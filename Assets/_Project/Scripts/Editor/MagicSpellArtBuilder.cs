@@ -300,6 +300,10 @@ public static class MagicSpellArtBuilder
         var lineMat = NewtonFightArt.ParticleMaterial("HealLine", LineCore(), Color.white, additive: false);
         var track = Line("Track", parent, lineMat, 0.07f, worldSpace: false, loop: true);
         var progress = Line("Progress", parent, lineMat, 0.15f, worldSpace: false, loop: false);
+        // The halo over the head: the part the over-the-shoulder aim camera,
+        // which Heal is cast from, keeps in frame (QA F-3).
+        var haloTrack = Line("HaloTrack", parent, lineMat, 0.05f, worldSpace: false, loop: true);
+        var haloRing = Line("HaloProgress", parent, lineMat, 0.1f, worldSpace: false, loop: false);
         var rune = NewtonFightArt.Quad("Rune", parent,
             NewtonFightArt.ParticleMaterial("HealRune", HealRuneTexture(), Color.white, additive: false), 1.9f, flat: true);
         rune.transform.localPosition = Vector3.up * 0.05f;
@@ -339,6 +343,8 @@ public static class MagicSpellArtBuilder
         Set(so, "caster", caster);
         Set(so, "progressRing", progress);
         Set(so, "trackRing", track);
+        Set(so, "haloRing", haloRing);
+        Set(so, "haloTrack", haloTrack);
         Set(so, "rune", rune.GetComponent<Renderer>());
         Set(so, "glow", glow.GetComponent<Renderer>());
         Set(so, "glowLight", light);

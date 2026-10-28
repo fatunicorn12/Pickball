@@ -107,5 +107,21 @@ namespace Pickleball.Sandbox.Magic
             if (Vector3.Dot(direction, fallback) <= 0f) return fallback;
             return direction;
         }
+
+        /// <summary>
+        /// The direction an orb leaves the hand at <paramref name="origin"/> when
+        /// the crosshair is on a target: straight at the target's body centre
+        /// <paramref name="targetCentre"/>, at any distance. Unlike
+        /// <see cref="LaunchDirection"/> there is no near-aim fallback, because at
+        /// point-blank range camera forward points at the floor and the orb would
+        /// burst there instead of on the enemy. Only a target centred on the hand
+        /// itself falls back to <paramref name="cameraForward"/> (or world forward).
+        /// </summary>
+        public static Vector3 TargetLaunchDirection(Vector3 origin, Vector3 targetCentre, Vector3 cameraForward)
+        {
+            Vector3 to = targetCentre - origin;
+            if (to.sqrMagnitude > Epsilon) return to.normalized;
+            return cameraForward.sqrMagnitude > Epsilon ? cameraForward.normalized : Vector3.forward;
+        }
     }
 }

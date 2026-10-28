@@ -9,8 +9,9 @@ namespace Pickleball.UI
     /// The spell selector beside the mana bar: one slot per spell carried, each
     /// with its icon in the spell's colour, its number key, and a dark sweep
     /// that drains as its cooldown recovers. The selected slot stands taller and
-    /// brighter and pops when picked, and the selected spell's name and cost sit
-    /// above the row. A spell the bar cannot pay for right now is dimmed, so
+    /// brighter and pops when picked, and the selected spell's name (white, on
+    /// the dark plate the builder lays behind the selector, underlined in the
+    /// spell's colour) and cost sit above the row. A spell the bar cannot pay for right now is dimmed, so
     /// "can I cast this?" reads before the button is pressed.
     ///
     /// Presentation only. It polls <see cref="SpellSelector"/> and its caster
@@ -42,8 +43,12 @@ namespace Pickleball.UI
         [SerializeField] private TMP_Text[] keys;
         [Tooltip("The selected spell's name, above the row.")]
         [SerializeField] private TMP_Text nameText;
-        [Tooltip("The selected spell's cost, beside its name.")]
+        [Tooltip("Optional. The selected spell's cost as its own label. Empty: the cost is " +
+                 "written right after the name instead (\"Fireball · 25\").")]
         [SerializeField] private TMP_Text costText;
+        [Tooltip("Optional. A bar under the name in the selected spell's colour (left-anchored; " +
+                 "its width follows the name).")]
+        [SerializeField] private Image nameUnderline;
 
         [Header("Colour")]
         [Tooltip("Frame of an unselected slot.")]
@@ -54,6 +59,11 @@ namespace Pickleball.UI
         [Range(0f, 1f)] [SerializeField] private float unaffordableDim = 0.35f;
         [Tooltip("Cooldown sweep tint; alpha is its darkness.")]
         [SerializeField] private Color cooldownColour = new(0.02f, 0.03f, 0.08f, 0.72f);
+        [Tooltip("The name's colour. White on the dark plate reads on any floor; the spell's " +
+                 "colour goes on the underline instead.")]
+        [SerializeField] private Color nameColour = Color.white;
+        [Tooltip("The cost's colour when it follows the name.")]
+        [SerializeField] private Color inlineCostColour = new(0.62f, 0.84f, 1f, 1f);
 
         [Header("Motion")]
         [Tooltip("Scale of the selected slot (x).")]
@@ -174,25 +184,35 @@ namespace Pickleball.UI
         void UpdateName(int selected, SpellCaster caster)
         {
             var spell = selector.SpellAt(selected);
-            if (selected != _shownSelected)
+            int cost = spell != null ? spell.ManaCost : 0;
+            if (selected != _shownSelected || cost != _shownCost)
             {
+                // Rewritten only on a change, so the string work never runs per frame.
                 _shownSelected = selected;
+                _shownCost = cost;
                 if (nameText != null)
                 {
-                    nameText.text = spell != null ? spell.DisplayName : "";
+                    string label = spell != null ? spell.DisplayName : "";
+                    if (costText == null && spell != null && cost > 0)
+                        label = $"{label}  <color=#{ColorUtility.ToHtmlStringRGB(inlineCostColour)}>· {cost}</color>";
+                    nameText.text = label;
+                    nameText.color = nameColour;
+                }
+                if (nameUnderline != null)
+                {
+                    nameUnderline.enabled = spell != null;
                     if (spell != null)
                     {
-                        Color c = Color.Lerp(Color.white, spell.ThemeColour, 0.45f);
-                        c.a = 1f;
-                        nameText.color = c;
+                        Color theme = spell.ThemeColour;
+                        theme.a = 1f;
+                        nameUnderline.color = theme;
+                        if (nameText != null)
+                        {
+                            var r = nameUnderline.rectTransform;
+                            r.sizeDelta = new Vector2(nameText.GetPreferredValues(nameText.text).x, r.sizeDelta.y);
+                        }
                     }
                 }
-            }
-
-            int cost = spell != null ? spell.ManaCost : 0;
-            if (cost != _shownCost)
-            {
-                _shownCost = cost;
                 if (costText != null)
                 {
                     costText.SetText("{0}", cost);
@@ -204,6 +224,15 @@ namespace Pickleball.UI
             float alpha = aiming || _nameHold > 0f ? 1f : idleNameAlpha;
             if (nameText != null) nameText.alpha = alpha;
             if (costText != null) costText.alpha = alpha;
+            if (nameUnderline != null)
+            {
+                var c = nameUnderline.color;
+                if (!Mathf.Approximately(c.a, alpha))
+                {
+                    c.a = alpha;
+                    nameUnderline.color = c;
+                }
+            }
         }
 
         static T At<T>(T[] array, int i) where T : class => array != null && i < array.Length ? array[i] : null;

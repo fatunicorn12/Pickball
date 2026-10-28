@@ -32,5 +32,10 @@ namespace Pickleball.Sandbox.Magic
         Switched,
         /// <summary>The caster was disabled or destroyed mid-channel.</summary>
         Disabled,
+        /// <summary>The body was moved more than the spell's
+        /// <c>channelMaxDrift</c> from where the channel started, by anything at
+        /// all (a gravity well's pull, a push, a moving floor), with no movement
+        /// input of its own. Appended last: never reorder.</summary>
+        Displaced,
     }
 }

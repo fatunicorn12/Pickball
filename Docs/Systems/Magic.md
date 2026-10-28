@@ -20,7 +20,8 @@ by a person yet. The spells were checked by a headless Play-mode harness on Trai
 - **Tests:** `Assets/_Project/Tests/EditMode/Magic/` (`ManaPoolTests`, `ManaTests`, `OrbMathTests`,
   `AimInputClaimsTests`, `SpellChannelTests`, `ChannelSignalsTests`, `SpellCooldownsTests`,
   `SpellSelectionTests`, `SpellSelectInputTests`, `SlowLedgerTests`, `FreezeZoneTests`, `BurnTests`,
-  `StrikeMathTests`; shared `MagicTestFixture`; and M-1's `SpellInputTests`).
+  `StrikeMathTests`, `GroundTargetTests`, `ChannelStandStillTests`, `LightningStrikeTests`; shared
+  `MagicTestFixture`; and M-1's `SpellInputTests`).
 
 ## 1. Purpose and player-facing feel
 
@@ -82,7 +83,7 @@ never resets one.
 |---|---|---|---|---|---|
 | 1 | **Arcane Orb** | Orb | 15 | 0.45 s | Unchanged (above). |
 | 2 | **Fireball** | Orb | 25 | 0.9 s | A fast (20 m/s) fireball with a flame trail. 16 to what it hits, a 3.2 m blast (12 at the centre, 5 at the edge), then everything the burst hit **burns**: 2.5 every 0.5 s for 3 s (15 more). |
-| 3 | **Thunderbolt** | Strike | 30 | 1.5 s | A 0.35 s telegraph (an amber ring tightening, a storm cloud gathering), then lightning: 34 to the target, a 1.6 m splash (12 to 5), a 0.6 s **stagger** if the target accepts one, and a **chain** to the 2 nearest other enemies within 6 m for 10 each. |
+| 3 | **Thunderbolt** | Strike | 30 | 1.5 s | A 0.35 s telegraph (an amber ring tightening, a storm cloud gathering), then lightning: 34 to the target, a 1.6 m splash (12 to 5), a 0.6 s **stagger** if the target accepts one, and a **chain** from the struck target to the 2 nearest other enemies within 6 m for 10 each. A bolt with no direct victim does not chain. |
 | 4 | **Freeze Zone** | Zone | 35 | 6 s | A 3 m-radius, 2.5 m-tall disc of frost on the ground for 4 s. Anything inside that accepts a slow runs at **30%** speed, and for 0.35 s after it leaves. No damage. |
 | 5 | **Heal** | Channel | 40 | 3 s | Hold fire for **2 s, standing still**, to restore **30** health. |
 
@@ -101,11 +102,22 @@ damage) and never stacks it, so damage per second has a ceiling.
 **Thunderbolt.** Cast with the crosshair on an enemy, the strike **follows that enemy** through the
 telegraph and always lands: the telegraph says where, not "dodge this". Cast on the ground, it lands
 where aimed, and whoever stands nearest the point (within half the splash radius) takes the direct
-hit. The aim assist is wider (0.5 m) because picking the target is the whole aim. The stagger needs
-the target to implement `IStaggerable` (see §4).
+hit. With nobody there it is a miss: splash only, **no chain** (QA F-10). The aim assist is wider
+(0.5 m) because picking the target is the whole aim. The stagger needs the target to implement
+`IStaggerable` (see §4).
+
+**Ground spells never land in mid-air** (QA F-2). An untargeted Thunderbolt and every Freeze Zone
+need floor under the crosshair (`GroundProbe.TryGroundTarget`: straight down up to
+`groundProbeDistance`, and within `maxRange` across the ground of the player). With none (the sky,
+a pit), the crosshair and its cost turn red (`SpellCaster.AimPlaceable`), and a press is refused
+before any spend, with the same `CastFailed` feedback as low mana: no mana, no cooldown.
+
+**Fireball and orb at point-blank** (QA F-9): with the crosshair on a target, the orb launches
+straight at the target's collider centre at any distance (`OrbMath.TargetLaunchDirection`). The
+`minAimDistance` camera-forward fallback is only for walls and floor.
 
 **Freeze Zone.** Lands on the floor under the crosshair (a crosshair on a wall or a chest drops to
-the ground below, up to 12 m). Its rim drains round like a clock as it runs out. It slows through a
+the ground below, up to 12 m; no floor refuses the cast, see above). Its rim drains round like a clock as it runs out. It slows through a
 new opt-in interface, `ISlowable`: the strongest slow wins, nothing multiplies, so two zones are not
 a freeze. The training dummies opt in through `StatusReceiver`; they never move, so for them the slow
 is a visible status (a frost shell and ice crust). **Newton does not opt in yet** (see §4).
@@ -113,8 +125,14 @@ is a visible status (a frost shell and ice crust). **Newton does not opt in yet*
 **Heal.** Hold aim (the casting stance; no crosshair is shown), then hold fire for 2 s:
 - **Any movement input cancels it**: the stick past 0.2, crouch, flip, mount or anchor. So do
   **jump** (or leaving the ground), **dash or tether** (or any move that makes
-  `ChibiLocomotion.IsBusy`), **being hurt**, **letting go** of fire or aim, and the input gate
+  `ChibiLocomotion.IsBusy`), **a real hit**, **letting go** of fire or aim, and the input gate
   **blocking Spell** (a conversation). Switching spell cancels it too.
+- **Standing still means it** (QA F-4). Being carried more than `channelMaxDrift` (0.4 m) across
+  the ground from where the channel began cancels it, whatever moved the body (a gravity well's
+  pull, a push), as `ChannelStopReason.Displaced` ("Pulled"). Height is ignored.
+- **One damage rule:** a single hit of at least `channelInterruptDamage` (1 HP) interrupts
+  ("Hit!"); smaller ticks (a gravity well's 0.1 core tick, a burn) never do
+  (`SpellChannel.HitInterrupts`). It is per hit, not accumulated.
 - The channel never claims the input gate and never zeroes input: the player stays free to move,
   and moving is how they cancel. It reads movement input through `PlayerMovementInput.Read()`
   (read-only; the press edges are per-frame, so reading twice changes nothing).
@@ -127,14 +145,23 @@ is a visible status (a frost shell and ice crust). **Newton does not opt in yet*
   overfills.
 - Presentation: a green ring fills clockwise round the feet over a faint track, a rune turns and
   brightens, a glow and rising motes build, and on completion a gold ring and a spray of motes burst
-  out. A cancel drains the ring red. Under the screen centre a bar fills with the spell's name, and
-  says what happened ("+30", "Moved", "Hit!", "Not enough mana", "Health is full").
+  out. A cancel drains the ring red. **A halo over the head** (1.8 m, 0.42 m radius) repeats the
+  ring, because Heal is cast from the aim stance and the over-the-shoulder camera cuts off the feet
+  (QA F-3): the halo is what the player sees. Under the screen centre a bar on a dark plate fills
+  with the spell's name, and says what happened ("+N" with the health actually restored, "Moved",
+  "Pulled", "Hit!", "Not enough mana", "Health is full").
+- **Proposed, not done:** Heal could skip the shoulder camera altogether (an `IAimState` flag such as
+  "wants shoulder camera", false for Channel spells, read by `SandboxOrbitCamera`), so the normal
+  follow camera keeps the feet ring in frame. That needs the camera owner's change.
 
 ### Choosing a spell
 
-The selector sits right of the mana bar: one slot per spell with its icon in the spell's colour,
-its number key, and a dark sweep while it recovers. The selected slot stands taller, the selected
-spell's name and cost sit above the row, and a spell the bar cannot pay for now is dimmed.
+The selector sits right of the health and mana stack, on a dark rounded plate: one 56 px slot per
+spell with its icon in the spell's colour, its number key (20 px), and a dark sweep while it
+recovers. The selected slot stands taller, the selected spell's name and cost sit above the row in
+one white 30 px line ("Fireball · 25") underlined in the spell's colour, and a spell the bar cannot
+pay for now is dimmed. The level label ("LV 1 · 0 / 50 Lemmas") sits above the mana bar: health,
+then mana, then level (QA F-5, F-6).
 
 ### Controls
 
@@ -372,7 +399,9 @@ delivery that reads the field.
 - **Freeze Zone** (Zone): `zoneRadius`, `zoneHeight` (m), `zoneDuration` (s), `slowMultiplier`
   (0-1 of normal speed; 0 is a full freeze), `slowLinger` (s after leaving), `groundProbeDistance`.
 - **Heal** (Channel): `channelSeconds`, `channelManaTiming` (OnCompletion / OnStart), `healAmount`,
-  `channelMoveDeadzone` (raw stick still counted as standing), `refuseAtFullHealth`, `cooldown`.
+  `channelMoveDeadzone` (raw stick still counted as standing), `channelMaxDrift` (m the body may be
+  carried before it cancels; 0 = off), `channelInterruptDamage` (smallest hit that interrupts;
+  0 = any), `refuseAtFullHealth`, `cooldown`.
 - **The slot order** is the `spells` list on the player's `SpellSelector` (slot 1 = key 1). Setup
   Magic fills it only when empty.
 - **The pad cycle buttons** are the `padPreviousBinding` / `padNextBinding` paths on
@@ -496,9 +525,12 @@ aiming" component.
 - **Freeze Zone and stagger only affect targets that opt in.** Today that is the training dummies,
   which never move, so on them the slow is only a status you can see. Newton needs his owner's
   change (§4).
-- **"Standing still" for Heal reads input, not speed.** Being dragged by a force that does no
-  damage (Newton's gravity well) does not cancel it; a hit does. The channel reads
+- **"Standing still" for Heal reads input and position.** Input cancels at once ("Moved"); being
+  carried more than 0.4 m by anything cancels as "Pulled". The channel reads
   `PlayerMovementInput.Read()` a second time each frame, read-only.
+- **The HUD fixes need Setup Magic re-run on both scenes** (manager): the bigger selector and
+  channel bar, their plates, the level label lift and the heal halo are all built by Setup Magic.
+  Re-run it after Setup Sword Abilities, which puts the level label back on the mana bar.
 - **The spell scenes are not committed.** Scenes are the agent manager's: re-run Setup Magic on
   ChibiSandbox and save, then Build Training Stage (its dummies now opt in to slows and staggers
   as it builds them), to get the selector, the heal visual and the new HUD in both scenes.

@@ -11,7 +11,12 @@ namespace Pickleball.Sandbox.Magic.Presentation
     ///    brightening with progress, with a green light and rising motes;
     ///  - on completion, a burst: a ring spreading out, a spray of motes and a
     ///    light flash;
-    ///  - on a cancel, everything flushes to the fail colour and drains away.
+    ///  - on a cancel, everything flushes to the fail colour and drains away;
+    ///  - a <b>halo</b> over the head repeats the ring (track and progress arc).
+    ///    Heal is cast from the aim stance, whose over-the-shoulder camera
+    ///    frames the head and cuts off the feet, so the halo is the part of the
+    ///    channel the player actually sees (QA F-3); the feet ring serves every
+    ///    other view.
     ///
     /// Presentation only: it listens to <see cref="SpellCaster.ChannelStarted"/>,
     /// <see cref="SpellCaster.ChannelCompleted"/> and
@@ -54,6 +59,10 @@ namespace Pickleball.Sandbox.Magic.Presentation
         [SerializeField] private ParticleSystem burst;
         [Tooltip("Flat ring that spreads out on completion.")]
         [SerializeField] private Renderer burstRing;
+        [Tooltip("Optional. Local-space line: the progress arc of the halo over the head.")]
+        [SerializeField] private LineRenderer haloRing;
+        [Tooltip("Optional. Local-space looped line: the halo's faint full track.")]
+        [SerializeField] private LineRenderer haloTrack;
 
         [Header("Colour")]
         [Tooltip("Channel tint: ring, rune, glow, light; alpha is opacity. The ring and rune " +
@@ -71,6 +80,11 @@ namespace Pickleball.Sandbox.Magic.Presentation
         [Min(0.1f)] [SerializeField] private float ringRadius = 0.95f;
         [Tooltip("Height of the ring above the feet, in metres.")]
         [SerializeField] private float ringHeight = 0.06f;
+        [Tooltip("Radius of the halo over the head, in metres.")]
+        [Min(0.05f)] [SerializeField] private float haloRadius = 0.42f;
+        [Tooltip("Height of the halo above the feet, in metres: just over the chibi's head, " +
+                 "inside the aim camera's frame.")]
+        [SerializeField] private float haloHeight = 1.8f;
         [Tooltip("Rune turn rate, in degrees per second.")]
         [SerializeField] private float runeSpinDegreesPerSecond = 45f;
         [Tooltip("Glow diameter at full progress, in metres.")]
@@ -213,14 +227,25 @@ namespace Pickleball.Sandbox.Magic.Presentation
             strength = Mathf.Max(0f, strength);
             if (trackRing != null)
             {
-                DrawArc(trackRing, 1f, loop: true);
+                DrawArc(trackRing, 1f, loop: true, ringRadius, ringHeight);
                 Tint(trackRing, colour, 1f, 0.3f * alpha);
             }
             if (progressRing != null)
             {
-                DrawArc(progressRing, fill, loop: false);
+                DrawArc(progressRing, fill, loop: false, ringRadius, ringHeight);
                 progressRing.enabled = fill > 0.005f;
                 Tint(progressRing, colour, 1f + 0.15f * strength, alpha);
+            }
+            if (haloTrack != null)
+            {
+                DrawArc(haloTrack, 1f, loop: true, haloRadius, haloHeight);
+                Tint(haloTrack, colour, 1f, 0.45f * alpha);
+            }
+            if (haloRing != null)
+            {
+                DrawArc(haloRing, fill, loop: false, haloRadius, haloHeight);
+                haloRing.enabled = fill > 0.005f;
+                Tint(haloRing, colour, 1f + 0.15f * strength, alpha);
             }
             if (rune != null && _model == null)
             {
@@ -259,6 +284,8 @@ namespace Pickleball.Sandbox.Magic.Presentation
         {
             if (progressRing != null) progressRing.enabled = on;
             if (trackRing != null) trackRing.enabled = on;
+            if (haloRing != null) haloRing.enabled = on;
+            if (haloTrack != null) haloTrack.enabled = on;
             if (rune != null) rune.enabled = on && _model == null;
             if (_model != null) _model.SetActive(on);
             if (glow != null) glow.enabled = on;
@@ -280,9 +307,10 @@ namespace Pickleball.Sandbox.Magic.Presentation
             if (_model != null) _model.transform.localPosition = new Vector3(0f, ringHeight, 0f);
         }
 
-        /// <summary>An arc of <paramref name="fraction"/> of a turn round the feet,
-        /// in local space, starting at the front and running clockwise.</summary>
-        void DrawArc(LineRenderer line, float fraction, bool loop)
+        /// <summary>An arc of <paramref name="fraction"/> of a turn of
+        /// <paramref name="radius"/> at <paramref name="height"/>, in local space,
+        /// starting at the front and running clockwise.</summary>
+        void DrawArc(LineRenderer line, float fraction, bool loop, float radius, float height)
         {
             fraction = Mathf.Clamp01(fraction);
             int count = loop ? ArcSegments : Mathf.Max(2, Mathf.CeilToInt(fraction * ArcSegments) + 1);
@@ -290,7 +318,7 @@ namespace Pickleball.Sandbox.Magic.Presentation
             for (int i = 0; i < count; i++)
             {
                 float a = Mathf.PI * 0.5f - span * i / (count - 1);
-                _arc[i] = new Vector3(Mathf.Cos(a) * ringRadius, ringHeight, Mathf.Sin(a) * ringRadius);
+                _arc[i] = new Vector3(Mathf.Cos(a) * radius, height, Mathf.Sin(a) * radius);
             }
             line.loop = loop;
             line.positionCount = count;
