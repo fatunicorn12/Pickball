@@ -121,6 +121,14 @@ namespace Pickleball.Sandbox
             _cam.fieldOfView = _baseFov + _punchAmount * Mathf.Sin(k * Mathf.PI) * (1f - k * 0.35f);
         }
 
+        // Disabled while another rig (the dialogue camera) holds the transform:
+        // resume from the pose handed back, not with the follow speed it had.
+        void OnEnable()
+        {
+            _velocity = Vector3.zero;
+            _yawVelocity = _pitchVelocity = 0f;
+        }
+
         void Start()
         {
             _cam = GetComponent<Camera>();
