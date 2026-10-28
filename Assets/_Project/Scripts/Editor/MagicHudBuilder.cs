@@ -9,9 +9,10 @@ using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 /// <summary>
-/// Builds the magic HUD — the mana bar on top of the player's health bar and
-/// the spell crosshair at screen centre — under a given canvas. Called by
-/// <see cref="MagicSetup"/>; not a menu item itself.
+/// Builds the magic HUD under a given canvas — the mana bar on top of the
+/// player's health bar, the spell selector beside it, the spell crosshair at
+/// screen centre and the channel bar under it — plus the spells' generated
+/// icons. Called by <see cref="MagicSetup"/>; not a menu item itself.
 ///
 /// Idempotent the way NewtonFightSetup's HUD is: both roots are destroyed and
 /// rebuilt from code on every run, so the HUD in the scene is always exactly
@@ -35,6 +36,22 @@ public static class MagicHudBuilder
 
     const string ManaBarName = "PlayerManaBar";
     const string CrosshairName = "SpellCrosshair";
+    const string SelectorName = "SpellSelector";
+    const string ChannelBarName = "SpellChannelBar";
+
+    /// <summary>The shapes <see cref="SpellIcon"/> can draw, one per spell.</summary>
+    public enum IconShape { Orb, Flame, Bolt, Snowflake, Cross }
+
+    // Selector slot size and spacing, in canvas pixels, and its gap from the
+    // mana bar's right end.
+    const float SlotSize = 40f;
+    const float SlotGap = 10f;
+    const float SelectorGap = 26f;
+
+    // Channel bar size and its drop below screen centre (below the crosshair's
+    // cost label), in canvas pixels.
+    static readonly Vector2 ChannelBarSize = new(280f, 14f);
+    const float ChannelBarDrop = 112f;
     const string HealthBarName = "PlayerHealthBar";
     const string DamageNumbersName = "DamageNumbers";
 
@@ -77,19 +94,20 @@ public static class MagicHudBuilder
 
     struct HudStyle
     {
-        public Sprite Mask, Frame, Fill, ManaFill, Band, Glow, Star, Ring, Dot, Tick;
+        public Sprite Mask, Frame, Fill, ManaFill, Band, Glow, Star, Ring, Dot, Tick, SlotWell, SlotFrame;
         public TMP_FontAsset Font;
         public Material FontMaterial;
     }
 
     /// <summary>
-    /// Destroys and rebuilds "PlayerManaBar" and "SpellCrosshair" under
-    /// <paramref name="canvas"/>, wired to <paramref name="mana"/> and
-    /// <paramref name="caster"/>. Either may be null — the views resolve the
-    /// pool from the caster at runtime and hide what they cannot drive — but
-    /// the canvas may not.
+    /// Destroys and rebuilds "PlayerManaBar", "SpellSelector", "SpellCrosshair"
+    /// and "SpellChannelBar" under <paramref name="canvas"/>, wired to
+    /// <paramref name="mana"/>, <paramref name="caster"/> and
+    /// <paramref name="selector"/>. Any of those may be null — the views hide
+    /// what they cannot drive — but the canvas may not. The selector gets one
+    /// slot per slot of <paramref name="selector"/>.
     /// </summary>
-    public static void Build(Transform canvas, Mana mana, SpellCaster caster)
+    public static void Build(Transform canvas, Mana mana, SpellCaster caster, SpellSelector selector = null)
     {
         if (canvas == null)
         {
@@ -104,7 +122,121 @@ public static class MagicHudBuilder
         var bar = BuildManaBar(canvas, mana, caster, style);
         var crosshair = BuildCrosshair(canvas, caster, style);
         SetDrawOrder(canvas, bar, crosshair);
+        var picker = BuildSelector(canvas, selector, (RectTransform)bar, style);
+        var channel = BuildChannelBar(canvas, caster, style);
+        // The selector sits beside the mana bar and never overlaps it; the
+        // channel bar draws with the crosshair, over the damage numbers.
+        picker.SetSiblingIndex(bar.GetSiblingIndex());
+        channel.SetSiblingIndex(crosshair.GetSiblingIndex() + 1);
         EditorUtility.SetDirty(canvas.gameObject);
+    }
+
+    /// <summary>
+    /// The icon for one spell: a white shape with a dark rim, tinted by the
+    /// spell's theme colour in the HUD. Written to Art/UI/Magic/SpellIcon*.png
+    /// and reimported in place, so a SpellDefinition's reference survives a
+    /// re-run. Setup Magic assigns it only to a spell whose icon is blank.
+    /// </summary>
+    public static Sprite SpellIcon(IconShape shape)
+    {
+        ChibiSandboxSetup.EnsureFolderPublic(ArtDir);
+        Func<Vector2, bool> inside = shape switch
+        {
+            IconShape.Flame => InFlame,
+            IconShape.Bolt => InBolt,
+            IconShape.Snowflake => InSnowflake,
+            IconShape.Cross => InCross,
+            _ => InOrb,
+        };
+        return WriteSprite($"{ArtDir}/SpellIcon{shape}.png", 64, 64, Vector4.zero, true, (x, y) =>
+        {
+            // 4x4 supersampled shape, and a rim from the shape grown by ~4 px.
+            const int n = 4;
+            const float rim = 0.11f;
+            float core = 0f, outline = 0f;
+            for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                // Texture rows run bottom-up, so +y is up in the icon too.
+                var q = new Vector2((x - 0.5f + (i + 0.5f) / n) / 32f - 1f, (y - 0.5f + (j + 0.5f) / n) / 32f - 1f);
+                bool hit = inside(q);
+                if (hit) core += 1f;
+                bool near = hit;
+                for (int k = 0; k < 8 && !near; k++)
+                {
+                    float a = k * Mathf.PI / 4f;
+                    near = inside(q + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * rim);
+                }
+                if (near) outline += 1f;
+            }
+            return Outlined(core / (n * n), outline / (n * n));
+        });
+    }
+
+    static bool InOrb(Vector2 p)
+    {
+        float r = p.magnitude;
+        return r < 0.42f || Mathf.Abs(r - 0.68f) < 0.07f;
+    }
+
+    static bool InFlame(Vector2 p)
+    {
+        const float baseY = -0.32f, radius = 0.44f, height = 1.12f;
+        if ((p - new Vector2(0f, baseY)).magnitude < radius) return true;
+        float t = (p.y - baseY) / height;
+        if (t < 0f || t > 1f) return false;
+        float sway = 0.16f * Mathf.Sin(t * 3.2f) * t;
+        return Mathf.Abs(p.x - sway) < radius * Mathf.Pow(1f - t, 0.9f);
+    }
+
+    static readonly Vector2[] BoltShape =
+    {
+        new(0.32f, 0.9f), new(-0.4f, 0.02f), new(-0.03f, 0.02f), new(-0.3f, -0.9f),
+        new(0.42f, 0.12f), new(0.05f, 0.12f),
+    };
+
+    static bool InBolt(Vector2 p)
+    {
+        bool inside = false;
+        for (int i = 0, j = BoltShape.Length - 1; i < BoltShape.Length; j = i++)
+        {
+            Vector2 a = BoltShape[i], b = BoltShape[j];
+            if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)
+                inside = !inside;
+        }
+        return inside;
+    }
+
+    static bool InSnowflake(Vector2 p)
+    {
+        if (p.magnitude < 0.16f) return true;
+        for (int k = 0; k < 6; k++)
+        {
+            float a = Mathf.PI * 0.5f + k * Mathf.PI / 3f;
+            var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+            if (SegmentDistance(p, Vector2.zero, dir * 0.82f) < 0.065f) return true;
+            for (int s = -1; s <= 1; s += 2)
+            {
+                float b = a + s * 0.85f;
+                var twig = new Vector2(Mathf.Cos(b), Mathf.Sin(b));
+                if (SegmentDistance(p, dir * 0.45f, dir * 0.45f + twig * 0.26f) < 0.05f) return true;
+                if (SegmentDistance(p, dir * 0.66f, dir * 0.66f + twig * 0.16f) < 0.045f) return true;
+            }
+        }
+        return false;
+    }
+
+    static bool InCross(Vector2 p)
+    {
+        bool plus = (Mathf.Abs(p.x) < 0.17f && Mathf.Abs(p.y) < 0.55f) || (Mathf.Abs(p.y) < 0.17f && Mathf.Abs(p.x) < 0.55f);
+        return plus || Mathf.Abs(p.magnitude - 0.8f) < 0.06f;
+    }
+
+    static float SegmentDistance(Vector2 p, Vector2 a, Vector2 b)
+    {
+        Vector2 ab = b - a;
+        float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
+        return (p - (a + ab * t)).magnitude;
     }
 
     static HudStyle LoadStyle()
@@ -122,6 +254,8 @@ public static class MagicHudBuilder
             Ring = RingSprite(),
             Dot = DotSprite(),
             Tick = TickSprite(),
+            SlotWell = SlotWellSprite(),
+            SlotFrame = SlotFrameSprite(),
             Font = NewtonFightArt.Font("Oswald Bold SDF"),
         };
         // The health bar's own label material (same name, same settings), so
@@ -416,6 +550,164 @@ public static class MagicHudBuilder
         return root;
     }
 
+    // ---- spell selector ----------------------------------------------------
+
+    /// <summary>
+    ///   SpellSelector (CanvasGroup) — beside the mana bar's right end
+    ///     Slot0..n (scaled for selection)
+    ///       Well → Icon → Cooldown (Radial 360 sweep) → Frame → Key
+    ///     Name (selected spell) · Cost
+    /// </summary>
+    static Transform BuildSelector(Transform canvas, SpellSelector selector, RectTransform bar, HudStyle s)
+    {
+        DestroyChildren(canvas, SelectorName);
+        var root = NewRect(SelectorName, canvas);
+        int count = selector != null ? selector.Count : 0;
+
+        root.anchorMin = root.anchorMax = bar.anchorMin;
+        root.pivot = new Vector2(0f, 0.5f);
+        root.sizeDelta = new Vector2(Mathf.Max(1, count) * (SlotSize + SlotGap), SlotSize);
+        root.anchoredPosition = bar.anchoredPosition + new Vector2(BarSize.x + FrameOutset + SelectorGap, BarSize.y * 0.5f);
+
+        var group = root.gameObject.AddComponent<CanvasGroup>();
+        group.interactable = false;
+        group.blocksRaycasts = false;
+
+        var slots = new RectTransform[count];
+        var frames = new Image[count];
+        var icons = new Image[count];
+        var sweeps = new Image[count];
+        var keys = new TMP_Text[count];
+        for (int i = 0; i < count; i++)
+        {
+            var spell = selector.SpellAt(i);
+            var slot = NewRect($"Slot{i + 1}", root);
+            slot.anchorMin = slot.anchorMax = new Vector2(0f, 0.5f);
+            slot.pivot = new Vector2(0.5f, 0.5f);
+            slot.sizeDelta = new Vector2(SlotSize, SlotSize);
+            slot.anchoredPosition = new Vector2(SlotSize * 0.5f + i * (SlotSize + SlotGap), 0f);
+
+            AddImage(slot, "Well", WellColour, s.SlotWell, Image.Type.Simple);
+            var icon = AddImage(slot, "Icon", spell != null ? spell.ThemeColour : Color.white,
+                                spell != null ? spell.Icon : null, Image.Type.Simple);
+            Centre(icon.rectTransform, Vector2.zero, new Vector2(SlotSize - 10f, SlotSize - 10f));
+            icon.enabled = icon.sprite != null;
+            var sweep = AddImage(slot, "Cooldown", new Color(0.02f, 0.03f, 0.08f, 0.72f), s.SlotWell, Image.Type.Filled);
+            sweep.fillMethod = Image.FillMethod.Radial360;
+            sweep.fillOrigin = (int)Image.Origin360.Top;
+            sweep.fillClockwise = false;
+            sweep.fillAmount = 0f;
+            var frame = AddImage(slot, "Frame", FrameColour, s.SlotFrame, Image.Type.Simple);
+
+            var key = AddText(slot, "Key", s, 13f, TextAlignmentOptions.BottomRight);
+            Stretch(key.rectTransform);
+            key.rectTransform.offsetMin = new Vector2(0f, -2f);
+            key.rectTransform.offsetMax = new Vector2(-3f, 0f);
+            key.text = (i + 1).ToString();
+            key.color = Color.white;
+
+            slots[i] = slot;
+            frames[i] = frame;
+            icons[i] = icon;
+            sweeps[i] = sweep;
+            keys[i] = key;
+        }
+
+        var name = AddText(root, "Name", s, 18f, TextAlignmentOptions.BottomLeft);
+        var nr = name.rectTransform;
+        nr.anchorMin = new Vector2(0f, 1f);
+        nr.anchorMax = new Vector2(1f, 1f);
+        nr.pivot = new Vector2(0f, 0f);
+        nr.sizeDelta = new Vector2(0f, 24f);
+        nr.anchoredPosition = new Vector2(0f, 6f);
+        var selected = selector != null ? selector.Selected : null;
+        name.text = selected != null ? selected.DisplayName : "";
+
+        var cost = AddText(root, "Cost", s, 15f, TextAlignmentOptions.BottomRight);
+        var cr = cost.rectTransform;
+        cr.anchorMin = new Vector2(0f, 1f);
+        cr.anchorMax = new Vector2(1f, 1f);
+        cr.pivot = new Vector2(1f, 0f);
+        cr.sizeDelta = new Vector2(0f, 22f);
+        cr.anchoredPosition = new Vector2(0f, 7f);
+        cost.color = CostColour;
+        cost.text = selected != null && selected.ManaCost > 0 ? selected.ManaCost.ToString() : "";
+
+        var view = root.gameObject.AddComponent<SpellSelectorView>();
+        var so = new SerializedObject(view);
+        Set(so, "selector", selector);
+        Set(so, "group", group);
+        SetArray(so, "slots", slots);
+        SetArray(so, "frames", frames);
+        SetArray(so, "icons", icons);
+        SetArray(so, "cooldowns", sweeps);
+        SetArray(so, "keys", keys);
+        Set(so, "nameText", name);
+        Set(so, "costText", cost);
+        so.ApplyModifiedPropertiesWithoutUndo();
+        return root;
+    }
+
+    // ---- channel bar -------------------------------------------------------
+
+    /// <summary>
+    ///   SpellChannelBar (CanvasGroup; hidden until a channel spell is aimed)
+    ///     Body (shaken on a cancel)
+    ///       Track → Fill (Horizontal) → Frame
+    ///       Label (spell name / result) above, Hint below
+    /// </summary>
+    static Transform BuildChannelBar(Transform canvas, SpellCaster caster, HudStyle s)
+    {
+        DestroyChildren(canvas, ChannelBarName);
+        var root = NewRect(ChannelBarName, canvas);
+        root.anchorMin = root.anchorMax = root.pivot = new Vector2(0.5f, 0.5f);
+        root.sizeDelta = ChannelBarSize;
+        root.anchoredPosition = new Vector2(0f, -ChannelBarDrop);
+
+        var group = root.gameObject.AddComponent<CanvasGroup>();
+        group.alpha = 0f;
+        group.interactable = false;
+        group.blocksRaycasts = false;
+
+        var body = NewRect("Body", root);
+        Stretch(body);
+
+        var track = AddImage(body, "Track", WellColour, s.Mask, Image.Type.Sliced);
+        track.gameObject.AddComponent<Mask>().showMaskGraphic = true;
+        var fill = AddFill(track.rectTransform, "Fill", new Color(0.45f, 1f, 0.55f), s.Fill);
+        fill.fillAmount = 0f;
+        var frame = AddImage(body, "Frame", FrameColour, s.Frame, Image.Type.Sliced);
+        Outset(frame.rectTransform, FrameOutset);
+
+        var label = AddText(body, "Label", s, 22f, TextAlignmentOptions.Bottom);
+        var lr = label.rectTransform;
+        lr.anchorMin = new Vector2(0f, 1f);
+        lr.anchorMax = new Vector2(1f, 1f);
+        lr.pivot = new Vector2(0.5f, 0f);
+        lr.sizeDelta = new Vector2(80f, 30f);
+        lr.anchoredPosition = new Vector2(0f, 8f);
+
+        var hint = AddText(body, "Hint", s, 15f, TextAlignmentOptions.Top);
+        var hr = hint.rectTransform;
+        hr.anchorMin = new Vector2(0f, 0f);
+        hr.anchorMax = new Vector2(1f, 0f);
+        hr.pivot = new Vector2(0.5f, 1f);
+        hr.sizeDelta = new Vector2(120f, 22f);
+        hr.anchoredPosition = new Vector2(0f, -8f);
+        hint.color = new Color(1f, 1f, 1f, 0.85f);
+
+        var view = root.gameObject.AddComponent<SpellChannelView>();
+        var so = new SerializedObject(view);
+        Set(so, "caster", caster);
+        Set(so, "group", group);
+        Set(so, "body", body);
+        Set(so, "fill", fill);
+        Set(so, "label", label);
+        Set(so, "hint", hint);
+        so.ApplyModifiedPropertiesWithoutUndo();
+        return root;
+    }
+
     // ---- UI plumbing -----------------------------------------------------
 
     /// <summary>Every child with the name, not just the first: a hand-duplicated
@@ -513,6 +805,18 @@ public static class MagicHudBuilder
         text.textWrappingMode = TextWrappingModes.NoWrap;
         text.raycastTarget = false;
         return text;
+    }
+
+    static void SetArray<T>(SerializedObject so, string field, T[] values) where T : Object
+    {
+        var property = so.FindProperty(field);
+        if (property == null)
+        {
+            Debug.LogError($"MagicHudBuilder: {so.targetObject.GetType().Name} has no serialized field '{field}'.");
+            return;
+        }
+        property.arraySize = values.Length;
+        for (int i = 0; i < values.Length; i++) property.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
     }
 
     /// <summary>Writes one serialized reference, failing loudly if the field was
@@ -647,6 +951,20 @@ public static class MagicHudBuilder
             float dx = x - 8f, dy = y - Mathf.Clamp(y, 11f, 29f);
             float d = Mathf.Sqrt(dx * dx + dy * dy);
             return Outlined(Coverage(d - 3f), Coverage(d - 6f));
+        });
+
+    /// <summary>A selector slot's background: a white rounded square (tinted dark
+    /// by the builder), also the cooldown sweep's shape.</summary>
+    static Sprite SlotWellSprite() => WriteSprite($"{ArtDir}/SlotWell.png", 64, 64, Vector4.zero, true,
+        (x, y) => White(Coverage(RoundBox(x, y, 32f, 32f, 30f, 30f, 12f))));
+
+    /// <summary>A selector slot's frame: a white rounded outline with a dark
+    /// edge either side, like the crosshair's ring.</summary>
+    static Sprite SlotFrameSprite() => WriteSprite($"{ArtDir}/SlotFrame.png", 64, 64, Vector4.zero, true,
+        (x, y) =>
+        {
+            float band = Mathf.Abs(RoundBox(x, y, 32f, 32f, 29f, 29f, 12f) + 2.5f);
+            return Outlined(Coverage(band - 1.6f), Coverage(band - 3.4f));
         });
 
     /// <summary>White core inside a dark rim, from the two coverages.</summary>

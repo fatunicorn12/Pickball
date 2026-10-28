@@ -19,6 +19,12 @@ namespace Pickleball.Sandbox.Magic.Presentation
     /// and the sparks can finish, then destroys itself. Presentation owns
     /// presentation's lifetime; gameplay never waits on it.
     ///
+    /// <b>Optional model.</b> When the orb's spell has a
+    /// <see cref="SpellDefinition.ModelPrefab"/> (a Tripo fireball core), it is
+    /// spawned in place of the procedural core at launch, scaled to the core's
+    /// diameter times <see cref="SpellDefinition.ModelScale"/>, and spun gently;
+    /// the halo, trail, light and burst stay procedural around it.
+    ///
     /// Hot-reload safe: the property block is rebuilt in OnEnable, and a
     /// detached visual whose orb is gone (a script reload mid-burst drops the
     /// flash timers) simply removes itself rather than freezing on screen.
@@ -118,12 +124,19 @@ namespace Pickleball.Sandbox.Magic.Presentation
         [Tooltip("Sparkles thrown off by the pop.")]
         [Min(0)] [SerializeField] private int fizzleSparkCount = 10;
 
+        [Header("Model (optional)")]
+        [Tooltip("Degrees per second a spell's model spins about its travel axis, so a " +
+                 "static mesh still reads as a living fireball.")]
+        [SerializeField] private float modelSpinDegreesPerSecond = 180f;
+
         [Header("Cleanup")]
         [Tooltip("Seconds the detached visual lives after the orb is gone, so the trail " +
                  "and sparks can fade. Never shorter than the burst, fizzle or trail time.")]
         [Min(0f)] [SerializeField] private float lingerSeconds = 0.6f;
 
         MaterialPropertyBlock _block;
+        GameObject _model;
+        float _modelSize;
         Phase _phase;
         float _age, _fxAge, _muzzleLeft, _burstRadius, _lingerTotal;
 
@@ -162,6 +175,7 @@ namespace Pickleball.Sandbox.Magic.Presentation
 
         void OnLaunched(MagicOrb source)
         {
+            EnsureModel(source);
             _phase = Phase.Flying;
             _age = 0f;
             _muzzleLeft = muzzleSeconds;
@@ -259,11 +273,13 @@ namespace Pickleball.Sandbox.Magic.Presentation
                 flare *= flare;   // fast drop-off: a flash, not a fade
             }
 
-            if (core != null)
+            if (core != null && _model == null)
             {
                 core.transform.localScale = Vector3.one * (coreDiameter * (1f + pulseAmount * wave));
                 Tint(core, coreColour, intensity * (1f + 0.3f * wave + 2f * flare), 1f);
             }
+            if (_model != null)
+                _model.transform.localRotation = Quaternion.AngleAxis(_age * modelSpinDegreesPerSecond, Vector3.forward);
             if (halo != null)
             {
                 float size = haloDiameter * (1f + 0.5f * pulseAmount * wave) * Mathf.Lerp(1f, muzzleHaloScale, flare);
@@ -324,7 +340,12 @@ namespace Pickleball.Sandbox.Magic.Presentation
                 : Mathf.Lerp(fizzleSwell, 0f, (t - 0.3f) / 0.7f);
             bool live = t < 1f;
 
-            if (core != null)
+            if (_model != null)
+            {
+                _model.SetActive(live);
+                if (live) _model.transform.localScale = Vector3.one * (_modelSize * scale);
+            }
+            else if (core != null)
             {
                 core.enabled = live;
                 // Brightness held, not faded: the core is opaque, and an unlit
@@ -356,7 +377,8 @@ namespace Pickleball.Sandbox.Magic.Presentation
 
         void ShowFlight(bool on)
         {
-            if (core != null) core.enabled = on;
+            if (core != null) core.enabled = on && _model == null;
+            if (_model != null) _model.SetActive(on);
             if (halo != null) halo.enabled = on;
             if (motes != null) motes.gameObject.SetActive(on);
             if (glowLight != null) glowLight.enabled = on;
@@ -366,6 +388,19 @@ namespace Pickleball.Sandbox.Magic.Presentation
         {
             if (burstShell != null) burstShell.enabled = on;
             if (burstRing != null) burstRing.enabled = on;
+        }
+
+        /// <summary>Spawns the spell's model once per visual (the prefab is reused
+        /// for every launch of the same orb, so it is kept, not respawned).</summary>
+        void EnsureModel(MagicOrb source)
+        {
+            if (_model != null) return;
+            var spell = source != null ? source.Spell : null;
+            if (spell == null || spell.ModelPrefab == null) return;
+            var parent = core != null ? core.transform.parent : transform;
+            _modelSize = coreDiameter * spell.ModelScale;
+            _model = SpellModel.Spawn(spell.ModelPrefab, parent, _modelSize);
+            if (_model != null && core != null) core.enabled = false;
         }
 
         /// <summary>HDR tint through the shared property block: rgb scaled by

@@ -19,8 +19,11 @@ namespace Pickleball.Sandbox.Magic
     /// This is the one place magic's input rules live: the caster, movement,
     /// sword and lock-on never learn about each other.
     ///
-    /// <b>Lock-on is released explicitly, before the claim.</b> A LockOn claim
-    /// only drops the toggle and flicks; a lock already held is kept, and it
+    /// <b>Lock-on is also released explicitly, before the claim.</b> Since the
+    /// lock-on fix (1d10103) any claim on <see cref="InputBlock.LockOn"/>, by
+    /// whoever makes it, drops a held lock and hides the lock-on hint, so with
+    /// the gate wired the explicit <c>Release()</c> is redundant. It stays for a
+    /// player without a gate, where nothing else would drop the lock and it
     /// would fight the crosshair for the body's facing.
     ///
     /// Hot reload: claims are not serialized, and the gate drops them all on

@@ -6,16 +6,33 @@ using Object = UnityEngine.Object;
 namespace Pickleball.Sandbox.Magic
 {
     /// <summary>
-    /// The aimed spell's gameplay, Expedition 33 style: hold aim (right mouse /
-    /// LT) to raise the crosshair, press fire (left mouse / RT) to launch a
-    /// slow arcane orb at whatever is under it, paying mana per shot.
+    /// The player's spellcasting, Expedition 33 style: hold aim (right mouse /
+    /// LT) to raise the crosshair, press fire (left mouse / RT) to cast the
+    /// selected spell at whatever is under it, paying mana per cast.
     ///
     /// It only simulates. Buttons come from <see cref="SpellInput"/>, mana from
-    /// <see cref="Mana"/>, and everything else is announced: the camera, lock-on
-    /// and sword read <see cref="IsAiming"/> through <see cref="IAimState"/> and
-    /// step aside; the HUD reads the aim and cooldown state; whatever caps
+    /// <see cref="Mana"/>, the selected spell from whoever calls
+    /// <see cref="SetSpell"/> (the <see cref="SpellSelector"/>), and everything
+    /// else is announced: the camera, lock-on and sword read
+    /// <see cref="IsAiming"/> through <see cref="IAimState"/> and step aside;
+    /// the HUD reads the aim, cooldown and channel state; whatever caps
     /// movement while aiming listens to <see cref="AimStarted"/> /
     /// <see cref="AimEnded"/>. The caster itself never touches movement input.
+    ///
+    /// <b>Deliveries</b> (<see cref="SpellDefinition.Delivery"/>):
+    ///  - <b>Orb</b> (Arcane Orb, Fireball): a <see cref="MagicOrb"/> launched from
+    ///    the cast origin at the crosshair, homing on what was under it.
+    ///  - <b>Strike</b> (Thunderbolt): a <see cref="LightningStrike"/> on the
+    ///    ground under the crosshair, following the enemy it was cast on.
+    ///  - <b>Zone</b> (Freeze Zone): a <see cref="FreezeZone"/> on the ground under
+    ///    the crosshair.
+    ///  - <b>Channel</b> (Heal): fire held, standing still, for the spell's time;
+    ///    the rules are <see cref="SpellChannel"/>'s. Any movement input, a jump,
+    ///    a dash or tether (or any busy move), being hurt, letting go, or the
+    ///    gate blocking Spell cancels it. It never claims the input gate: the
+    ///    player stays free to move, and moving is how they cancel.
+    /// Each spell has its own cooldown (<see cref="SpellCooldowns"/>), so
+    /// switching never resets one.
     ///
     /// Facing: while aiming it is the body's urgent facing source (registered
     /// with <see cref="ChibiLocomotion.SetCombatFacingSource"/>), which makes the
@@ -38,8 +55,8 @@ namespace Pickleball.Sandbox.Magic
         const float FallbackOriginForward = 0.4f;
 
         [Header("Spell")]
-        [Tooltip("The spell cast: cost, cooldown, aim and orb tuning. Without one " +
-                 "the caster never aims.")]
+        [Tooltip("The spell cast: cost, cooldown, aim and delivery tuning. The SpellSelector " +
+                 "swaps it; without one the caster never aims.")]
         [SerializeField] private SpellDefinition spell;
 
         [Header("Wiring")]
@@ -56,8 +73,18 @@ namespace Pickleball.Sandbox.Magic
         [SerializeField] private Camera aimCamera;
         [Tooltip("The player's movement facade: aiming is refused while it is busy " +
                  "(dash, tether, skateboard), and it is told to face the crosshair " +
-                 "while aiming. Found on this object when empty.")]
+                 "while aiming. A channel cancels when it leaves the ground. Found on this " +
+                 "object when empty.")]
         [SerializeField] private ChibiLocomotion locomotion;
+        [Tooltip("The caster's own health: what a Channel spell (Heal) restores, and being " +
+                 "hurt cancels a channel. Found on this object when empty.")]
+        [SerializeField] private Health health;
+        [Tooltip("Read, never consumed, during a channel: any movement input cancels it. " +
+                 "Found on this object when empty; without it only the motor's state counts.")]
+        [SerializeField] private PlayerMovementInput movementInput;
+        [Tooltip("Optional. A channel cancels the moment Spell is blocked (a conversation), " +
+                 "and says so. Found on this object when empty.")]
+        [SerializeField] private PlayerInputGate inputGate;
 
         [Header("Aim")]
         [Tooltip("Layers the crosshair ray can stop on. Triggers are always ignored, " +
@@ -81,12 +108,29 @@ namespace Pickleball.Sandbox.Magic
         /// </summary>
         public event Action AimEnded;
 
-        /// <summary>A shot was fired and paid for; the orb is already launched.</summary>
-        public event Action<MagicOrb> Cast;
+        /// <summary>A spell was cast and paid for: an orb launched, a strike called,
+        /// a zone placed, or a channel completed (after the heal). Raised after
+        /// the cooldown has started.</summary>
+        public event Action<SpellDefinition> Cast;
 
-        /// <summary>Fire was pressed while aiming, off cooldown, but mana was short.
+        /// <summary>Fire was pressed while aiming, off cooldown, but mana was short
+        /// (for a channel: at its start, or when its completion could not pay).
         /// Presses during the cooldown are not failures and raise nothing.</summary>
         public event Action CastFailed;
+
+        /// <summary>The spell changed through <see cref="SetSpell"/>.</summary>
+        public event Action<SpellDefinition> SpellChanged;
+
+        /// <summary>A channel began (fire pressed while aiming a Channel spell).</summary>
+        public event Action<SpellDefinition> ChannelStarted;
+
+        /// <summary>A channel completed and its effect applied (raised before
+        /// <see cref="Cast"/>).</summary>
+        public event Action<SpellDefinition> ChannelCompleted;
+
+        /// <summary>A channel was refused at its start or cancelled while running,
+        /// and why. A refusal raises this without <see cref="ChannelStarted"/>.</summary>
+        public event Action<SpellDefinition, ChannelStopReason> ChannelCancelled;
 
         RaycastHit[] _aimHits;
         Vector3 _aimPoint;
@@ -94,8 +138,18 @@ namespace Pickleball.Sandbox.Magic
         int _aimFrame = -1;
         bool _aimResolved;
         bool _aimLatched;
-        float _cooldownLeft, _cooldownTotal;
-        bool _warnedNoPrefab, _warnedNoMana;
+        bool _warnedNoPrefab, _warnedNoMana, _warnedNoHealth;
+        bool _hurtPending;
+
+        // Built on first use, never readonly: a script reload resets them to
+        // null (cooldowns then read as ready, a running channel just ends).
+        SpellCooldowns _cooldowns;
+        SpellChannel _channel;
+        SpellDefinition _channelSpell;
+        Health _subscribedHealth;
+
+        SpellCooldowns Cooldowns => _cooldowns ??= new SpellCooldowns();
+        SpellChannel Channel => _channel ??= new SpellChannel();
 
         /// <summary>
         /// True every frame aim is held and allowed: aim button down, a spell
@@ -106,14 +160,21 @@ namespace Pickleball.Sandbox.Magic
         public bool IsAiming => isActiveAndEnabled && spell != null && input != null && input.AimHeld
                                 && (locomotion == null || !locomotion.IsBusy);
 
-        /// <summary>The spell cast; may be null (never aims).</summary>
+        /// <summary>The selected spell; may be null (never aims).</summary>
         public SpellDefinition Spell => spell;
 
         /// <summary>The mana pool paid from; may be null (every shot fails).</summary>
         public Mana Mana => mana;
 
-        /// <summary>Mana points per shot; 0 without a spell.</summary>
+        /// <summary>The caster's health (what Heal restores); may be null.</summary>
+        public Health Health => health;
+
+        /// <summary>Mana points per cast of the selected spell; 0 without a spell.</summary>
         public int Cost => spell != null ? spell.ManaCost : 0;
+
+        /// <summary>True while aiming a spell that uses the crosshair (everything
+        /// but a channel). The crosshair HUD shows on this, not on aim alone.</summary>
+        public bool ShowsCrosshair => IsAiming && spell.UsesCrosshair;
 
         /// <summary>World point under the crosshair this frame while aiming (a miss
         /// is the point at max range along the view). Holds the last aimed point
@@ -132,7 +193,8 @@ namespace Pickleball.Sandbox.Magic
         public bool AimOnTarget => AimTarget != null;
 
         /// <summary>The collider transform under the crosshair when
-        /// <see cref="AimOnTarget"/>; what the next orb homes on. Null otherwise.</summary>
+        /// <see cref="AimOnTarget"/>; what the next orb homes on, or a strike
+        /// follows. Null otherwise.</summary>
         public Transform AimTarget
         {
             get
@@ -142,18 +204,51 @@ namespace Pickleball.Sandbox.Magic
             }
         }
 
-        /// <summary>True when a fire press now would launch an orb: aiming, off
-        /// cooldown, an orb prefab assigned and the cost affordable.</summary>
-        public bool CanCast => IsAiming && _cooldownLeft <= 0f && spell.OrbPrefab != null
+        /// <summary>True when a fire press now would cast: aiming, off cooldown,
+        /// the delivery's prefab (or, for a channel, health) present and the cost
+        /// affordable.</summary>
+        public bool CanCast => IsAiming && CooldownRemaining <= 0f && HasPayload(spell)
                                && mana != null && mana.CanAfford(Cost);
 
-        /// <summary>1 right after a shot, falling to 0 when the next can fire.</summary>
-        public float CooldownNormalised => _cooldownTotal > 0f ? Mathf.Clamp01(_cooldownLeft / _cooldownTotal) : 0f;
+        /// <summary>1 right after a cast of the selected spell, falling to 0 when
+        /// it can be cast again.</summary>
+        public float CooldownNormalised => spell != null ? Cooldowns.Normalised(spell) : 0f;
 
-        /// <summary>Seconds until the next shot can fire; 0 when ready.</summary>
-        public float CooldownRemaining => _cooldownLeft;
+        /// <summary>Seconds until the selected spell can be cast again; 0 when ready.</summary>
+        public float CooldownRemaining => spell != null ? Cooldowns.Remaining(spell) : 0f;
 
-        /// <summary>The transform orbs treat as their owner (never damaged, never
+        /// <summary>True while a channel runs.</summary>
+        public bool IsChanneling => _channel != null && _channel.IsChanneling;
+
+        /// <summary>0-1 through the running channel; after a cancel it holds where
+        /// it broke, after a completion 1.</summary>
+        public float ChannelProgress => _channel != null ? _channel.Progress : 0f;
+
+        /// <summary>The spell being (or last) channelled; null before any.</summary>
+        public SpellDefinition ChannelingSpell => _channelSpell;
+
+        /// <summary>Seconds until <paramref name="which"/> can be cast again (selector HUD).</summary>
+        public float CooldownRemainingFor(SpellDefinition which) => which != null ? Cooldowns.Remaining(which) : 0f;
+
+        /// <summary>1 right after a cast of <paramref name="which"/>, falling to 0 (selector HUD).</summary>
+        public float CooldownNormalisedFor(SpellDefinition which) => which != null ? Cooldowns.Normalised(which) : 0f;
+
+        /// <summary>
+        /// Selects <paramref name="next"/> as the spell cast. A running channel is
+        /// cancelled (<see cref="ChannelStopReason.Switched"/>). Aiming carries
+        /// on with the new spell; null ends it. Raises <see cref="SpellChanged"/>
+        /// when it actually changed.
+        /// </summary>
+        public void SetSpell(SpellDefinition next)
+        {
+            if (next == spell) return;
+            if (IsChanneling) StopChannel(ChannelStopReason.Switched);
+            spell = next;
+            _warnedNoPrefab = false;
+            SpellChanged?.Invoke(spell);
+        }
+
+        /// <summary>The transform spells treat as their owner (never damaged, never
         /// aimed at): the player root when locomotion is wired, else this one.</summary>
         Transform Owner => locomotion != null ? locomotion.transform : transform;
 
@@ -166,6 +261,9 @@ namespace Pickleball.Sandbox.Magic
             if (mana == null) mana = GetComponent<Mana>();
             if (input == null) input = GetComponent<SpellInput>();
             if (locomotion == null) locomotion = GetComponent<ChibiLocomotion>();
+            if (health == null) health = GetComponent<Health>();
+            if (movementInput == null) movementInput = GetComponent<PlayerMovementInput>();
+            if (inputGate == null) inputGate = GetComponent<PlayerInputGate>();
             if (aimCamera == null) aimCamera = Camera.main;
         }
 
@@ -176,7 +274,9 @@ namespace Pickleball.Sandbox.Magic
             _aimTarget = null;
             _aimFrame = -1;
             _aimResolved = false;
+            _hurtPending = false;
             if (locomotion != null) locomotion.SetCombatFacingSource(this);
+            SubscribeHealth(health);
             if (spell == null)
                 Debug.LogWarning($"[SpellCaster] {name} has no SpellDefinition — aiming is off. " +
                                  "Run Tools ▸ Pickleball ▸ Setup Magic.", this);
@@ -188,6 +288,8 @@ namespace Pickleball.Sandbox.Magic
             // cannot check the slot is still ours; nothing else registers one.
             if (locomotion != null) locomotion.SetCombatFacingSource(null);
             _aimTarget = null;
+            if (IsChanneling) StopChannel(ChannelStopReason.Disabled);
+            SubscribeHealth(null);
             if (_aimLatched)
             {
                 _aimLatched = false;
@@ -197,7 +299,7 @@ namespace Pickleball.Sandbox.Magic
 
         void Update()
         {
-            if (_cooldownLeft > 0f) _cooldownLeft = Mathf.Max(0f, _cooldownLeft - Time.deltaTime);
+            Cooldowns.Tick(Time.deltaTime);
 
             bool aiming = IsAiming;
             if (aiming != _aimLatched)
@@ -211,10 +313,17 @@ namespace Pickleball.Sandbox.Magic
                     AimEnded?.Invoke();
                 }
             }
-            if (!aiming) return;
+            if (!aiming)
+            {
+                if (IsChanneling) StopChannel(AimLostReason());
+                _hurtPending = false;
+                return;
+            }
 
             RefreshAim();
-            TryFire();
+            if (spell.Delivery == SpellDelivery.Channel) UpdateChannel(Time.deltaTime);
+            else TryFire();
+            _hurtPending = false;
         }
 
         // ------------------------------------------------------------ firing
@@ -223,27 +332,22 @@ namespace Pickleball.Sandbox.Magic
         {
             bool pressed = input.FirePressedThisFrame;
             bool wants = pressed || (spell.AutoRepeat && input.FireHeld);
-            if (!wants || _cooldownLeft > 0f) return;   // cooldown-gated presses are silent
+            if (!wants || CooldownRemaining > 0f) return;   // cooldown-gated presses are silent
 
-            if (spell.OrbPrefab == null)
+            if (!HasPayload(spell))
             {
                 if (!_warnedNoPrefab)
                 {
                     _warnedNoPrefab = true;
-                    Debug.LogWarning($"[SpellCaster] Spell '{spell.name}' has no orb prefab — nothing " +
-                                     "to fire. Run Tools ▸ Pickleball ▸ Setup Magic.", this);
+                    Debug.LogWarning($"[SpellCaster] Spell '{spell.name}' has no {spell.Delivery} prefab — " +
+                                     "nothing to cast. Run Tools ▸ Pickleball ▸ Setup Magic.", this);
                 }
                 return;
             }
 
             if (mana == null)
             {
-                if (!_warnedNoMana)
-                {
-                    _warnedNoMana = true;
-                    Debug.LogWarning($"[SpellCaster] {name} has no Mana to pay with — every shot " +
-                                     "fails. Run Tools ▸ Pickleball ▸ Setup Magic.", this);
-                }
+                WarnNoMana();
                 if (pressed) CastFailed?.Invoke();
                 return;
             }
@@ -258,10 +362,18 @@ namespace Pickleball.Sandbox.Magic
                 return;
             }
 
-            Launch();
+            switch (spell.Delivery)
+            {
+                case SpellDelivery.Strike: CallStrike(); break;
+                case SpellDelivery.Zone: PlaceZone(); break;
+                default: LaunchOrb(); break;
+            }
+
+            Cooldowns.Start(spell, spell.Cooldown);
+            Cast?.Invoke(spell);
         }
 
-        void Launch()
+        void LaunchOrb()
         {
             Vector3 origin = CastOriginPosition;
             Vector3 viewForward = aimCamera != null ? aimCamera.transform.forward : transform.forward;
@@ -269,11 +381,140 @@ namespace Pickleball.Sandbox.Magic
 
             var orb = Instantiate(spell.OrbPrefab, origin, Quaternion.LookRotation(direction));
             orb.Launch(origin, direction, spell, Owner, _aimTarget);
-
-            _cooldownTotal = spell.Cooldown;
-            _cooldownLeft = spell.Cooldown;
-            Cast?.Invoke(orb);
         }
+
+        void CallStrike()
+        {
+            Vector3 point = _aimTarget != null ? GroundProbe.FeetOf(_aimTarget) : GroundUnder(_aimPoint);
+            var strike = Instantiate(spell.StrikePrefab, point, Quaternion.identity);
+            strike.Begin(point, _aimTarget, spell, Owner);
+        }
+
+        void PlaceZone()
+        {
+            Vector3 aim = _aimTarget != null ? GroundProbe.FeetOf(_aimTarget) : _aimPoint;
+            Vector3 point = GroundUnder(aim);
+            var zone = Instantiate(spell.ZonePrefab, point, Quaternion.identity);
+            zone.Place(point, spell, Owner);
+        }
+
+        Vector3 GroundUnder(Vector3 point)
+        {
+            if (_aimHits == null) _aimHits = new RaycastHit[AimHitCapacity];
+            GroundProbe.TrySnap(point, spell.GroundProbeDistance, spell.HitMask, Owner, _aimHits, out Vector3 ground);
+            return ground;
+        }
+
+        /// <summary>Whether <paramref name="which"/> has what its delivery needs to
+        /// cast: its prefab, or for a channel the health it restores.</summary>
+        bool HasPayload(SpellDefinition which)
+        {
+            if (which == null) return false;
+            return which.Delivery switch
+            {
+                SpellDelivery.Strike => which.StrikePrefab != null,
+                SpellDelivery.Zone => which.ZonePrefab != null,
+                SpellDelivery.Channel => health != null,
+                _ => which.OrbPrefab != null,
+            };
+        }
+
+        void WarnNoMana()
+        {
+            if (_warnedNoMana) return;
+            _warnedNoMana = true;
+            Debug.LogWarning($"[SpellCaster] {name} has no Mana to pay with — every shot " +
+                             "fails. Run Tools ▸ Pickleball ▸ Setup Magic.", this);
+        }
+
+        // ----------------------------------------------------------- channel
+
+        void UpdateChannel(float dt)
+        {
+            var signals = ReadSignals();
+
+            if (!IsChanneling)
+            {
+                // A channel starts on a fresh press only, off cooldown.
+                if (!input.FirePressedThisFrame || CooldownRemaining > 0f) return;
+                if (health == null && !_warnedNoHealth)
+                {
+                    _warnedNoHealth = true;
+                    Debug.LogWarning($"[SpellCaster] {name} has no Health to heal — '{spell.name}' " +
+                                     "cannot be channelled. Run Tools ▸ Pickleball ▸ Setup Magic.", this);
+                }
+                if (mana == null) WarnNoMana();
+
+                var refused = Channel.TryBegin(signals, spell.ChannelSeconds, Cost, spell.ChannelManaTiming, mana);
+                if (refused != ChannelStopReason.None)
+                {
+                    ChannelCancelled?.Invoke(spell, refused);
+                    if (refused == ChannelStopReason.NoMana) CastFailed?.Invoke();
+                    return;
+                }
+                _channelSpell = spell;
+                ChannelStarted?.Invoke(spell);
+                return;
+            }
+
+            switch (Channel.Tick(dt, signals, mana))
+            {
+                case ChannelStep.Completed:
+                    if (health != null) health.Heal(spell.HealAmount);
+                    Cooldowns.Start(spell, spell.Cooldown);
+                    ChannelCompleted?.Invoke(spell);
+                    Cast?.Invoke(spell);
+                    break;
+                case ChannelStep.Cancelled:
+                    ChannelCancelled?.Invoke(_channelSpell, Channel.LastStop);
+                    if (Channel.LastStop == ChannelStopReason.NoMana) CastFailed?.Invoke();
+                    break;
+            }
+        }
+
+        /// <summary>This frame's channel rules: fire held, movement input (read,
+        /// not consumed), the motor's busy / grounded state, a hit since last
+        /// frame, the gate, and whether there is health to restore.</summary>
+        ChannelSignals ReadSignals()
+        {
+            var signals = new ChannelSignals
+            {
+                Held = input != null && input.FireHeld,
+                Hurt = _hurtPending,
+                Blocked = inputGate != null && inputGate.IsBlocked(InputBlock.Spell),
+                Busy = locomotion != null && locomotion.IsBusy,
+                Airborne = locomotion != null && !locomotion.IsGrounded,
+                HealthUnavailable = health == null || health.IsDead,
+                HealthFull = health != null && spell.RefuseAtFullHealth && health.Current >= health.Max,
+            };
+            if (movementInput != null && movementInput.isActiveAndEnabled)
+                signals.AddIntent(movementInput.Read(), spell.ChannelMoveDeadzone);
+            return signals;
+        }
+
+        ChannelStopReason AimLostReason()
+        {
+            if (inputGate != null && inputGate.IsBlocked(InputBlock.Spell)) return ChannelStopReason.Blocked;
+            if (locomotion != null && locomotion.IsBusy) return ChannelStopReason.Busy;
+            if (spell == null) return ChannelStopReason.Switched;
+            if (!isActiveAndEnabled) return ChannelStopReason.Disabled;
+            return ChannelStopReason.Released;
+        }
+
+        void StopChannel(ChannelStopReason reason)
+        {
+            if (!Channel.Cancel(reason)) return;
+            ChannelCancelled?.Invoke(_channelSpell, Channel.LastStop);
+        }
+
+        void SubscribeHealth(Health next)
+        {
+            if (_subscribedHealth != null) _subscribedHealth.Hurt -= OnHurt;
+            _subscribedHealth = next;
+            if (_subscribedHealth != null) _subscribedHealth.Hurt += OnHurt;
+        }
+
+        void OnHurt(float amount, Vector3 at) => _hurtPending = true;
 
         // --------------------------------------------------------------- aim
 

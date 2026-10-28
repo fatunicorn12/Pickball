@@ -27,12 +27,23 @@ using UnityEngine.Rendering;
 /// (<see cref="NewtonFightArt.VfxDir"/>), named MagicOrb* so they cannot
 /// collide with the Newton fight's. All of them are URP Particles/Unlit
 /// (additive, vertex-coloured) except the core, which is opaque URP Unlit.
+///
+/// Two looks share one structure: the Arcane Orb (cyan and violet, materials
+/// named MagicOrb*) and the Fireball (white-hot core, orange halo, red accent,
+/// a wider ember trail and a child "Flames" system that licks off behind it;
+/// materials named Fireball*). The Fireball is the same <see cref="MagicOrb"/>
+/// and <see cref="MagicOrbVisual"/>; only colours, sizes and the flames differ.
 /// </summary>
 public static class MagicOrbPrefabBuilder
 {
     static readonly Color Cyan = new(0.3f, 0.88f, 1f);
     static readonly Color Violet = new(0.66f, 0.42f, 1f);
     static readonly Color CoreWhite = new(0.78f, 1f, 1f);
+
+    static readonly Color FireCore = new(1f, 0.93f, 0.62f);
+    static readonly Color FireOrange = new(1f, 0.48f, 0.1f);
+    static readonly Color FireRed = new(0.95f, 0.18f, 0.04f);
+    static readonly Color Smoke = new(0.25f, 0.08f, 0.04f);
 
     // Sizes in metres. The core sits a little inside the spell's default
     // 0.28 m hit radius, so what you see is never bigger than what hits.
@@ -42,12 +53,51 @@ public static class MagicOrbPrefabBuilder
     const float MoteSize = 0.2f;
     const int MoteCount = 3;
 
+    /// <summary>Everything that differs between the orb looks.</summary>
+    struct OrbLook
+    {
+        public string Prefix;
+        public Color Core, Glow, Accent, TrailMid, TrailEnd, LightColour, SparkFrom, SparkTo, BurstFrom;
+        public float GlowAlpha, AccentAlpha, CoreDiameter, HaloDiameter, TrailTime, TrailWidth, Intensity;
+        public float SparkleRate, SparkleGravity;
+        public bool Flames;
+    }
+
+    static OrbLook ArcaneLook => new()
+    {
+        Prefix = "MagicOrb",
+        Core = CoreWhite, Glow = Cyan, Accent = Violet, TrailMid = Cyan, TrailEnd = Violet,
+        LightColour = Cyan, SparkFrom = Cyan, SparkTo = Violet, BurstFrom = Color.white,
+        GlowAlpha = 0.85f, AccentAlpha = 0.7f, CoreDiameter = CoreDiameter, HaloDiameter = HaloDiameter,
+        TrailTime = 0.35f, TrailWidth = CoreDiameter * 1.1f, Intensity = 2.5f,
+        SparkleRate = 28f, SparkleGravity = 0f, Flames = false,
+    };
+
+    static OrbLook FireLook => new()
+    {
+        Prefix = "Fireball",
+        Core = FireCore, Glow = FireOrange, Accent = FireRed, TrailMid = FireOrange, TrailEnd = FireRed,
+        LightColour = FireOrange, SparkFrom = FireCore, SparkTo = FireRed, BurstFrom = FireCore,
+        GlowAlpha = 0.9f, AccentAlpha = 0.75f, CoreDiameter = 0.46f, HaloDiameter = 1.8f,
+        TrailTime = 0.32f, TrailWidth = 0.6f, Intensity = 3f,
+        SparkleRate = 45f, SparkleGravity = -0.35f, Flames = true,
+    };
+
     /// <summary>
-    /// Builds (or rebuilds in place) the orb prefab at <paramref name="prefabPath"/>
-    /// and returns the <see cref="MagicOrb"/> on the saved asset, ready to drop
-    /// into a SpellDefinition. Null if the path is empty or the save failed.
+    /// Builds (or rebuilds in place) the Arcane Orb prefab at
+    /// <paramref name="prefabPath"/> and returns the <see cref="MagicOrb"/> on the
+    /// saved asset, ready to drop into a SpellDefinition. Null if the path is
+    /// empty or the save failed.
     /// </summary>
-    public static MagicOrb Build(string prefabPath)
+    public static MagicOrb Build(string prefabPath) => Build(prefabPath, ArcaneLook);
+
+    /// <summary>
+    /// Builds (or rebuilds in place) the Fireball prefab: the orb's structure in
+    /// fire colours with a flame trail. Same return contract as <see cref="Build(string)"/>.
+    /// </summary>
+    public static MagicOrb BuildFireball(string prefabPath) => Build(prefabPath, FireLook);
+
+    static MagicOrb Build(string prefabPath, OrbLook look)
     {
         if (string.IsNullOrEmpty(prefabPath))
         {
@@ -67,29 +117,31 @@ public static class MagicOrbPrefabBuilder
         var parent = visualGo.transform;
 
         var glow = NewtonFightArt.Glow();
-        var sparkleMat = NewtonFightArt.ParticleMaterial("MagicOrbSparkle", glow, Color.white, additive: true);
+        string p = look.Prefix;
+        var sparkleMat = NewtonFightArt.ParticleMaterial($"{p}Sparkle", glow, Color.white, additive: true);
 
-        var core = Sphere("Core", parent, NewtonFightArt.UnlitMaterial("MagicOrbCore", CoreWhite), CoreDiameter);
+        var core = Sphere("Core", parent, NewtonFightArt.UnlitMaterial($"{p}Core", look.Core), look.CoreDiameter);
 
         var halo = NewtonFightArt.Quad("Halo", parent,
-            NewtonFightArt.ParticleMaterial("MagicOrbHalo", glow, WithAlpha(Cyan, 0.85f), additive: true),
-            HaloDiameter, flat: false);
+            NewtonFightArt.ParticleMaterial($"{p}Halo", glow, WithAlpha(look.Glow, look.GlowAlpha), additive: true),
+            look.HaloDiameter, flat: false);
 
-        var motes = BuildMotes(parent, glow);
-        var trail = BuildTrail(parent);
-        var light = BuildLight(parent);
-        var sparkles = BuildSparkles(parent, sparkleMat);
-        var burstSparks = BuildBurstSparks(parent, sparkleMat);
+        var motes = BuildMotes(parent, glow, look);
+        var trail = BuildTrail(parent, look);
+        var light = BuildLight(parent, look.LightColour);
+        var sparkles = BuildSparkles(parent, sparkleMat, look);
+        if (look.Flames) BuildFlames(sparkles.transform, look);
+        var burstSparks = BuildBurstSparks(parent, sparkleMat, look);
 
         // Burst parts start hidden; the visual shows them at the burst.
         // Single-sided shell: from inside the blast you see nothing rather
         // than a full-screen wash.
         var shell = Sphere("BurstShell", parent,
-            NewtonFightArt.ParticleMaterial("MagicOrbShell", null, WithAlpha(Violet, 0.7f),
+            NewtonFightArt.ParticleMaterial($"{p}Shell", null, WithAlpha(look.Accent, look.AccentAlpha),
                                             additive: true, twoSided: false), 1f);
         shell.enabled = false;
         var ring = NewtonFightArt.Quad("BurstRing", parent,
-            NewtonFightArt.ParticleMaterial("MagicOrbRing", NewtonFightArt.WellHalo(), Cyan, additive: true),
+            NewtonFightArt.ParticleMaterial($"{p}Ring", NewtonFightArt.WellHalo(), look.Glow, additive: true),
             1f, flat: false).GetComponent<Renderer>();
         ring.enabled = false;
 
@@ -104,11 +156,12 @@ public static class MagicOrbPrefabBuilder
         SetObject(so, "burstSparks", burstSparks);
         SetObject(so, "burstShell", shell);
         SetObject(so, "burstRing", ring);
-        SetFloat(so, "coreDiameter", CoreDiameter);
-        SetFloat(so, "haloDiameter", HaloDiameter);
-        SetColour(so, "coreColour", CoreWhite);
-        SetColour(so, "glowColour", WithAlpha(Cyan, 0.85f));
-        SetColour(so, "accentColour", WithAlpha(Violet, 0.7f));
+        SetFloat(so, "coreDiameter", look.CoreDiameter);
+        SetFloat(so, "haloDiameter", look.HaloDiameter);
+        SetFloat(so, "intensity", look.Intensity);
+        SetColour(so, "coreColour", look.Core);
+        SetColour(so, "glowColour", WithAlpha(look.Glow, look.GlowAlpha));
+        SetColour(so, "accentColour", WithAlpha(look.Accent, look.AccentAlpha));
         so.ApplyModifiedPropertiesWithoutUndo();
 
         var saved = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
@@ -118,7 +171,7 @@ public static class MagicOrbPrefabBuilder
             Debug.LogError($"[MagicOrbPrefabBuilder] Could not save the orb prefab to {prefabPath}.");
             return null;
         }
-        Debug.Log($"  magic orb prefab → {prefabPath}");
+        Debug.Log($"  {look.Prefix} prefab → {prefabPath}");
         return saved.GetComponent<MagicOrb>();
     }
 
@@ -142,11 +195,11 @@ public static class MagicOrbPrefabBuilder
     /// <summary>Small violet glows evenly spaced on a ring round the core. The
     /// visual spins their pivot on a tilted axis, so they read as orbiting
     /// sparks rather than a flat wheel.</summary>
-    static Transform BuildMotes(Transform parent, Texture glow)
+    static Transform BuildMotes(Transform parent, Texture glow, OrbLook look)
     {
         var pivot = new GameObject("Motes").transform;
         pivot.SetParent(parent, false);
-        var mat = NewtonFightArt.ParticleMaterial("MagicOrbMote", glow, WithAlpha(Violet, 0.95f), additive: true);
+        var mat = NewtonFightArt.ParticleMaterial($"{look.Prefix}Mote", glow, WithAlpha(look.Accent, 0.95f), additive: true);
         for (int i = 0; i < MoteCount; i++)
         {
             float angle = i * Mathf.PI * 2f / MoteCount;
@@ -159,22 +212,22 @@ public static class MagicOrbPrefabBuilder
     /// <summary>A short tapering streak, white-hot at the orb fading through
     /// cyan to violet. The beam's streak texture gives it moving filaments;
     /// the colour rides in the vertex colour, which Particles/Unlit honours.</summary>
-    static TrailRenderer BuildTrail(Transform parent)
+    static TrailRenderer BuildTrail(Transform parent, OrbLook look)
     {
         var go = new GameObject("Trail");
         go.transform.SetParent(parent, false);
         var trail = go.AddComponent<TrailRenderer>();
-        trail.time = 0.35f;
+        trail.time = look.TrailTime;
         trail.minVertexDistance = 0.05f;
-        trail.widthMultiplier = CoreDiameter * 1.1f;
+        trail.widthMultiplier = look.TrailWidth;
         trail.widthCurve = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 0f));
         var gradient = new Gradient();
         gradient.SetKeys(
             new[]
             {
-                new GradientColorKey(CoreWhite, 0f),
-                new GradientColorKey(Cyan, 0.25f),
-                new GradientColorKey(Violet, 1f),
+                new GradientColorKey(look.Core, 0f),
+                new GradientColorKey(look.TrailMid, 0.25f),
+                new GradientColorKey(look.TrailEnd, 1f),
             },
             new[]
             {
@@ -190,18 +243,20 @@ public static class MagicOrbPrefabBuilder
         trail.emitting = true;
         trail.shadowCastingMode = ShadowCastingMode.Off;
         trail.receiveShadows = false;
-        trail.sharedMaterial = NewtonFightArt.ParticleMaterial("MagicOrbTrail", NewtonFightArt.BeamStreak(),
-                                                               Color.white, additive: true);
+        // The arcane trail is pure light; a fire trail blends normally so it still
+        // reads as fire against a bright floor or sky.
+        trail.sharedMaterial = NewtonFightArt.ParticleMaterial($"{look.Prefix}Trail", NewtonFightArt.BeamStreak(),
+                                                               Color.white, additive: !look.Flames);
         return trail;
     }
 
-    static Light BuildLight(Transform parent)
+    static Light BuildLight(Transform parent, Color colour)
     {
         var go = new GameObject("Light");
         go.transform.SetParent(parent, false);
         var light = go.AddComponent<Light>();
         light.type = LightType.Point;
-        light.color = Cyan;
+        light.color = colour;
         light.range = 4f;
         light.intensity = 2.5f;
         light.shadows = LightShadows.None;
@@ -210,22 +265,62 @@ public static class MagicOrbPrefabBuilder
 
     /// <summary>Looping dust shed in world space, so it hangs behind the orb as
     /// a sparkling wake. Also puffed by the visual at launch and fizzle.</summary>
-    static ParticleSystem BuildSparkles(Transform parent, Material mat)
+    static ParticleSystem BuildSparkles(Transform parent, Material mat, OrbLook look)
     {
         var ps = NewParticles("Sparkles", parent, mat, loop: true, life: new Vector2(0.35f, 0.7f),
                               speed: new Vector2(0.1f, 0.5f), size: new Vector2(0.04f, 0.11f), maxParticles: 80);
         var emission = ps.emission;
-        emission.rateOverTime = 28f;
+        emission.rateOverTime = look.SparkleRate;
         var shape = ps.shape;
         shape.shapeType = ParticleSystemShapeType.Sphere;
-        shape.radius = CoreDiameter * 0.55f;
-        Fade(ps, Cyan, Violet);
+        shape.radius = look.CoreDiameter * 0.55f;
+        if (look.SparkleGravity != 0f)
+        {
+            var main = ps.main;
+            main.gravityModifier = look.SparkleGravity;
+        }
+        Fade(ps, look.SparkFrom, look.SparkTo);
         return ps;
+    }
+
+    /// <summary>
+    /// The Fireball's flame wake: soft puffs shed in world space behind the core,
+    /// white-yellow to orange to a dark red-brown as they die, rising a little
+    /// and swelling as they cool. A child of the sparkles, so the visual's
+    /// Play / Stop on the sparkles drives it too (withChildren).
+    /// </summary>
+    static void BuildFlames(Transform sparkles, OrbLook look)
+    {
+        // Normal blending: additive fire vanishes against a bright floor or sky.
+        var mat = NewtonFightArt.ParticleMaterial($"{look.Prefix}Flame", NewtonFightArt.Glow(), Color.white, additive: false);
+        var ps = NewParticles("Flames", sparkles, mat, loop: true, life: new Vector2(0.25f, 0.5f),
+                              speed: new Vector2(0.05f, 0.4f), size: new Vector2(0.42f, 0.78f), maxParticles: 200);
+        var emission = ps.emission;
+        emission.rateOverTime = 110f;
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = look.CoreDiameter * 0.35f;
+        var main = ps.main;
+        main.gravityModifier = -0.6f;
+        var sol = ps.sizeOverLifetime;
+        sol.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.7f, 1f, 1.4f));
+        var col = ps.colorOverLifetime;
+        col.enabled = true;
+        var grad = new Gradient();
+        grad.SetKeys(new[]
+                     {
+                         new GradientColorKey(look.Core, 0f),
+                         new GradientColorKey(look.Glow, 0.3f),
+                         new GradientColorKey(look.Accent, 0.65f),
+                         new GradientColorKey(Smoke, 1f),
+                     },
+                     new[] { new GradientAlphaKey(0.95f, 0f), new GradientAlphaKey(0.6f, 0.5f), new GradientAlphaKey(0f, 1f) });
+        col.color = new ParticleSystem.MinMaxGradient(grad);
     }
 
     /// <summary>One spray at the burst, damped so it hangs in a ball instead of
     /// flying across the arena.</summary>
-    static ParticleSystem BuildBurstSparks(Transform parent, Material mat)
+    static ParticleSystem BuildBurstSparks(Transform parent, Material mat, OrbLook look)
     {
         var ps = NewParticles("BurstSparks", parent, mat, loop: false, life: new Vector2(0.25f, 0.55f),
                               speed: new Vector2(3f, 7f), size: new Vector2(0.06f, 0.16f), maxParticles: 64);
@@ -238,7 +333,16 @@ public static class MagicOrbPrefabBuilder
         limit.enabled = true;
         limit.dampen = 0.3f;
         limit.limit = new ParticleSystem.MinMaxCurve(1.5f);
-        Fade(ps, Color.white, Violet);
+        Fade(ps, look.BurstFrom, look.Accent);
+        if (look.Flames)
+        {
+            // A fireball's burst throws more, and bigger, embers.
+            emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)55) });
+            var main = ps.main;
+            main.startSize = new ParticleSystem.MinMaxCurve(0.1f, 0.26f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(4f, 9f);
+            main.maxParticles = 96;
+        }
         return ps;
     }
 
