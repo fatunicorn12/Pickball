@@ -425,7 +425,7 @@ MonoBehaviour:
     assetName: Singularity
     category: 7
     rig: 0
-    source: BS-01_Singularity_v2
+    source: BS-01_Singularity_v3
     sizeAxis: 2
     targetSize: 5
     sizeTolerance: 0.05
@@ -443,5 +443,173 @@ MonoBehaviour:
     smoothness: 0.7
     metallic: 0
     emissionColor: {r: 0.35, g: 0.35, b: 0.35, a: 1}
+    colliderShape: 0
+    castShadows: 1
+  - id: GD-02
+    assetName: Hypatia
+    category: 4
+    rig: 1
+    source: GD-02_Hypatia_Rigged_BlenderPreset
+    sizeAxis: 0
+    targetSize: 2.1
+    sizeTolerance: 0.05
+    pivot: 0
+    modelRotation: {x: 0, y: 0, z: 0}
+    generateMeshLods: 0
+    triangleBudget: 10000
+    triangleCap: 15000
+    textureMaxSize: 2048
+    textureSaturation: 1
+    textureGain: 1
+    gradientBottom: {r: 1, g: 1, b: 1, a: 1}
+    gradientTop: {r: 1, g: 1, b: 1, a: 1}
+    baseColor: {r: 1, g: 1, b: 1, a: 1}
+    smoothness: 0.15
+    metallic: 0
+    emissionColor: {r: 0, g: 0, b: 0, a: 1}
+    colliderShape: 0
+    castShadows: 1
+  - id: GD-03
+    assetName: Fibonacci
+    category: 4
+    rig: 1
+    source: GD-03_Fibonacci_Rigged_BlenderPreset
+    sizeAxis: 0
+    targetSize: 2
+    sizeTolerance: 0.05
+    pivot: 0
+    modelRotation: {x: 0, y: 0, z: 0}
+    generateMeshLods: 0
+    triangleBudget: 10000
+    triangleCap: 15000
+    textureMaxSize: 2048
+    textureSaturation: 1
+    textureGain: 1
+    gradientBottom: {r: 1, g: 1, b: 1, a: 1}
+    gradientTop: {r: 1, g: 1, b: 1, a: 1}
+    baseColor: {r: 1, g: 1, b: 1, a: 1}
+    smoothness: 0.15
+    metallic: 0
+    emissionColor: {r: 0, g: 0, b: 0, a: 1}
+    colliderShape: 0
+    castShadows: 1
+  - id: GD-04
+    assetName: AlKhwarizmi
+    category: 4
+    rig: 1
+    source: GD-04_AlKhwarizmi_Rigged_BlenderPreset
+    sizeAxis: 0
+    targetSize: 2.2
+    sizeTolerance: 0.05
+    pivot: 0
+    modelRotation: {x: 0, y: 0, z: 0}
+    generateMeshLods: 0
+    triangleBudget: 10000
+    triangleCap: 15000
+    textureMaxSize: 2048
+    textureSaturation: 1
+    textureGain: 1
+    gradientBottom: {r: 1, g: 1, b: 1, a: 1}
+    gradientTop: {r: 1, g: 1, b: 1, a: 1}
+    baseColor: {r: 1, g: 1, b: 1, a: 1}
+    smoothness: 0.15
+    metallic: 0
+    emissionColor: {r: 0, g: 0, b: 0, a: 1}
+    colliderShape: 0
+    castShadows: 1
+  - id: GD-05
+    assetName: Euler
+    category: 4
+    rig: 1
+    source: GD-05_Euler_Rigged_BlenderPreset
+    sizeAxis: 0
+    targetSize: 2.1
+    sizeTolerance: 0.05
+    pivot: 0
+    modelRotation: {x: 0, y: 0, z: 0}
+    generateMeshLods: 0
+    triangleBudget: 10000
+    triangleCap: 15000
+    textureMaxSize: 2048
+    textureSaturation: 1
+    textureGain: 1
+    gradientBottom: {r: 1, g: 1, b: 1, a: 1}
+    gradientTop: {r: 1, g: 1, b: 1, a: 1}
+    baseColor: {r: 1, g: 1, b: 1, a: 1}
+    smoothness: 0.15
+    metallic: 0
+    emissionColor: {r: 0, g: 0, b: 0, a: 1}
+    colliderShape: 0
+    castShadows: 1
+  - id: GD-06
+    assetName: Galois
+    category: 4
+    rig: 1
+    source: GD-06_Galois_Rigged_BlenderPreset
+    sizeAxis: 0
+    targetSize: 2
+    sizeTolerance: 0.05
+    pivot: 0
+    modelRotation: {x: 0, y: 0, z: 0}
+    generateMeshLods: 0
+    triangleBudget: 10000
+    triangleCap: 15000
+    textureMaxSize: 2048
+    textureSaturation: 1
+    textureGain: 1
+    gradientBottom: {r: 1, g: 1, b: 1, a: 1}
+    gradientTop: {r: 1, g: 1, b: 1, a: 1}
+    baseColor: {r: 1, g: 1, b: 1, a: 1}
+    smoothness: 0.15
+    metallic: 0
+    emissionColor: {r: 0, g: 0, b: 0, a: 1}
+    colliderShape: 0
+    castShadows: 1
+  - id: GD-07
+    assetName: Riemann
+    category: 4
+    rig: 1
+    source: GD-07_Riemann_Rigged_BlenderPreset
+    sizeAxis: 0
+    targetSize: 2.2
+    sizeTolerance: 0.05
+    pivot: 0
+    modelRotation: {x: 0, y: 0, z: 0}
+    generateMeshLods: 0
+    triangleBudget: 10000
+    triangleCap: 15000
+    textureMaxSize: 2048
+    textureSaturation: 1
+    textureGain: 1
+    gradientBottom: {r: 1, g: 1, b: 1, a: 1}
+    gradientTop: {r: 1, g: 1, b: 1, a: 1}
+    baseColor: {r: 1, g: 1, b: 1, a: 1}
+    smoothness: 0.15
+    metallic: 0
+    emissionColor: {r: 0, g: 0, b: 0, a: 1}
+    colliderShape: 0
+    castShadows: 1
+  - id: EN-01
+    assetName: FibonacciRabbit
+    category: 5
+    rig: 0
+    source: EN-01_FibonacciRabbit_Rigged_BlenderPreset
+    sizeAxis: 1
+    targetSize: 0.45
+    sizeTolerance: 0.05
+    pivot: 0
+    modelRotation: {x: 0, y: 90, z: 0}
+    generateMeshLods: 0
+    triangleBudget: 2500
+    triangleCap: 3000
+    textureMaxSize: 512
+    textureSaturation: 1
+    textureGain: 1
+    gradientBottom: {r: 1, g: 1, b: 1, a: 1}
+    gradientTop: {r: 1, g: 1, b: 1, a: 1}
+    baseColor: {r: 1, g: 1, b: 1, a: 1}
+    smoothness: 0.2
+    metallic: 0
+    emissionColor: {r: 0, g: 0, b: 0, a: 1}
     colliderShape: 0
     castShadows: 1

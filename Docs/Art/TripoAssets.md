@@ -170,13 +170,31 @@ Measured by the import (prefab space, metres). "Unit" sizes are rescaled by game
 | PJ-01 | TriangleShot | 1,651 (400 / 2,000); LODs 832 / 448 / 256 / 128 / 64 | 0.80 × 0.77 × 0.33, face ±Z | none | v2 (image-to-3D) | Good: clean right-triangle slab; rim and square unpainted |
 | PJ-02 | GoldenNautilus | 1,921 (2,000 / 2,500) | 0.95 × 1.00 × 0.41 | 1024 | v1 | Good: golden spiral shell, chambers visible |
 | IT-01 | PythagorasBean | 1,870 (500 / 2,000) | 0.30 × 0.15 × 0.12 | 512 | v2 | OK: reads as a bean; a small keyring-like loop at one end |
-| BS-01 | Singularity | 5,519 (6,000 / 10,000) | 5.0 × 4.3 × 5.0 (core ~3 m) | 2048 | v2 | OK: black sphere, white ring, one-sided crescent of marble shards |
+| BS-01 | Singularity | 5,800 (6,000 / 10,000) | 5.0 × 4.8 × 4.3 (core ~3 m) | 2048 | v3 (replaces v2) | Good: glossy black sphere studded with white marble spikes and cubes, no ring |
+| GD-02 | Hypatia | 8,934 (10,000 / 15,000) | 1.63 (T-pose span) × 2.10 × 0.60 | 2048 | Blender-preset rig | Good: Humanoid, 52 bones; star-chart dress and sandals; clean walk |
+| GD-03 | Fibonacci | 10,152 (10,000 / 15,000) | 1.73 × 2.00 × 0.78 | 2048 | Blender-preset rig | Good: Humanoid, 52 bones; the right hand brushes the flared tunic hem beside the pouch at the back of the walk swing (minor) |
+| GD-04 | AlKhwarizmi | 8,277 (10,000 / 15,000) | 1.93 × 2.20 × 0.84 | 2048 | Blender-preset rig | Good: Humanoid, 52 bones; turban, emerald kaftan, sash |
+| GD-05 | Euler | 10,210 (10,000 / 15,000) | 2.06 × 2.10 × 0.79 | 2048 | Blender-preset rig | OK: Humanoid, 50 bones (right middle finger tip unmapped); the eyepatch reads as dark glasses in profile; the raised hand tears into a flat paddle in the cast pose; pale smear on the left sleeve |
+| GD-06 | Galois | 10,144 (10,000 / 15,000) | 1.86 × 2.00 × 0.67 | 2048 | Blender-preset rig | Good: Humanoid, 52 bones; a few stray hair flecks above the head |
+| GD-07 | Riemann | 9,472 (10,000 / 15,000) | 2.00 × 2.20 × 0.81 | 2048 | Blender-preset rig | Good: Humanoid, 51 bones (right middle distal unmapped); spectacles, watch chain |
+| EN-01 | FibonacciRabbit | 2,394 (2,500 / 3,000) | 0.25 × 0.56 × 0.45, turned 90° to face +Z | 512 | Blender-preset rig, imported without a rig | Good: chubby cream rabbit, gold spiral on its side; static mesh for a procedural hop |
 
 ## Known limitations
 
 - Prefab renderers on nested model instances carry overrides for the shadow mode and materials;
   re-running the import resets them, so tune those in the catalog, not on the prefab.
 - Unity drops 3 degenerate polygons from Pythagoras on import (logged); nothing visible.
+- Guardian heights come from the plan (2.0 to 2.2 m), not all Pythagoras's 2.2 m: Fibonacci and
+  Galois are 2.0, Hypatia and Euler 2.1. Every guardian's idle feet sit within 3 mm of the ground.
+- Tripo's auto-skin ties long coats and tunics to the thighs, so in the walk the back panel bulges
+  and a swinging hand can brush the hem (Fibonacci, Al-Khwarizmi, Euler, Riemann). Fine at play
+  distance; a regenerate would be needed to fix it.
+- The rabbit imports with no rig (`TripoRig.None`), so it is a plain MeshRenderer and the skin is
+  dropped. Its 19-bone "Other" rig is a coherent quadruped under misleading names (`Head_0`
+  drives the hips; `bone_11` the head, `bone_12/13` the ears; three legs have three bones, the
+  front-left one bone), every vertex is weighted and the bind pose matches the rest mesh. It
+  could take hand-authored Generic clips, but no stock clip retargets onto it, and it would need
+  a `Generic` value in `TripoRig`.
 - Geometry-only FBXs (the orb) have no material slot to remap, so the raw FBX renders with
   Unity's default material; use the prefab, which has the asset's material.
 - The colour grade is a global desaturate-and-lift. It can't recolour one part of a texture.
