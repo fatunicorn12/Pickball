@@ -94,8 +94,8 @@ namespace Pickleball.Tests.Dialogue
             Assert.That(midway, Is.Not.EqualTo(StartPosition), "it moves in unscaled time");
             Assert.That(end.z, Is.LessThan(0f), "behind the player");
             Assert.That(Vector3.Distance(end, _player.position), Is.LessThan(Vector3.Distance(StartPosition, _player.position)));
-            Assert.That(_camera.fieldOfView, Is.InRange(30f, 50f).And.LessThan(Fov), "pushed in");
-            Assert.That(Vector3.Angle(_camera.transform.forward, _npc.FocusPosition - end), Is.LessThan(15f),
+            Assert.That(_camera.fieldOfView, Is.InRange(40f, 55f).And.LessThan(Fov), "pushed in");
+            Assert.That(Vector3.Angle(_camera.transform.forward, _npc.FocusPosition - end), Is.LessThan(25f),
                         "the NPC is near the middle of the frame");
         }
 

@@ -74,6 +74,7 @@ namespace Pickleball.Sandbox.Dialogue
         bool _orbitPending;
         Talkable _talkable;
         Vector3 _npcFocus, _npcFeet;
+        float _playerRadius, _npcHalfWidth;
         Transform _playerHead;
         Vector3 _blendCenter;
         RaycastHit[] _hits;
@@ -158,7 +159,16 @@ namespace Pickleball.Sandbox.Dialogue
             _talkable = talkable;
             _npcFocus = talkable.FocusPosition;
             _npcFeet = talkable.transform.position;
-            _playerHead = HeadBoneOf(director != null ? director.Partner : null);
+            Transform partner = director != null ? director.Partner : null;
+            _playerHead = HeadBoneOf(partner);
+            // Body sizes, read once per talk: the clearance cylinder round the
+            // player and the NPC's half-width.
+            _playerRadius = partner != null && partner.TryGetComponent(out CharacterController controller)
+                ? controller.radius * Mathf.Max(Mathf.Abs(partner.lossyScale.x), Mathf.Abs(partner.lossyScale.z))
+                : config.PlayerFallbackRadius;
+            _npcHalfWidth = talkable.TryGetComponent(out CapsuleCollider capsule)
+                ? Mathf.Max(config.NpcHalfWidth, capsule.radius * Mathf.Abs(talkable.transform.lossyScale.x))
+                : config.NpcHalfWidth;
             _from = new Pose(cam.transform.position, cam.transform.rotation);
             _fromFov = cam.fieldOfView;
             _time = 0f;
@@ -236,8 +246,11 @@ namespace Pickleball.Sandbox.Dialogue
             Transform partner = director != null ? director.Partner : null;
             Vector3 forward = partner != null ? partner.forward : _captured.forward;
             var framing = config.Framing;
+            framing.PlayerClearance = _playerRadius + config.PlayerClearanceMargin;
+            framing.NpcHalfWidth = _npcHalfWidth;
             float aspect = Cam != null ? Cam.aspect : 16f / 9f;
-            var shot = DialogueFraming.Solve(PlayerHead(), forward, _npcFocus, _npcFeet, aspect, framing);
+            Vector3 axis = partner != null ? partner.position : PlayerHead();
+            var shot = DialogueFraming.Solve(PlayerHead(), axis, forward, _npcFocus, _npcFeet, aspect, framing);
             Vector3 clear = KeepClear(shot, partner, _talkable != null ? _talkable.transform : null);
             if (clear != shot.Position)
                 shot = DialogueFraming.Compose(shot.Pivot, clear, _npcFocus, _npcFeet, aspect, framing);

@@ -6,15 +6,17 @@ namespace Pickleball.Sandbox.Dialogue
     /// The maths of the conversation camera, kept pure so it is tested rather
     /// than eyeballed.
     ///
-    /// <b>Position: over the shoulder, never through the head.</b> The camera
-    /// sits behind the player's head (the pivot) on the flat line from the
-    /// player to the NPC, raised, and shifted sideways. The chibi's head and hair
-    /// are huge, so a fixed sideways shift hides a short NPC behind them at
-    /// close range. The shift is therefore the larger of the configured one and
-    /// the one at which the sightline from the camera to the NPC's head passes
-    /// <see cref="DialogueFramingSettings.PlayerClearance"/> from the player's
-    /// head (<see cref="RequiredSideOffset"/>), capped. The left shoulder is the
-    /// default: the sword is carried on the right.
+    /// <b>Position: over the shoulder, never through the player.</b> The camera
+    /// sits behind the player on the flat line from the player's body axis to
+    /// the NPC's, raised above the player's head (the pivot), and shifted
+    /// sideways. The chibi's head, hair and flared cloak are huge next to a
+    /// short NPC, so a fixed sideways shift hides the NPC at close range. The
+    /// shift is the larger of the configured one and the one at which every
+    /// sightline from the camera to the NPC (head to feet, across its
+    /// <see cref="DialogueFramingSettings.NpcHalfWidth"/>) clears a vertical
+    /// cylinder of radius <see cref="DialogueFramingSettings.PlayerClearance"/>
+    /// round the player's body axis (<see cref="RequiredSideOffset"/>), capped.
+    /// The left shoulder is the default: the sword is carried on the right.
     ///
     /// <b>Composition: in screen space.</b> The rotation puts the NPC's focus
     /// point at a chosen screen height (the upper third) and a little toward the
@@ -31,20 +33,21 @@ namespace Pickleball.Sandbox.Dialogue
     {
         /// <summary>
         /// The conversation shot for a player whose head is at
-        /// <paramref name="playerHead"/> (the pivot: the Head bone, ideally)
+        /// <paramref name="playerHead"/> (the pivot: the Head bone, ideally) and
+        /// whose body axis passes through <paramref name="playerAxis"/> (his root),
         /// talking to an NPC whose focus point is <paramref name="npcFocus"/> and
         /// whose feet are at <paramref name="npcFeet"/>, seen through a camera of
-        /// the given <paramref name="aspect"/> (width / height). When the NPC is
-        /// straight above or below the pivot, <paramref name="playerForward"/>
-        /// stands in for the line between them, and world forward if that is
-        /// vertical too.
+        /// the given <paramref name="aspect"/> (width / height). When the NPC
+        /// stands on the player's axis, <paramref name="playerForward"/> stands in
+        /// for the line between them, and world forward if that is vertical too.
         /// </summary>
-        public static DialogueShot Solve(Vector3 playerHead, Vector3 playerForward, Vector3 npcFocus,
-                                         Vector3 npcFeet, float aspect, in DialogueFramingSettings settings)
+        public static DialogueShot Solve(Vector3 playerHead, Vector3 playerAxis, Vector3 playerForward,
+                                         Vector3 npcFocus, Vector3 npcFeet, float aspect,
+                                         in DialogueFramingSettings settings)
         {
             Vector3 pivot = playerHead;
 
-            Vector3 line = npcFocus - pivot;
+            Vector3 line = npcFeet - playerAxis;
             line.y = 0f;
             float distance = line.magnitude;
             if (distance < 1e-3f)
@@ -56,15 +59,21 @@ namespace Pickleball.Sandbox.Dialogue
             // Unity is left-handed: up × forward is right.
             Vector3 right = Vector3.Cross(Vector3.up, toNpc);
 
-            float side = SideSign(settings) * Mathf.Min(
-                Mathf.Max(Mathf.Abs(settings.SideOffset),
-                          RequiredSideOffset(distance, settings.PushInDistance, settings.PlayerClearance)),
-                Mathf.Max(settings.MaxSideOffset, Mathf.Abs(settings.SideOffset)));
+            // The widest the camera may swing; if even that can't clear the player
+            // from this far back, come forward (toward a side-on two-shot) until it can.
+            float maxSide = Mathf.Max(settings.MaxSideOffset, Mathf.Abs(settings.SideOffset));
+            float pushIn = settings.PushInDistance;
+            float required = RequiredSideOffset(distance, pushIn, settings.PlayerClearance, settings.NpcHalfWidth);
+            if (required > maxSide)
+            {
+                pushIn = PushInFor(distance, maxSide, settings.PlayerClearance, settings.NpcHalfWidth, pushIn);
+                required = RequiredSideOffset(distance, pushIn, settings.PlayerClearance, settings.NpcHalfWidth);
+            }
+            float side = SideSign(settings) * Mathf.Min(Mathf.Max(Mathf.Abs(settings.SideOffset), required), maxSide);
 
-            Vector3 position = pivot
-                               - toNpc * settings.PushInDistance
-                               + right * side
-                               + Vector3.up * settings.CameraHeight;
+            Vector3 position = new Vector3(playerAxis.x, pivot.y + settings.CameraHeight, playerAxis.z)
+                               - toNpc * pushIn
+                               + right * side;
             return Compose(pivot, position, npcFocus, npcFeet, aspect, settings);
         }
 
@@ -91,19 +100,48 @@ namespace Pickleball.Sandbox.Dialogue
         }
 
         /// <summary>
-        /// The least sideways camera offset at which the flat sightline from the
-        /// camera (<paramref name="pushIn"/> behind the player's head) to an NPC
-        /// <paramref name="npcDistance"/> in front passes
-        /// <paramref name="clearance"/> from the player's head. From the distance
-        /// of a point to a line: s·d / √((d + p)² + s²) ≥ c, so
-        /// s ≥ c·(d + p) / √(d² − c²). Infinite when the NPC is closer than the
-        /// clearance itself.
+        /// The least sideways camera offset s at which every flat sightline from
+        /// the camera (<paramref name="pushIn"/> = p behind the player's axis) to
+        /// an NPC <paramref name="npcDistance"/> = d ahead, up to
+        /// <paramref name="npcHalfWidth"/> = w either side of its axis, passes at
+        /// least <paramref name="clearance"/> = r from the player's axis. The
+        /// worst sightline goes to the NPC's far edge, (d, −w), from (−p, s); its
+        /// distance from the axis is (s·d − w·p) / √((d + p)² + (s + w)²) ≥ r,
+        /// whose larger root is solved exactly here. Being flat, it holds for the
+        /// NPC's head and feet alike, whatever the heights. Infinite when the NPC
+        /// stands inside the clearance.
         /// </summary>
-        public static float RequiredSideOffset(float npcDistance, float pushIn, float clearance)
+        public static float RequiredSideOffset(float npcDistance, float pushIn, float clearance,
+                                               float npcHalfWidth = 0f)
         {
-            if (clearance <= 0f) return 0f;
-            float d2 = npcDistance * npcDistance - clearance * clearance;
-            return d2 > 1e-6f ? clearance * (npcDistance + pushIn) / Mathf.Sqrt(d2) : float.PositiveInfinity;
+            if (clearance <= 0f) return npcDistance > 1e-6f ? Mathf.Max(0f, npcHalfWidth * pushIn / npcDistance) : 0f;
+            float d = npcDistance, p = pushIn, r = clearance, w = Mathf.Max(0f, npcHalfWidth);
+            float a = d * d - r * r;
+            if (a <= 1e-6f) return float.PositiveInfinity;
+            float halfB = w * (d * p + r * r);
+            float c = w * w * (p * p - r * r) - r * r * (d + p) * (d + p);
+            float disc = halfB * halfB - a * c;
+            return disc >= 0f ? (halfB + Mathf.Sqrt(disc)) / a : float.PositiveInfinity;
+        }
+
+        /// <summary>
+        /// The longest push-in, up to <paramref name="pushIn"/>, at which
+        /// <paramref name="maxSide"/> is enough to clear the player
+        /// (<see cref="RequiredSideOffset"/> grows with the push-in). 0 when even
+        /// a camera level with the player can't.
+        /// </summary>
+        public static float PushInFor(float npcDistance, float maxSide, float clearance, float npcHalfWidth,
+                                      float pushIn)
+        {
+            if (RequiredSideOffset(npcDistance, 0f, clearance, npcHalfWidth) > maxSide) return 0f;
+            float lo = 0f, hi = Mathf.Max(0f, pushIn);
+            for (int i = 0; i < 24; i++)
+            {
+                float mid = 0.5f * (lo + hi);
+                if (RequiredSideOffset(npcDistance, mid, clearance, npcHalfWidth) <= maxSide) lo = mid;
+                else hi = mid;
+            }
+            return lo;
         }
 
         /// <summary>

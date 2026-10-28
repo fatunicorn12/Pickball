@@ -6,46 +6,53 @@ namespace Pickleball.Tests.Dialogue
 {
     /// <summary>
     /// Pins the conversation shot: behind the player on the player → NPC line,
-    /// on the configured shoulder, wide enough that the sightline to the NPC's
-    /// head clears the player's head at any distance, the NPC's head at the
-    /// configured screen point with its feet above the box, never NaN, pulled
-    /// in (never pushed out) when something blocks it, and a blend path that
-    /// swings around the subjects instead of through them.
+    /// on the configured shoulder, wide enough that every sightline to the NPC
+    /// (head and feet, across its width) clears the player's body capsule at any
+    /// distance and height, the NPC's head at the configured screen point with
+    /// its feet above the box, never NaN, pulled in (never pushed out) when
+    /// something blocks it, and a blend path that swings around the subjects
+    /// instead of through them.
     /// </summary>
     public class DialogueFramingTests
     {
         const float Tolerance = 1e-4f;
         const float Aspect = 16f / 9f;
+        const float Clearance = 0.7f;     // controller radius + cloak margin
+        const float HalfWidth = 0.3f;
+        const float HeadTop = 0.45f;       // hair above the Head bone
+        const float HeadScreen = 0.62f;
 
         static DialogueFramingSettings Settings(float side = -0.8f) => new()
         {
             PushInDistance = 1.7f,
-            CameraHeight = 0.3f,
+            CameraHeight = 0.1f,
             SideOffset = side,
-            PlayerClearance = 0.45f,
-            MaxSideOffset = 1.6f,
-            NpcHeadScreenHeight = 0.66f,
+            PlayerClearance = Clearance,
+            NpcHalfWidth = HalfWidth,
+            MaxSideOffset = 2f,
+            NpcHeadScreenHeight = HeadScreen,
             NpcFeetScreenHeight = 0.31f,
-            NpcScreenSide = 0.1f,
-            MinFieldOfView = 30f,
-            MaxFieldOfView = 50f,
+            NpcScreenSide = 0.15f,
+            MinFieldOfView = 40f,
+            MaxFieldOfView = 55f,
         };
 
         static readonly Vector3 Feet = new(2f, 0f, -1f);
         static readonly Vector3 Head = Feet + Vector3.up * 1.35f;
 
         /// <summary>A Birdy-sized NPC <paramref name="distance"/> m ahead (+Z) of the
-        /// player's head, focus 0.85 m above its feet.</summary>
-        static (Vector3 focus, Vector3 feet) NpcAhead(float distance, float focusHeight = 0.85f)
+        /// player's axis, focus 0.85 m above its feet, its ground
+        /// <paramref name="drop"/> m below the player's.</summary>
+        static (Vector3 focus, Vector3 feet) NpcAhead(float distance, float focusHeight = 0.85f, float drop = 0f)
         {
-            var feet = Feet + new Vector3(0f, 0f, distance);
+            var feet = Feet + new Vector3(0f, -drop, distance);
             return (feet + Vector3.up * focusHeight, feet);
         }
 
-        static DialogueShot Solve(float distance, float side = -0.8f, float focusHeight = 0.85f)
+        static DialogueShot Solve(float distance, float side = -0.8f, float focusHeight = 0.85f, float drop = 0f)
         {
-            var (focus, feet) = NpcAhead(distance, focusHeight);
-            return DialogueFraming.Solve(Head, Vector3.forward, focus, feet, Aspect, Settings(side));
+            var (focus, feet) = NpcAhead(distance, focusHeight, drop);
+            return DialogueFraming.Solve(Head, Feet, Vector3.forward, focus, feet, Aspect, Settings(side));
         }
 
         /// <summary>A world point in the camera's local frame: x right, y up, z forward.</summary>
@@ -60,67 +67,113 @@ namespace Pickleball.Tests.Dialogue
             return new Vector2(0.5f + 0.5f * c.x / (c.z * tanHalf * Aspect), 0.5f + 0.5f * c.y / (c.z * tanHalf));
         }
 
-        static float DistanceToSegment(Vector3 p, Vector3 a, Vector3 b)
+        /// <summary>Shortest distance between segments ab and cd, by fine sampling of
+        /// ab against the exact point-to-segment distance to cd.</summary>
+        static float SegmentDistance(Vector3 a, Vector3 b, Vector3 c, Vector3 d)
         {
-            Vector3 ab = b - a;
-            float t = Mathf.Clamp01(Vector3.Dot(p - a, ab) / ab.sqrMagnitude);
-            return Vector3.Distance(p, a + ab * t);
+            float best = float.MaxValue;
+            for (int i = 0; i <= 400; i++)
+            {
+                Vector3 p = Vector3.Lerp(a, b, i / 400f);
+                Vector3 cd = d - c;
+                float t = Mathf.Clamp01(Vector3.Dot(p - c, cd) / cd.sqrMagnitude);
+                best = Mathf.Min(best, Vector3.Distance(p, c + cd * t));
+            }
+            return best;
         }
 
         // -------------------------------------------------------------- position
 
         [Test]
-        public void Camera_SitsBehindThePlayer_OnTheLineToTheNpc()
+        public void Camera_SitsBehindThePlayer_OnTheLineToTheNpc_AboveTheHead()
         {
-            var shot = Solve(3f);
-            Vector3 fromPivot = shot.Position - shot.Pivot;
+            var shot = Solve(2.4f);
+            Vector3 fromAxis = shot.Position - Feet;
 
             Assert.That(shot.Pivot, Is.EqualTo(Head), "the pivot is the player's head");
-            Assert.That(fromPivot.z, Is.EqualTo(-1.7f).Within(Tolerance), "behind, along the NPC line");
-            Assert.That(fromPivot.y, Is.EqualTo(0.3f).Within(Tolerance));
+            Assert.That(fromAxis.z, Is.EqualTo(-1.7f).Within(Tolerance), "behind, along the NPC line");
+            Assert.That(shot.Position.y, Is.EqualTo(Head.y + 0.1f).Within(Tolerance));
         }
 
         [TestCase(0.8f)]
         [TestCase(-0.8f)]
-        public void Camera_IsOverTheConfiguredShoulder_WhenTheNpcIsFarEnough(float side)
+        public void Camera_IsOverTheConfiguredShoulder_WhenNothingNeedsClearing(float side)
         {
-            // At 3 m the clearance needs only ~0.71 m, so the configured 0.8 holds.
-            var shot = Solve(3f, side);
-            Assert.That((shot.Position - shot.Pivot).x, Is.EqualTo(side).Within(Tolerance));
+            var settings = Settings(side);
+            settings.PlayerClearance = 0f;
+            settings.NpcHalfWidth = 0f;
+            var (focus, feet) = NpcAhead(2.4f);
+            var shot = DialogueFraming.Solve(Head, Feet, Vector3.forward, focus, feet, Aspect, settings);
+            Assert.That((shot.Position - Feet).x, Is.EqualTo(side).Within(Tolerance));
         }
 
         [Test]
-        public void Camera_SwingsWiderWhenTheNpcIsClose()
+        public void Camera_SwingsWiderWhenTheNpcIsCloser()
         {
-            float near = Mathf.Abs((Solve(1f).Position - Feet).x);
-            float far = Mathf.Abs((Solve(3f).Position - Feet).x);
+            float near = Mathf.Abs((Solve(1.5f).Position - Feet).x);
+            float far = Mathf.Abs((Solve(2.4f).Position - Feet).x);
             Assert.That(near, Is.GreaterThan(far));
-            Assert.That(near, Is.EqualTo(DialogueFraming.RequiredSideOffset(1f, 1.7f, 0.45f)).Within(1e-3f));
+            Assert.That(far, Is.EqualTo(DialogueFraming.RequiredSideOffset(2.4f, 1.7f, Clearance, HalfWidth))
+                                .Within(1e-3f));
         }
 
-        [TestCase(1.0f, 1.35f)]
-        [TestCase(1.5f, 1.35f)]
-        [TestCase(2.4f, 1.35f)]
-        [TestCase(1.0f, 0.85f)]
-        [TestCase(1.5f, 0.85f)]
-        [TestCase(2.4f, 0.85f)]
-        public void Sightline_ToTheNpcsHead_ClearsThePlayersHead(float distance, float focusHeight)
+        [Test]
+        public void Camera_TooCloseToClearFromBehind_ComesForwardToASideShot()
         {
-            // QA: the chibi's hair hid Birdy. The sightline must pass 0.45 m from
-            // the player's head, whatever the distance and the NPC's height.
-            var shot = Solve(distance, focusHeight: focusHeight);
-            var (focus, _) = NpcAhead(distance, focusHeight);
+            // At 1.0 m, clearing 0.7 m round the player from 1.7 m back needs ~4 m of
+            // swing; the cap is 2 m, so the camera comes forward instead.
+            var shot = Solve(1.0f);
+            Vector3 fromAxis = shot.Position - Feet;
+            Assert.That(Mathf.Abs(fromAxis.x), Is.LessThanOrEqualTo(2f + Tolerance));
+            Assert.That(fromAxis.z, Is.GreaterThan(-1.7f), "pushed in less than configured");
+            Assert.That(DialogueFraming.RequiredSideOffset(1f, -fromAxis.z, Clearance, HalfWidth),
+                        Is.LessThanOrEqualTo(2f + 1e-3f));
+        }
 
-            Assert.That(DistanceToSegment(shot.Pivot, shot.Position, focus), Is.GreaterThanOrEqualTo(0.45f - 1e-3f));
+        [TestCase(1.0f, 0.85f, 0f)]
+        [TestCase(1.5f, 0.85f, 0f)]
+        [TestCase(2.4f, 0.85f, 0f)]
+        [TestCase(1.0f, 1.35f, 0f)]
+        [TestCase(1.5f, 1.35f, 0f)]
+        [TestCase(2.4f, 1.35f, 0f)]
+        [TestCase(1.0f, 0.85f, 0.8f)]
+        [TestCase(1.5f, 0.85f, 0.8f)]
+        [TestCase(2.4f, 0.85f, 0.8f)]
+        public void Sightlines_ToTheNpcsHeadAndFeet_AcrossItsWidth_ClearThePlayersBody(
+            float distance, float focusHeight, float npcDrop)
+        {
+            // QA: the cloak hid most of Birdy. Every sightline from the camera to the
+            // NPC (head and feet, either edge) must clear the player's capsule: his
+            // axis from the feet to the top of the hair, radius = controller + cloak.
+            var shot = Solve(distance, focusHeight: focusHeight, drop: npcDrop);
+            var (focus, feet) = NpcAhead(distance, focusHeight, npcDrop);
+            Vector3 axisBottom = Feet, axisTop = Head + Vector3.up * HeadTop;
+
+            foreach (float edge in new[] { -HalfWidth, 0f, HalfWidth })
+            {
+                Vector3 across = Vector3.right * edge;
+                foreach (var target in new[] { focus + across, feet + across })
+                    Assert.That(SegmentDistance(shot.Position, target, axisBottom, axisTop),
+                                Is.GreaterThanOrEqualTo(Clearance - 2e-3f),
+                                $"edge {edge:+0.0;-0.0;0} to {(target.y > feet.y ? "head" : "feet")}");
+            }
+        }
+
+        [Test]
+        public void RequiredSideOffset_WithNoWidth_IsTheHeadOnlyFormula()
+        {
+            float d = 1.5f, p = 1.7f, r = 0.45f;
+            Assert.That(DialogueFraming.RequiredSideOffset(d, p, r, 0f),
+                        Is.EqualTo(r * (d + p) / Mathf.Sqrt(d * d - r * r)).Within(1e-4f));
+            Assert.That(DialogueFraming.RequiredSideOffset(0.3f, p, r, 0.3f), Is.EqualTo(float.PositiveInfinity));
         }
 
         [Test]
         public void Side_IsCappedAtTheMaximum_AndNeverNaN_WhenTheNpcIsInsideTheClearance()
         {
-            var shot = Solve(0.3f);
-            Assert.That(Mathf.Abs((shot.Position - shot.Pivot).x), Is.EqualTo(1.6f).Within(Tolerance));
+            var shot = Solve(0.5f);
+            Assert.That(Mathf.Abs((shot.Position - Feet).x), Is.EqualTo(2f).Within(Tolerance));
             Assert.That(float.IsNaN(shot.Rotation.x) || float.IsNaN(shot.FieldOfView), Is.False);
-            Assert.That(DialogueFraming.RequiredSideOffset(0.3f, 1.7f, 0.45f), Is.EqualTo(float.PositiveInfinity));
         }
 
         // ----------------------------------------------------------- composition
@@ -134,10 +187,21 @@ namespace Pickleball.Tests.Dialogue
             Vector2 npc = Viewport(shot, focus);
             Vector2 player = Viewport(shot, shot.Pivot);
 
-            Assert.That(npc.y, Is.EqualTo(0.66f).Within(1e-3f), "head on the upper third");
-            Assert.That(npc.x, Is.EqualTo(0.5f + Mathf.Sign(side) * 0.1f).Within(1e-3f), "toward the open side");
+            Assert.That(npc.y, Is.EqualTo(HeadScreen).Within(1e-3f), "head on the upper third");
+            Assert.That(npc.x, Is.EqualTo(0.5f + Mathf.Sign(side) * 0.15f).Within(1e-3f), "toward the open side");
             Assert.That(Mathf.Sign(player.x - 0.5f), Is.EqualTo(-Mathf.Sign(side)), "the shoulder fills the far side");
             Assert.That(InCamera(shot, focus).z, Is.GreaterThan(0f));
+        }
+
+        [TestCase(1.5f)]
+        [TestCase(2.4f)]
+        public void PlayerHead_IsInFrame_AsTheFramingShoulder(float distance)
+        {
+            var shot = Solve(distance);
+            Vector2 head = Viewport(shot, Head);
+            Assert.That(InCamera(shot, Head).z, Is.GreaterThan(0f));
+            Assert.That(head.x, Is.InRange(0.5f, 1.05f), "on the right of a left-shoulder shot");
+            Assert.That(head.y, Is.InRange(0.3f, 1.05f));
         }
 
         [TestCase(1.0f)]
@@ -147,14 +211,14 @@ namespace Pickleball.Tests.Dialogue
         {
             var shot = Solve(distance);
             var (_, feet) = NpcAhead(distance);
-            Assert.That(Viewport(shot, feet).y, Is.InRange(0.27f, 0.36f), "just above the box (bottom 0.27)");
+            Assert.That(Viewport(shot, feet).y, Is.GreaterThan(0.29f), "above the box (bottom 0.27)");
         }
 
         [Test]
         public void FieldOfView_IsClamped_ForVeryShortAndVeryTallNpcs()
         {
-            Assert.That(Solve(1.5f, focusHeight: 0.1f).FieldOfView, Is.EqualTo(30f).Within(Tolerance));
-            Assert.That(Solve(1.5f, focusHeight: 3f).FieldOfView, Is.EqualTo(50f).Within(Tolerance));
+            Assert.That(Solve(1.5f, focusHeight: 0.1f).FieldOfView, Is.EqualTo(40f).Within(Tolerance));
+            Assert.That(Solve(1.5f, focusHeight: 3f).FieldOfView, Is.EqualTo(55f).Within(Tolerance));
         }
 
         [TestCase(0.5f, 0.5f, 0f)]
@@ -177,9 +241,9 @@ namespace Pickleball.Tests.Dialogue
         public void Shot_RotatesWithTheScene()
         {
             var (focus, feet) = NpcAhead(2f);
-            var a = DialogueFraming.Solve(Head, Vector3.forward, focus, feet, Aspect, Settings());
+            var a = DialogueFraming.Solve(Head, Feet, Vector3.forward, focus, feet, Aspect, Settings());
             var turn = Quaternion.Euler(0f, 70f, 0f);
-            var b = DialogueFraming.Solve(turn * Head, turn * Vector3.forward, turn * focus, turn * feet,
+            var b = DialogueFraming.Solve(turn * Head, turn * Feet, turn * Vector3.forward, turn * focus, turn * feet,
                                           Aspect, Settings());
 
             Assert.That(Vector3.Distance(b.Position, turn * a.Position), Is.LessThan(1e-3f));
@@ -188,15 +252,15 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
-        public void NpcStraightAbove_FallsBackToThePlayersFacing_WithoutNaN()
+        public void NpcOnThePlayersAxis_FallsBackToThePlayersFacing_WithoutNaN()
         {
             var above = Feet + Vector3.up * 3f;
-            var shot = DialogueFraming.Solve(Head, Vector3.right, above, Feet, Aspect, Settings());
+            var shot = DialogueFraming.Solve(Head, Feet, Vector3.right, above, Feet, Aspect, Settings());
 
             Assert.That(float.IsNaN(shot.Position.x) || float.IsNaN(shot.Rotation.x), Is.False);
-            Assert.That((shot.Position - shot.Pivot).x, Is.EqualTo(-1.7f).Within(Tolerance), "behind along facing");
+            Assert.That((shot.Position - Feet).x, Is.LessThanOrEqualTo(Tolerance), "behind (or level) along facing");
 
-            var degenerate = DialogueFraming.Solve(Head, Vector3.up, above, Feet, Aspect, Settings());
+            var degenerate = DialogueFraming.Solve(Head, Feet, Vector3.up, above, Feet, Aspect, Settings());
             Assert.That(float.IsNaN(degenerate.Position.x) || float.IsNaN(degenerate.Rotation.w), Is.False);
         }
 
@@ -235,8 +299,8 @@ namespace Pickleball.Tests.Dialogue
             var recomposed = DialogueFraming.Compose(shot.Pivot, pulled, focus, feet, Aspect, Settings());
 
             Vector2 npc = Viewport(recomposed, focus);
-            Assert.That(npc.y, Is.EqualTo(0.66f).Within(1e-3f));
-            Assert.That(npc.x, Is.EqualTo(0.4f).Within(1e-3f));
+            Assert.That(npc.y, Is.EqualTo(HeadScreen).Within(1e-3f));
+            Assert.That(npc.x, Is.EqualTo(0.35f).Within(1e-3f));
         }
 
         // ------------------------------------------------------------ blend path
@@ -267,7 +331,7 @@ namespace Pickleball.Tests.Dialogue
         static (float orbit, float lerp) NearestToBodies(Vector3 start, float side)
         {
             Vector3 player = Vector3.zero, npcFeet = new(0f, 0f, 2f), npcFocus = npcFeet + Vector3.up * 0.85f;
-            var shot = DialogueFraming.Solve(player + Vector3.up * 1.35f, Vector3.forward, npcFocus, npcFeet,
+            var shot = DialogueFraming.Solve(player + Vector3.up * 1.35f, player, Vector3.forward, npcFocus, npcFeet,
                                              Aspect, Settings(side));
             var from = LookingAt(start, new Vector3(0f, 1.35f, 0f));
             var to = new Pose(shot.Position, shot.Rotation);
@@ -290,7 +354,7 @@ namespace Pickleball.Tests.Dialogue
         {
             // The orbit camera beyond the NPC, looking back at the player: the shot
             // is behind the player, so a straight lerp cuts through both of them.
-            var (orbit, lerp) = NearestToBodies(new Vector3(0f, 2f, 4.5f), side: -0.8f);
+            var (orbit, lerp) = NearestToBodies(new Vector3(1.5f, 2f, 4.5f), side: -0.8f);
             Assert.That(lerp, Is.LessThan(0.5f), "precondition: a straight lerp hits a body");
             Assert.That(orbit, Is.GreaterThan(1f), "the swing keeps a body's width clear");
         }
@@ -309,8 +373,8 @@ namespace Pickleball.Tests.Dialogue
         public void OrbitBlend_MidSwing_KeepsTheSubjectsInView()
         {
             Vector3 npcFeet = new(0f, 0f, 2f), npcFocus = npcFeet + Vector3.up * 0.85f;
-            var shot = DialogueFraming.Solve(Vector3.up * 1.35f, Vector3.forward, npcFocus, npcFeet, Aspect,
-                                             Settings());
+            var shot = DialogueFraming.Solve(Vector3.up * 1.35f, Vector3.zero, Vector3.forward, npcFocus, npcFeet,
+                                             Aspect, Settings());
             var from = LookingAt(new Vector3(0.1f, 2f, 4.5f), new Vector3(0f, 1.35f, 0f));
             var center = (shot.Pivot + npcFocus) * 0.5f;
 

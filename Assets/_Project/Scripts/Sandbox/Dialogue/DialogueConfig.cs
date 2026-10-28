@@ -83,35 +83,46 @@ namespace Pickleball.Sandbox.Dialogue
         [Tooltip("How far behind the pivot the camera sits, along the line from the player " +
                  "to the NPC, m. Smaller pulls the camera in closer.")]
         [SerializeField, Min(0.2f)] private float pushInDistance = 1.7f;
-        [Tooltip("Camera height above the pivot, m. A little up looks down on short NPCs.")]
-        [SerializeField] private float cameraHeight = 0.3f;
+        [Tooltip("Camera height above the player's head (Head bone), m. Near 0 keeps the shot " +
+                 "level, with the world behind the NPC in view; higher looks down onto a short NPC " +
+                 "and soon shows mostly ground. Clearance is sideways, so this never makes the " +
+                 "player hide the NPC.")]
+        [SerializeField] private float cameraHeight = 0.1f;
         [Tooltip("Least sideways camera offset, m; the sign picks the shoulder. Negative is " +
                  "over the player's left shoulder (the sword is on the right), positive the " +
-                 "right. Widened automatically when the NPC is close (Player Clearance).")]
+                 "right. Widened automatically when the NPC is close (Player Clearance Margin).")]
         [SerializeField] private float sideOffset = -0.8f;
-        [Tooltip("How far the sightline to the NPC's head must pass from the player's head, m. " +
-                 "The chibi's hair is ~0.32 m round its skull, so below ~0.4 the hair starts " +
-                 "to cover a short NPC. Larger swings the camera wider at close range.")]
-        [SerializeField, Min(0f)] private float playerClearance = 0.45f;
+        [Tooltip("Margin added to the player's CharacterController radius, m, for what sticks " +
+                 "out of it: the flared cloak, the hair, the sword. Every sightline from the camera " +
+                 "to the NPC clears that radius round the player's body axis, so larger swings " +
+                 "the camera wider at close range.")]
+        [SerializeField, Min(0f)] private float playerClearanceMargin = 0.3f;
+        [Tooltip("Player body radius used when he has no CharacterController, m.")]
+        [SerializeField, Min(0f)] private float playerFallbackRadius = 0.4f;
+        [Tooltip("Half-width of the NPC kept clear of the player in the shot, m, either side of " +
+                 "its axis (arms, wings, a staff). The NPC's own CapsuleCollider radius is used " +
+                 "when that is larger.")]
+        [SerializeField, Min(0f)] private float npcHalfWidth = 0.3f;
         [Tooltip("Largest sideways offset, m, however close the NPC stands.")]
-        [SerializeField, Min(0f)] private float maxSideOffset = 1.6f;
+        [SerializeField, Min(0f)] private float maxSideOffset = 2f;
 
         [Header("Camera — composition")]
-        [Tooltip("Screen height of the NPC's head (its focus point), 0 bottom to 1 top. About " +
-                 "0.66 puts it on the upper third.")]
-        [SerializeField, Range(0.3f, 0.95f)] private float npcHeadScreenHeight = 0.66f;
+        [Tooltip("Screen height of the NPC's head (its focus point), 0 bottom to 1 top. 0.62–0.67 " +
+                 "puts it on the upper third; lower leaves more room over a short NPC.")]
+        [SerializeField, Range(0.3f, 0.95f)] private float npcHeadScreenHeight = 0.62f;
         [Tooltip("Screen height the NPC's feet should reach down to, 0–1. Keep it above the " +
                  "dialogue box (which covers the bottom ~0.27) so the whole NPC shows.")]
         [SerializeField, Range(0f, 0.9f)] private float npcFeetScreenHeight = 0.31f;
         [Tooltip("How far the NPC sits from the screen centre toward the open side, away from " +
                  "the player's shoulder, in screen widths. 0 is dead centre.")]
-        [SerializeField, Range(0f, 0.4f)] private float npcScreenSide = 0.1f;
+        [SerializeField, Range(0f, 0.4f)] private float npcScreenSide = 0.15f;
         [Tooltip("Narrowest field of view, °. The field of view is chosen so the NPC fills the " +
-                 "space above the box; a very short NPC is not zoomed in past this.")]
-        [SerializeField, Range(10f, 90f)] private float minFieldOfView = 30f;
+                 "space above the box; this floor keeps a short NPC from being zoomed in so far " +
+                 "that the player's head and shoulder fall out of frame.")]
+        [SerializeField, Range(10f, 90f)] private float minFieldOfView = 40f;
         [Tooltip("Widest field of view, °. A tall NPC is cut off at the box rather than " +
                  "shrunk past this.")]
-        [SerializeField, Range(10f, 90f)] private float maxFieldOfView = 50f;
+        [SerializeField, Range(10f, 90f)] private float maxFieldOfView = 55f;
         [Tooltip("Seconds to blend from the orbit camera into the conversation shot.")]
         [SerializeField, Min(0.01f)] private float blendInSeconds = 0.45f;
         [Tooltip("Seconds the close takes, time still paused: the box fades and the camera " +
@@ -180,6 +191,12 @@ namespace Pickleball.Sandbox.Dialogue
         public bool RequireFree => requireFree;
         /// <summary>Airborne time that still counts as grounded, s.</summary>
         public float GroundedGraceSeconds => groundedGraceSeconds;
+        /// <summary>Margin added to the player's controller radius for the camera clearance, m.</summary>
+        public float PlayerClearanceMargin => playerClearanceMargin;
+        /// <summary>Player body radius when he has no CharacterController, m.</summary>
+        public float PlayerFallbackRadius => playerFallbackRadius;
+        /// <summary>Least NPC half-width kept clear of the player in the shot, m.</summary>
+        public float NpcHalfWidth => npcHalfWidth;
         /// <summary>Unscaled seconds after a close before a new talk may start.</summary>
         public float RestartCooldownSeconds => restartCooldownSeconds;
         /// <summary>Seconds of running time, input blocked, between the talk press and the pause.</summary>
@@ -260,7 +277,8 @@ namespace Pickleball.Sandbox.Dialogue
             PushInDistance = pushInDistance,
             CameraHeight = cameraHeight,
             SideOffset = sideOffset,
-            PlayerClearance = playerClearance,
+            PlayerClearance = playerFallbackRadius + playerClearanceMargin,
+            NpcHalfWidth = npcHalfWidth,
             MaxSideOffset = maxSideOffset,
             NpcHeadScreenHeight = npcHeadScreenHeight,
             NpcFeetScreenHeight = npcFeetScreenHeight,

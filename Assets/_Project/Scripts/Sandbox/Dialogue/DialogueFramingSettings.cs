@@ -14,9 +14,12 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>Least sideways camera offset, m; the sign picks the shoulder
         /// (negative: left). Widened by <see cref="PlayerClearance"/> when needed.</summary>
         public float SideOffset;
-        /// <summary>How far the sightline to the NPC's head must pass from the
-        /// player's head, m. Sets the side offset needed at each distance.</summary>
+        /// <summary>Radius round the player's vertical body axis that every
+        /// sightline to the NPC must clear, m: his controller radius plus a margin
+        /// for the cloak, hair and sword. Sets the side offset at each distance.</summary>
         public float PlayerClearance;
+        /// <summary>Half-width of the NPC kept in view, m, either side of its axis.</summary>
+        public float NpcHalfWidth;
         /// <summary>Largest sideways offset, m, however close the NPC stands.</summary>
         public float MaxSideOffset;
         /// <summary>Screen height of the NPC's focus point, 0 (bottom) to 1 (top).</summary>

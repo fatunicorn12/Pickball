@@ -28,10 +28,12 @@ and the views `UI/DialogueView.cs` and `UI/InteractPromptView.cs`. Setup:
   second so you slow to idle instead of freezing mid-stride, the camera starts to push in, and
   then time stops (`Time.timeScale` 0). The rest of the HUD fades out and the box fades and
   scales in.
-- **Talking.** The camera settles over your **left** shoulder (the sword is on the right), close
-  and tight. The NPC's head sits on the upper third, a little left of centre, with its feet just
-  above the box; the field of view is chosen from the NPC's height to make that so. At close
-  range the camera swings wider so your hair never hides the NPC. Text types at 45 characters a
+- **Talking.** The camera settles just above your head, out past your **left** shoulder (the
+  sword is on the right), looking nearly level. Your head and shoulder frame the right of the
+  shot; the NPC stands whole on the left, its head on the upper third and its feet just above
+  the box. The field of view is chosen from the NPC's height to make that so. The camera swings
+  out far enough that no part of your body or cloak covers any part of the NPC, and when the NPC
+  is very close it comes forward toward a side two-shot instead. Text types at 45 characters a
   second with short pauses after commas and full stops. The first press shows the whole line,
   the next goes to the next line; a pulsing ▼ marks a finished line. A hurried double-tap can't
   skip a line unread (0.12 s lockout after each change).
@@ -132,15 +134,29 @@ saving it for the release. The readers' gate fields are optional; empty keeps th
 | `SpacetimeView.Update` | `Spacetime` | T / d-pad left dropped |
 | — | `Camera` | no reader yet: the dialogue camera disables `SandboxOrbitCamera` instead |
 
-**The camera shot** (`DialogueFraming`, pure and tested). Position: behind the player's head on
-the flat player → NPC line, raised, and shifted to the configured shoulder by the larger of
-`sideOffset` and the offset at which the sightline to the NPC's head passes `playerClearance`
-from the player's head, s ≥ c·(d + p)/√(d² − c²), capped at `maxSideOffset`. Rotation: solved
-exactly (no roll) so the NPC's focus lands at a set screen point. Field of view: chosen from the
-NPC's height (focus above its root) so the feet reach the set height above the box, clamped.
-When a wall pulls the camera in, the composition is re-solved for the new spot. The blend in and
-out swings around the player/NPC midpoint (`OrbitBlend`): yaw turns the short way, radius and
-height are lerped, so the camera never passes through either body.
+**The camera shot** (`DialogueFraming`, pure and tested). Pivot: the player's humanoid Head
+bone (without one, his root raised by `playerFocusHeight`). Position: on the flat line from the
+player's body axis (his root) to the NPC's feet, `pushInDistance` back from the axis,
+`cameraHeight` above the pivot, and shifted toward the configured shoulder. The shift is the
+larger of `sideOffset` and the least offset at which **every** sightline from the camera to the
+NPC (to its head and to its feet, at either edge of its half-width) passes outside the player's
+body: a vertical capsule round his axis, from his feet to the top of his head, of radius
+CharacterController radius × scale (`playerFallbackRadius` without one) + `playerClearanceMargin`.
+In plan view all those sightlines collapse to two lines, and clearing the vertical cylinder
+there clears the capsule at any height, including when the player stands above or below the
+NPC. The tightest one, from the camera at (−p, s) to the NPC's far edge at (d, −w), must satisfy
+(s·d − w·p) / √((d + p)² + (s + w)²) ≥ r; `RequiredSideOffset` solves that exactly as the larger
+root of a quadratic. The NPC's half-width is the larger of `npcHalfWidth` and its
+`CapsuleCollider` radius; both radii are read once when the talk starts. If the required offset
+exceeds `maxSideOffset`, `PushInFor` shortens the push-in (bisection) until the capped offset
+clears, so a very close NPC gets a side two-shot rather than a hidden face. Rotation: solved
+exactly (no roll) so the NPC's focus lands at (0.5 ∓ `npcScreenSide`, `npcHeadScreenHeight`),
+on the side away from the player's shoulder. Field of view: chosen from the NPC's height (focus
+above its root) so its feet reach `npcFeetScreenHeight`, above the box, clamped to
+`minFieldOfView`–`maxFieldOfView`; the floor keeps the player's head and shoulder in frame. When
+a wall pulls the camera in, the composition is re-solved for the new spot. The blend in and out
+swings around the player/NPC midpoint (`OrbitBlend`): yaw turns the short way, radius and height
+are lerped, so the camera never passes through either body.
 
 **Typewriter counting** matches TextMeshPro's `maxVisibleCharacters`: only TMP-valid tags
 (`<`, optional `/`, a letter or `#`, a closing `>` with no `<` before it) are tags; formatting
@@ -160,7 +176,10 @@ lifecycle events allocate an invocation list a few times per conversation.
 ## 3. How to tune
 
 Everything is on `DialogueConfig` (Inspector tooltips give units). It is read live, so tune in
-Play mode.
+Play mode. Setup Dialogue creates `DialogueConfig.asset` only when it is missing and the asset is
+not committed, so a checkout that ran the menu before a change of defaults keeps the old values.
+To take the new ones, use the asset's ⋮ ▸ Reset in the Inspector, which keeps its GUID and every
+reference to it.
 
 | Feel | Fields |
 |---|---|
@@ -171,7 +190,8 @@ Play mode.
 | Text speed and rhythm | `charactersPerSecond` (0 = instant), `commaPauseSeconds`, `sentencePauseSeconds` |
 | Presses feel ignored, or lines get skipped | `advanceLockoutSeconds`, `textStartDelaySeconds` |
 | E reopens the talk too easily | `restartCooldownSeconds` |
-| Camera position | `playerFocusHeight`, `pushInDistance`, `cameraHeight`, `sideOffset` (sign = shoulder), `playerClearance`, `maxSideOffset` |
+| Camera position | `pushInDistance`, `cameraHeight` (above the Head bone; near 0 is level), `sideOffset` (sign = shoulder), `maxSideOffset`, `playerFocusHeight` (pivot only without a Head bone) |
+| Player's body or cloak still covers the NPC, or the camera swings too wide | `playerClearanceMargin` (added to the controller radius), `playerFallbackRadius`, `npcHalfWidth`, `maxSideOffset` |
 | Where the NPC sits on screen, how big | `npcHeadScreenHeight`, `npcFeetScreenHeight`, `npcScreenSide`, `minFieldOfView`, `maxFieldOfView` |
 | Camera speed | `blendInSeconds`, `closeSeconds` (also how long time stays stopped after the last line) |
 | Camera clipping | `cameraCollisionRadius`, `minCameraDistance`, `cameraObstructionMask` |
@@ -211,8 +231,18 @@ overload) plus a choice list in `DialogueView`; the director and camera need no 
 ## 5. Known limitations and open questions
 
 - **Play-tested headlessly only.** QA's PlayMode integration run (real Input System events,
-  Birdy merged) passed every functional check; the framing was redesigned after it, and that
-  redesign is verified by EditMode tests and stand-in renders, not yet by a run with Birdy.
+  Birdy merged) passed every functional check. The redesigned shot was then re-run headlessly
+  with the real Birdy: natural walk-ups from in front at about 1.1, 1.5 and 2.1 m, from his left
+  and right, and with the orbit camera starting in front and to the side. Birdy's head and body
+  were 0% hidden in every case, his lowest vertex sat above the box, and the blend kept 2 m from
+  both bodies. Nobody has judged the shot by eye in the Editor yet.
+- **The shot is usually at the side-offset cap.** The chibi's controller plus the cloak margin
+  is a wide body, so at natural talk distances the required offset reaches `maxSideOffset` (2 m)
+  and the push-in shortens instead. The result is a wide over-the-shoulder two-shot rather than
+  a tight one. Lowering `playerClearanceMargin` tightens it, at the cost of the cloak's edge.
+- **Body sizes are assumptions.** The NPC's height is focus minus root, so its root must be at
+  its feet. Anything sticking out past `npcHalfWidth` or the NPC's capsule (a big wing or staff)
+  can still be crossed by the player; raise `npcHalfWidth` for such an NPC.
 - **No touch input.** The Sandbox has no touch controls at all, so there is no way to talk on a
   phone yet. The box layout is phone-safe (width-relative, bottom-centre, clear of the notch).
 - **The lock-on reticle stays visible during a talk** (locked ring or hint arrow over the NPC).
