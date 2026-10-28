@@ -127,6 +127,37 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
+        [Ignore("Known bug DLG-R2-1: mashing E to skip text reopens the same conversation 0.35 s after it " +
+                "closes (playtest: 3 conversations in 7 s at 15 Hz and at 6.7 Hz). " +
+                "See Pickball-playtest/reports/R-dialogue-birdnpc.md.")]
+        public void MashingE_ThroughTheEnd_DoesNotReopenTheTalk()
+        {
+            NpcAt(new Vector3(0f, 0f, 1.5f));
+            _interactor.Tick(Frame, false);
+            _interactor.Tick(Frame, true);                      // talk
+            _director.Tick(_config.TextStartDelaySeconds + 0.01f, false);
+            int reopened = 0;
+            _director.ConversationStarting += _ => reopened++;
+
+            // A press every 4 frames (15 Hz) for 2 s: through both lines, the close,
+            // the release and well past the restart cooldown, the way a player
+            // mashes to skip text. Same frame order as the game: interactor, director.
+            for (int frame = 0; frame < 120; frame++)
+            {
+                bool press = frame % 4 == 0;
+                _interactor.Tick(Frame, press);
+                _director.Tick(Frame, press);
+            }
+
+            Assert.That(reopened, Is.EqualTo(0), "a mashed E must not start the conversation again");
+
+            // Once the player stops pressing, a fresh press after the cooldown talks again.
+            for (int frame = 0; frame < 60; frame++) { _interactor.Tick(Frame, false); _director.Tick(Frame, false); }
+            _interactor.Tick(Frame, true);
+            Assert.That(_director.IsBusy, Is.True);
+        }
+
+        [Test]
         public void NpcWhosePromptIsOffScreen_IsNotATarget_AndEStaysDash()
         {
             // The prompt view only draws a pill that is on screen; E must only talk
