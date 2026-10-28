@@ -38,15 +38,15 @@ namespace Pickleball.Sandbox
         [Header("Timing")]
         [Tooltip("Warning window before the beam does damage. The line is drawn " +
                  "and tracking during it, so it doubles as the 'stop now' tell.")]
-        [SerializeField] private float chargeTime = 1.1f;
+        [SerializeField] private float chargeTime = 1.6f;
 
         [Tooltip("How long the beam stays lethal once charged.")]
-        [SerializeField] private float fireTime = 2.4f;
+        [SerializeField] private float fireTime = 2.0f;
 
         [Header("Damage")]
         [Tooltip("Damage per second per m/s of your own speed. A 4.84 m/s sprint " +
                  "at 3.0 costs about 13.5 HP/s, permanently.")]
-        [SerializeField] private float damagePerSpeed = 3f;
+        [SerializeField] private float damagePerSpeed = 1.5f;
 
         [Tooltip("Speed below this is free. Covers controller jitter and the tail " +
                  "of a deceleration so standing still really is zero.")]
@@ -54,7 +54,11 @@ namespace Pickleball.Sandbox
 
         [Tooltip("Ceiling on damage per second, however fast you move — stops a " +
                  "dash (14 m/s) through the beam deleting the bar.")]
-        [SerializeField] private float maxDamagePerSecond = 30f;
+        [SerializeField] private float maxDamagePerSecond = 18f;
+
+        [Tooltip("Ceiling on the total damage one firing can deal, however fast the " +
+                 "player runs. 0 = uncapped.")]
+        [SerializeField] private float maxDamagePerFire = 30f;
 
         [Tooltip("Time constant, seconds, the measured speed is smoothed over. Only " +
                  "absorbs single-frame controller spikes; speed is not spiky the " +
@@ -165,7 +169,9 @@ namespace Pickleball.Sandbox
             if (dps > 0f && _playerHealth != null && HitsPlayer(out Vector3 point))
             {
                 // recoverable: false — this is the permanent one.
-                _playerHealth.Damage(dps * dt, point, recoverable: false);
+                float dmg = BudgetedDamage(dps * dt, _fireDamage, maxDamagePerFire);
+                _fireDamage += dmg;
+                if (dmg > 0f) _playerHealth.Damage(dmg, point, recoverable: false);
             }
 
             if (_stateTime >= fireTime) Stop();
@@ -208,6 +214,16 @@ namespace Pickleball.Sandbox
             if (over <= 0f) return 0f;
             return Mathf.Min(over * perSpeed, ceiling);
         }
+
+        /// <summary>Damage this tick after the per-fire cap: never more than what
+        /// is left of <paramref name="cap"/> (0 = uncapped). Pure, for tests.</summary>
+        public static float BudgetedDamage(float wanted, float spent, float cap)
+        {
+            if (cap <= 0f) return wanted;
+            return Mathf.Clamp(cap - spent, 0f, wanted);
+        }
+
+        float _fireDamage;
 
         void TrackPlayer(float dt)
         {
@@ -302,6 +318,7 @@ namespace Pickleball.Sandbox
         {
             _state = next;
             _stateTime = 0f;
+            if (next == State.Firing) _fireDamage = 0f;
         }
 
         /// <summary>Live reading, for a HUD that wants to tell the player exactly

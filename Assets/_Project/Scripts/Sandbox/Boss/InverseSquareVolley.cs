@@ -41,12 +41,15 @@ namespace Pickleball.Sandbox
 
         [Header("Inverse square")]
         [Tooltip("Damage when hit exactly referenceDistance from Newton.")]
-        [SerializeField] private float baseDamage = 8f;
+        [SerializeField] private float baseDamage = 7f;
         [SerializeField] private float referenceDistance = 4f;
         [SerializeField] private float minDamage = 1f;
-        [SerializeField] private float maxDamage = 30f;
+        [SerializeField] private float maxDamage = 18f;
 
         [Header("Hit")]
+        [Tooltip("After an orb hits the player, the rest of that ring cannot damage " +
+                 "them for this many seconds (stand-in for a Health-level hit grace).")]
+        [SerializeField] private float ringHitGrace = 0.5f;
         [SerializeField] private float orbRadius = 0.35f;
 
         [Header("Presentation")]
@@ -63,10 +66,14 @@ namespace Pickleball.Sandbox
             public Transform Visual;
             public Vector3 Origin, Direction, Previous;
             public float Travelled;
+            public int Ring;
         }
 
         readonly List<Orb> _orbs = new();
         readonly List<float> _pendingRings = new();
+        readonly RingHitGrace _grace = new();
+        float _clock;
+        int _nextRing;
         ChibiLocomotion _player;
         Health _playerHealth;
 
@@ -95,6 +102,7 @@ namespace Pickleball.Sandbox
 
         public void Clear()
         {
+            _grace.Clear();
             _pendingRings.Clear();
             for (int i = 0; i < _orbs.Count; i++)
                 if (_orbs[i].Visual != null) Destroy(_orbs[i].Visual.gameObject);
@@ -106,6 +114,7 @@ namespace Pickleball.Sandbox
         void Update()
         {
             float dt = Time.deltaTime;
+            _clock += dt;
 
             for (int i = _pendingRings.Count - 1; i >= 0; i--)
             {
@@ -139,7 +148,7 @@ namespace Pickleball.Sandbox
 
                 if (_player != null && HitsPlayer(orb.Previous, now, playerCentre))
                 {
-                    if (_playerHealth != null)
+                    if (_playerHealth != null && _grace.TryHit(orb.Ring, _clock, ringHitGrace))
                         _playerHealth.Damage(DamageAt(orb.Travelled, baseDamage,
                                                       referenceDistance, minDamage, maxDamage),
                                              now);
@@ -163,6 +172,7 @@ namespace Pickleball.Sandbox
             Vector3 origin = transform.position + Vector3.up * flightHeight;
             float offset = Random.Range(0f, 360f);
             int count = Mathf.Max(orbsPerRing, 1);
+            int ring = _nextRing++;
 
             for (int i = 0; i < count; i++)
             {
@@ -175,6 +185,7 @@ namespace Pickleball.Sandbox
                     Direction = dir,
                     Previous = origin,
                     Travelled = 0f,
+                    Ring = ring,
                 });
             }
         }
@@ -201,5 +212,28 @@ namespace Pickleball.Sandbox
             if (_orbs[index].Visual != null) Destroy(_orbs[index].Visual.gameObject);
             _orbs.RemoveAt(index);
         }
+    }
+}
+
+namespace Pickleball.Sandbox
+{
+    /// <summary>
+    /// Per-ring hit grace: once an orb of a ring has damaged the player, the rest
+    /// of that ring is harmless for a short window. Pure, so it can be swept at
+    /// any frame rate in a test.
+    /// </summary>
+    public sealed class RingHitGrace
+    {
+        readonly System.Collections.Generic.Dictionary<int, float> _until = new();
+
+        /// <summary>True if the orb may damage; records the grace when it does.</summary>
+        public bool TryHit(int ring, float now, float grace)
+        {
+            if (_until.TryGetValue(ring, out float until) && now < until) return false;
+            _until[ring] = now + grace;
+            return true;
+        }
+
+        public void Clear() => _until.Clear();
     }
 }

@@ -241,12 +241,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ab105deea07e15a4ca6569f2322ede4c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.GravityWell
-  strength: 90
+  strength: 60
   influenceRadius: 14
   coreRadius: 1.8
-  coreDamagePerSecond: 9
-  coreMoveLock: 0.25
-  lifetime: 9
+  coreDamagePerSecond: 6
+  coreMoveLock: 0
+  lifetime: 6
   spawnRamp: 0.6
   core: {fileID: 1023863783807744002}
   debris: {fileID: 4269426670114339776}
