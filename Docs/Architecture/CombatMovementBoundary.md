@@ -1,6 +1,6 @@
 # The combat ↔ movement ↔ lock-on boundary
 
-Snapshot as of `a930952`. Movement and sword combat each have a system doc
+Snapshot as of `a930952`, updated for the QA fixes through `f876b63`. Movement and sword combat each have a system doc
 (`Docs/Systems/Movement.md`, `Docs/Systems/SwordAbilities.md`). This page records how the three
 player systems meet, because that seam belongs to neither doc and is where regressions hide.
 
@@ -58,15 +58,15 @@ right-stick look, and `LockOnTargeting` reads them as left/right target hops. Th
 is measured once, at lock time, so the camera doesn't "breathe".
 
 **Grounding is deliberately asymmetric.** Landing refills the air chain at once (commit
-`1e38c1c`); leaving the ground waits `airborneGraceSeconds`. *Known gap:* the ground/air **track**
-for a new swing is chosen from the raw `IsGrounded`, so a one-frame grounded flicker can still
-start an air step and drop the ground chain.
+`1e38c1c`); leaving the ground waits `airborneGraceSeconds`. Since `6991c60`, one pure
+`GroundContact` gives the graced answer, and that answer both picks a new swing's ground/air
+track and decides when the ground chain is dropped. A one-frame flicker can no longer start an
+air step.
 
 **Vertical levers exist but are not wired.** `ChibiLocomotion.SetVerticalVelocity` and
 `SuspendGravity` (commit `657117d`) forward to the motor, but nothing calls them, and neither the
-adapter nor the interfaces expose them. They have not been play-tested.
-`MovementMotor.SuspendGravity`'s timer only counts down and is not cleared on landing, so leftover
-hang time can freeze a later fall. Fix that before combat starts using it.
+adapter nor the interfaces expose them. They have not been play-tested in combat. Since
+`f876b63`, `SuspendGravity`'s hang ends on landing.
 
 ## Pad and key layout contract
 

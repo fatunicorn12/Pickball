@@ -114,7 +114,11 @@ namespace Pickleball.Sandbox
 
         public SwordMoveset Moveset => moveset;
 
-        const int OverlapCapacity = 16;
+        // Room for level geometry as well as targets: the overlap queries run on
+        // the hittable mask, and a 3 m ring on a busy map can return a dozen
+        // floor and wall colliders. With 16 slots those could crowd the actual
+        // target out of the results.
+        const int OverlapCapacity = 64;
         const int BurstCapacity = 4;
 
         ICombatMovement _movement;
@@ -359,21 +363,33 @@ namespace Pickleball.Sandbox
             for (int i = 0; i < count; i++)
             {
                 var col = _overlap[i];
-                if (!TryGetTarget(col, _alreadyHit, out var target)) continue;   // once per swing
+                if (!TryResolveTarget(col, out var target)) continue;
+                if (!MarkStruck(_alreadyHit, target)) continue;                   // once per swing
 
-                Vector3 point = col.ClosestPoint((a + b) * 0.5f);
+                Vector3 point = HitPoint.Nearest(col, (a + b) * 0.5f);
                 Deal(target, col, point, hit, hit.PushAlong(transform.forward), _current, fromBurst: false);
             }
         }
 
-        bool TryGetTarget(Collider col, HashSet<Object> struck, out IDamageable target)
+        /// <summary>The damageable <paramref name="col"/> belongs to, if any and
+        /// not ourselves. No side effects: resolving a target must not count as
+        /// striking it — a ring checks reach first.</summary>
+        bool TryResolveTarget(Collider col, out IDamageable target)
         {
             target = null;
             if (col == null || col.transform.IsChildOf(transform)) return false;
             target = col.GetComponentInParent<IDamageable>();
-            if (target == null) return false;
-            return !(target is Object key) || struck.Add(key);
+            return target != null;
         }
+
+        static bool AlreadyStruck(HashSet<Object> struck, IDamageable target)
+            => target is Object key && struck.Contains(key);
+
+        /// <summary>Record <paramref name="target"/> as struck; false if it already
+        /// was. A damageable that is not a Unity object cannot be tracked and is
+        /// always allowed through.</summary>
+        static bool MarkStruck(HashSet<Object> struck, IDamageable target)
+            => !(target is Object key) || struck.Add(key);
 
         void Deal(IDamageable target, Collider col, Vector3 point, HitSettings hit, Vector3 push,
                   ResolvedStep placement, bool fromBurst)
@@ -432,10 +448,14 @@ namespace Pickleball.Sandbox
             for (int i = 0; i < count; i++)
             {
                 var col = _overlap[i];
-                if (col == null || col.transform.IsChildOf(transform)) continue;
-                Vector3 point = col.ClosestPoint(slot.Centre);
-                if (!burst.Reaches(slot.Centre, point, radius)) continue;
-                if (!TryGetTarget(col, slot.Struck, out var target)) continue;
+                // Target first: the overlap returns map geometry too, and measuring
+                // a non-convex level mesh is what flooded the console with
+                // ClosestPoint warnings. Only a target's colliders get measured.
+                if (!TryResolveTarget(col, out var target)) continue;
+                if (AlreadyStruck(slot.Struck, target)) continue;
+                Vector3 point = HitPoint.Nearest(col, slot.Centre);
+                if (!burst.Reaches(slot.Centre, point, radius)) continue;   // edge not there yet
+                MarkStruck(slot.Struck, target);
                 // The ring is reported as the step that released it, even if the
                 // chain has moved on by the time its edge arrives.
                 Deal(target, col, point, burst.Hit, burst.Hit.PushAlong(point - slot.Centre),
