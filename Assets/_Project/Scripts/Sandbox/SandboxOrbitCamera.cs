@@ -31,7 +31,7 @@ namespace Pickleball.Sandbox
         [SerializeField] private float sensitivity = 0.12f;
         [SerializeField] private float minPitch = -25f;
         [SerializeField] private float maxPitch = 65f;
-        [SerializeField] private float followSmoothTime = 0.06f;
+        [SerializeField] private float followSmoothTime = 0.18f;
 
         [Header("Gamepad")]
         [Tooltip("Right-stick turn rate at full tilt, in degrees per second.")]

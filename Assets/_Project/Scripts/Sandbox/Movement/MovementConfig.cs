@@ -28,7 +28,7 @@ namespace Pickleball.Sandbox.Movement
         // ------------------------------------------------------------- ground
         [Header("Ground — run")]
         [Tooltip("Top speed at full stick before the sprint kicks in, m/s.")]
-        [SerializeField, Min(0.1f)] private float runSpeed = 4.2f;
+        [SerializeField, Min(0.1f)] private float runSpeed = 5f;
         [Tooltip("Starting from rest, he jumps straight to this speed, m/s (Sunshine " +
                  "kicks Mario to 8 units/frame). What makes the first step feel instant.")]
         [SerializeField, Min(0f)] private float runStartSpeed = 1.5f;
@@ -53,7 +53,7 @@ namespace Pickleball.Sandbox.Movement
         [SerializeField, Min(0.1f)] private float sprintSpeed = 7f;
         [Tooltip("Seconds of continuous running before the sprint starts. No button: he " +
                  "just picks up pace.")]
-        [SerializeField, Min(0f)] private float sprintDelay = 1f;
+        [SerializeField, Min(0f)] private float sprintDelay = 0.6f;
         [Tooltip("Seconds to ramp from run speed to sprint speed once the delay is up.")]
         [SerializeField, Min(0f)] private float sprintRampTime = 0.4f;
         [Tooltip("A gap in running shorter than this (s) keeps the sprint — a stick " +
@@ -91,13 +91,13 @@ namespace Pickleball.Sandbox.Movement
         [SerializeField, Range(0f, 1f)] private float skidMinStick = 0.5f;
         [Tooltip("Length of the whole redirect, s. Sunshine's brake + turn-end is ~0.4 s " +
                  "and throws your speed away; this keeps it. 0 = an instant flip.")]
-        [SerializeField, Min(0f)] private float skidDuration = 0.14f;
+        [SerializeField, Min(0f)] private float skidDuration = 0.22f;
         [Tooltip("Fraction of the skid (0–1) spent planted, braking along the old " +
                  "direction while the body swings round, before pushing off.")]
         [SerializeField, Range(0f, 1f)] private float skidPlantFraction = 0.4f;
         [Tooltip("Exit speed as a fraction of entry speed (0–1.2). 1 = every bit of " +
                  "momentum kept (Sunshine: ~0.25).")]
-        [SerializeField, Range(0f, 1.2f)] private float skidSpeedKeep = 0.92f;
+        [SerializeField, Range(0f, 1.2f)] private float skidSpeedKeep = 0.45f;
         [Tooltip("How fast the plant still slides on along the old direction, as a " +
                  "fraction of entry speed (0–1). 0 = stops dead.")]
         [SerializeField, Range(0f, 1f)] private float skidSlide = 0.3f;
@@ -114,10 +114,10 @@ namespace Pickleball.Sandbox.Movement
         [SerializeField, Min(0f)] private float doubleJumpHeight = 2.8f;
         [Tooltip("Apex of the triple jump (a flip), m (Sunshine: 8.6 — about 5 body " +
                  "heights, which overshoots this world).")]
-        [SerializeField, Min(0f)] private float tripleJumpHeight = 4.5f;
+        [SerializeField, Min(0f)] private float tripleJumpHeight = 6f;
         [Tooltip("Extra apex at full sprint speed for single and double jumps, as a " +
                  "fraction of their standing height (Sunshine: +41% single, +35% double).")]
-        [SerializeField, Range(0f, 1f)] private float runningJumpBonus = 0.38f;
+        [SerializeField, Range(0f, 1f)] private float runningJumpBonus = 0.2f;
         [Tooltip("Horizontal speed kept on a single or double jump's takeoff (0–1). " +
                  "Sunshine: 0.8. The triple keeps all of it.")]
         [SerializeField, Range(0f, 1f)] private float jumpTakeoffSpeedKeep = 0.8f;
@@ -194,7 +194,7 @@ namespace Pickleball.Sandbox.Movement
         [Header("Belly slide")]
         [Tooltip("Speed decay sliding with the stick neutral, 1/s (exponential: speed × " +
                  "e^(−this·t)). Sunshine: 2.5 at our time scale — ~1.4 s from a full dive.")]
-        [SerializeField, Min(0f)] private float bellySlideDecay = 2.5f;
+        [SerializeField, Min(0f)] private float bellySlideDecay = 1.8f;
         [Tooltip("Same, holding the stick forward, 1/s (Sunshine: 0.8 — a long glide).")]
         [SerializeField, Min(0f)] private float bellySlideDecayForward = 0.8f;
         [Tooltip("Same, holding the stick back, 1/s (Sunshine: 4.2 — a brake).")]
@@ -335,6 +335,12 @@ namespace Pickleball.Sandbox.Movement
                  "Sunshine keeps Mario grounded over drops of up to 100 units (1.06 m at our " +
                  "scale). 0 = off.")]
         [SerializeField, Min(0f)] private float groundSnapDistance = 0.35f;
+        [Tooltip("Push down a face steeper than the controller slope limit, m/s^2. Sunshine " +
+                 "slides you off steep slopes instead of letting you freeze on them. Must " +
+                 "beat Momentum Ground Drag. 0 = off.")]
+        [SerializeField, Min(0f)] private float steepSlideAcceleration = 30f;
+        [Tooltip("Top speed of that slide, m/s.")]
+        [SerializeField, Min(0f)] private float steepSlideMaxSpeed = 8f;
 
         // ------------------------------------------------------------ getters
         public float RunSpeed => runSpeed;
@@ -434,6 +440,8 @@ namespace Pickleball.Sandbox.Movement
         public float LockAttackTurnTime => lockAttackTurnTime;
         public float GroundProbe => groundProbe;
         public float GroundSnapDistance => groundSnapDistance;
+        public float SteepSlideAcceleration => steepSlideAcceleration;
+        public float SteepSlideMaxSpeed => steepSlideMaxSpeed;
 
         /// <summary>The jump gravity profile: light rise, hanging apex, heavy fall.</summary>
         public GravityProfile JumpGravity

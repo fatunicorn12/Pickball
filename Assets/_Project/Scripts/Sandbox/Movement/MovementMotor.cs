@@ -499,7 +499,37 @@ namespace Pickleball.Sandbox.Movement
 
             float drag = IsGrounded ? c.MomentumGroundDrag : c.MomentumAirDrag;
             Momentum = Vector3.MoveTowards(Momentum, Vector3.zero, drag * dt);
+
+            // Pressed against a face too steep to stand on: slide down it (Sunshine)
+            // rather than freeze. Collected by OnControllerColliderHit during Move.
+            if (_steepNormalSet)
+            {
+                _steepNormalSet = false;
+                Vector3 push = SteepSlope.SlideAcceleration(_steepNormal, _cc.slopeLimit,
+                                                            c.SteepSlideAcceleration);
+                if (push.sqrMagnitude > 0f)
+                {
+                    Vector3 m = Momentum + push * dt;
+                    Momentum = Vector3.ClampMagnitude(m, Mathf.Max(c.SteepSlideMaxSpeed, Momentum.magnitude));
+                }
+            }
         }
+
+        Vector3 _steepNormal;
+        bool _steepNormalSet;
+
+        void OnControllerColliderHit(ControllerColliderHit hit)
+        {
+            if (SteepSlope.IsSlideSurface(hit.normal, _cc.slopeLimit))
+            {
+                _steepNormal = hit.normal;
+                _steepNormalSet = true;
+            }
+        }
+
+        /// <summary>True when walkable floor is within the ground probe below him
+        /// (used by the dash exit).</summary>
+        internal bool FloorWithinProbe() => FindFloor(Config.GroundProbe, out _);
 
         /// <summary>
         /// Keeps a ground move on the ground over a downslope or a small step down,
