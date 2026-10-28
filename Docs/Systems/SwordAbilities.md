@@ -90,6 +90,20 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
 | `SwordEffects` | Blade trail tint and emit, impact sparks, pooled hit and burst effects, camera shake and FOV kick. | presentation |
 | `ProgressionToast` | Shows the Q.E.D. / New-technique banner queue and the `LV n · x / y Lemmas` readout (on the `SwordHUD` canvas). | presentation |
 
+### Hit detection (`MeleeCombat`)
+- The blade and the rings both overlap-query the `hittable` mask into one buffer of **64**
+  colliders. It is that large because a 3 m ring on a busy map also returns floor and wall
+  colliders; with the old 16 slots they could crowd the real target out of the results.
+- Each collider is first **resolved** to the `IDamageable` it belongs to; the player's own colliders
+  are skipped. Anything that isn't a target is dropped before it is measured.
+- Resolving a target, checking whether it was **already struck**, and **marking** it struck are
+  separate steps:
+  - The blade marks a target as soon as it resolves: one hit per target per swing.
+  - A ring skips targets it already struck, measures the rest, and marks a target only once its
+    edge has reached it. Marking on resolve would make an expanding ring skip, for good, a target
+    its edge hadn't reached yet.
+- Hit points come from `HitPoint.Nearest`, never `Collider.ClosestPoint` directly (see below).
+
 ### Pure logic (plain C#, EditMode-tested)
 - **`ComboResolver`:** picks the next step. A chain on either track is
   `[opener?] base hits… extenders by chainOrder… [finisher]`. The rules:
@@ -113,6 +127,13 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
     and base swept since last frame.
   - So the first live frame, the frame the blade stops, and a long frame that jumps the whole
     window are all tested.
+- **`HitPoint`:** where on a collider a hit lands.
+  - Box, sphere, capsule and convex-mesh colliders get Unity's exact `ClosestPoint`.
+  - Anything else (a non-convex level mesh, a `CharacterController`, terrain) gets the nearest point
+    on its world bounds. On those shapes Unity's `ClosestPoint` logs a warning and returns a junk
+    point.
+  - The rings used to call it on map geometry, which logged about 1,300 warnings in one TrainingStage
+    session and mis-measured their reach.
 - **`GroundContact`:** "airborne" means off the ground for longer than the grace.
   - That one answer picks the chain for a press and drops the ground chain, so a one-frame flicker
     on a slope does neither.
@@ -274,6 +295,8 @@ A boss drop can grant an ability early; its level is the fallback.
       all 9 swings.
     - 2026-10-27, after the QA fixes: all 198 EditMode tests passed, 61 of them in
       `Tests/EditMode/Combat/`.
+    - 2026-10-27, after the `ClosestPoint` fix: 278 run, 270 passed, 0 failed, 64 of them combat.
+      The 8 skipped are outside combat. The run logged no `ClosestPoint` warnings.
   - Nobody has watched the new swings in Play mode. The new states reuse clips that are already
     wired, at their own speeds: + C is Attack1's sweep at 3×, Phase Shift is the downstroke in the
     air, Unit Circle is the wide sweep, and Area Under the Curve is the launcher at 2×.
