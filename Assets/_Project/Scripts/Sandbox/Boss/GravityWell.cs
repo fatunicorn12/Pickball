@@ -50,7 +50,7 @@ namespace Pickleball.Sandbox
         [Header("Field")]
         [Tooltip("G·m in the equation above — the pull one metre out, in m/s². " +
                  "Everything else follows from the inverse square.")]
-        [SerializeField] private float strength = 90f;
+        [SerializeField] private float strength = 60f;
 
         [Tooltip("Beyond this the well is ignored entirely. Keeps the arena " +
                  "readable and the per-frame cost bounded.")]
@@ -63,16 +63,16 @@ namespace Pickleball.Sandbox
         [Header("Core")]
         [Tooltip("Damage per second while inside the core. Chip, not a kill — the " +
                  "cost of a bad line, and it is recoverable.")]
-        [SerializeField] private float coreDamagePerSecond = 9f;
+        [SerializeField] private float coreDamagePerSecond = 6f;
 
         [Tooltip("Movement lock refreshed each frame inside the core. Short: it is " +
                  "re-applied continuously while held, and expires quickly on exit.")]
-        [SerializeField] private float coreMoveLock = 0.25f;
+        [SerializeField] private float coreMoveLock = 0f;
 
         [Header("Life")]
         [Tooltip("Seconds before the well collapses. Zero or less means it stays " +
                  "until something destroys it.")]
-        [SerializeField] private float lifetime = 9f;
+        [SerializeField] private float lifetime = 6f;
 
         [Tooltip("Seconds spent fading in. The field ramps over this window so a " +
                  "well cannot spawn on top of you and yank instantly.")]
@@ -88,6 +88,10 @@ namespace Pickleball.Sandbox
         [SerializeField] private Renderer field;
 
         [SerializeField] private float fieldSpinDegreesPerSecond = 28f;
+
+        [Tooltip("The core goes fully transparent when the camera is this close to " +
+                 "its surface, so it never swallows the view. 0 disables the fade.")]
+        [SerializeField] private float coreFadeDistance = 3f;
 
         /// <summary>Every live well. Apples and any other field-sensitive body read
         /// this rather than each finding wells for itself.</summary>
@@ -153,6 +157,8 @@ namespace Pickleball.Sandbox
                 core.localScale = Vector3.one * (coreRadius * 2f * Intensity * pulse);
             }
 
+            FadeCoreNearCamera();
+
             if (field != null)
             {
                 // Fades in with the pull itself, so the floor never promises a
@@ -181,11 +187,48 @@ namespace Pickleball.Sandbox
 
             if (distance <= coreRadius)
             {
-                _player.LockMovement(coreMoveLock);
+                // 0 = the stick keeps working inside the core (R1 stun-lock fix).
+                if (coreMoveLock > 0f) _player.LockMovement(coreMoveLock);
                 if (_playerHealth != null)
                     _playerHealth.Damage(coreDamagePerSecond * dt * Intensity,
                                          _player.transform.position);
             }
+        }
+
+        Renderer _coreRenderer;
+        MaterialPropertyBlock _coreBlock;
+
+        /// <summary>Core opacity for a camera <paramref name="cameraDistance"/> from
+        /// the well centre: 0 inside the surface, rising to 1 at
+        /// <paramref name="fadeDistance"/> beyond it. Pure, for tests.</summary>
+        public static float CoreAlpha(float cameraDistance, float coreRadius, float fadeDistance)
+        {
+            if (fadeDistance <= 0f) return 1f;
+            return Mathf.Clamp01((cameraDistance - coreRadius) / fadeDistance);
+        }
+
+        void FadeCoreNearCamera()
+        {
+            if (core == null || coreFadeDistance <= 0f) return;
+            var cam = Camera.main;
+            if (cam == null) return;
+            if (_coreRenderer == null) _coreRenderer = core.GetComponentInChildren<Renderer>();
+            if (_coreRenderer == null) return;
+
+            float a = CoreAlpha(Vector3.Distance(cam.transform.position, transform.position),
+                                coreRadius, coreFadeDistance);
+            var mat = _coreRenderer.sharedMaterial;
+            if (mat != null && mat.HasColor(BaseColorId))
+            {
+                var c = mat.GetColor(BaseColorId);
+                c.a *= a;
+                _coreBlock ??= new MaterialPropertyBlock();
+                _coreRenderer.GetPropertyBlock(_coreBlock);
+                _coreBlock.SetColor(BaseColorId, c);
+                _coreRenderer.SetPropertyBlock(_coreBlock);
+            }
+            // Fully faded: skip drawing it rather than rely on the material being transparent.
+            _coreRenderer.enabled = a > 0.02f;
         }
 
         static readonly RaycastHit[] GroundHits = new RaycastHit[8];

@@ -55,7 +55,7 @@ namespace Pickleball.Sandbox
 
         [Tooltip("Never drop a well closer than this to the player. Being trapped " +
                  "by a well that materialised on top of you is not a read.")]
-        [SerializeField] private float wellMinDistanceFromPlayer = 5f;
+        [SerializeField] private float wellMinDistanceFromPlayer = 7f;
 
         [Tooltip("How far from himself Newton will place one.")]
         [SerializeField] private float wellPlacementRadius = 11f;
@@ -72,7 +72,7 @@ namespace Pickleball.Sandbox
 
         [Tooltip("The volley timer runs this many times faster while the player " +
                  "is inside weakPointRange, so camping at his feet gets punished.")]
-        [SerializeField] private float volleyCloseUrgency = 2.5f;
+        [SerializeField] private float volleyCloseUrgency = 1.4f;
 
         [Header("Apple barrage")]
         [SerializeField] private AppleBarrage barrage;
@@ -280,6 +280,11 @@ namespace Pickleball.Sandbox
             _beamTimer -= dt;
             if (_beamTimer <= 0f && beam != null && !beam.IsActive)
             {
+                if (!_beamWarned)
+                {
+                    _beamWarned = true;
+                    Bark(NewtonBarks.Occasion.BeamWarning);
+                }
                 beam.Fire();
                 Telegraph(0.9f);
                 Bark(NewtonBarks.Occasion.Beam);
@@ -318,6 +323,8 @@ namespace Pickleball.Sandbox
             Fire(VolleyHash);
             _volleyTimer = Phase >= 2 ? volleyIntervalPhaseTwo : volleyIntervalPhaseOne;
         }
+
+        bool _beamWarned;
 
         void Bark(NewtonBarks.Occasion occasion)
         {

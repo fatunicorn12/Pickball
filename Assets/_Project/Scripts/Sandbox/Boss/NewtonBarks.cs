@@ -14,7 +14,7 @@ namespace Pickleball.Sandbox
     /// </summary>
     public class NewtonBarks : MonoBehaviour
     {
-        public enum Occasion { Intro, Well, Beam, Volley, PhaseTwo, Barrage, Hurt, Death, Unprompted }
+        public enum Occasion { Intro, Well, Beam, Volley, PhaseTwo, Barrage, Hurt, Death, Unprompted, BeamWarning }
 
         [Tooltip("Minimum seconds between two lines, except Intro/PhaseTwo/Death, " +
                  "which always play.")]
@@ -44,6 +44,13 @@ namespace Pickleball.Sandbox
             "The fluxion of your position, student. Move and pay for it.",
             "Stand still. Or do you not understand rates of change?",
             "Leibniz would call this a 'derivative'. Plagiarist.",
+        };
+
+        [Tooltip("Said once, before the first beam of the fight, so the one rule the " +
+                 "player needs is on screen first.")]
+        [SerializeField] private string[] beamWarning =
+        {
+            "Observe: the beam prices motion. Stand perfectly still, student.",
         };
 
         [SerializeField] private string[] volley =
@@ -89,7 +96,7 @@ namespace Pickleball.Sandbox
 
         public void Say(Occasion occasion)
         {
-            bool always = occasion is Occasion.Intro or Occasion.PhaseTwo or Occasion.Death;
+            bool always = occasion is Occasion.Intro or Occasion.PhaseTwo or Occasion.Death or Occasion.BeamWarning;
             if (!always)
             {
                 if (Time.time - _lastSpoke < minGap) return;
@@ -101,6 +108,7 @@ namespace Pickleball.Sandbox
                 Occasion.Intro => intro,
                 Occasion.Well => well,
                 Occasion.Beam => beam,
+                Occasion.BeamWarning => beamWarning,
                 Occasion.Volley => volley,
                 Occasion.PhaseTwo => phaseTwo,
                 Occasion.Barrage => barrage,
