@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Pickleball.Sandbox;
 using Pickleball.Sandbox.Combat;
 using Pickleball.Sandbox.Magic;
+using Pickleball.Sandbox.Movement;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -19,10 +20,12 @@ using UnityEngine.UI;
 ///  2. <b>Prefab</b> — regenerates Prefabs/Magic/MagicOrb.prefab through
 ///     <see cref="MagicOrbPrefabBuilder"/> (same content every run, GUID kept,
 ///     so the spell's reference holds).
-///  3. <b>Scene</b> — adds Mana, SpellInput and SpellCaster to the player if
-///     missing, a "SpellOrigin" child over the right shoulder, points the orbit
-///     camera's aim source at the caster, and rebuilds the mana bar and the
-///     crosshair under the FightHUD canvas through <see cref="MagicHudBuilder"/>.
+///  3. <b>Scene</b> — adds Mana, SpellInput, SpellCaster and AimInputClaims to
+///     the player if missing (and the PlayerInputGate, if Setup Dialogue has not
+///     added it), a "SpellOrigin" child over the right shoulder, points the
+///     orbit camera's aim source at the caster, gates the spell, sword and
+///     lock-on inputs, and rebuilds the mana bar and the crosshair under the
+///     FightHUD canvas through <see cref="MagicHudBuilder"/>.
 ///
 /// Data references on the player (the config, the spell) are filled only when
 /// blank, so a hand-assigned second spell survives a re-run. Component-to-
@@ -136,6 +139,12 @@ public static class MagicSetup
         if (input == null) input = go.AddComponent<SpellInput>();
         var caster = go.GetComponent<SpellCaster>();
         if (caster == null) caster = go.AddComponent<SpellCaster>();
+        var claims = go.GetComponent<AimInputClaims>();
+        if (claims == null) claims = go.AddComponent<AimInputClaims>();
+        // The same single gate Setup Dialogue adds (DisallowMultipleComponent),
+        // so the two menus can run in either order.
+        var gate = go.GetComponent<PlayerInputGate>();
+        if (gate == null) gate = go.AddComponent<PlayerInputGate>();
 
         var origin = EnsureOrigin(player.transform);
 
@@ -157,20 +166,29 @@ public static class MagicSetup
         else warnings.Add("no ChibiMovementAdapter on the player (run Setup Sword Abilities) — Mana " +
                           "will look for an ICombatMovement itself, else never count as standing still");
 
-        Set(input, ("cameraRig", orbit));
+        Set(input, ("cameraRig", orbit), ("inputGate", gate));
 
         FillIfBlank(caster, "spell", spell);
         Set(caster, ("mana", mana), ("input", input), ("castOrigin", origin),
             ("aimCamera", aimCamera), ("locomotion", player));
         SetMask(caster, "aimMask", AimMaskFor(go));
 
-        // TODO(after the dialogue merge): while aiming, sword attack and the
-        // lock-on toggle must step aside. That is a PlayerInputGate claim —
-        // Claim(this, InputBlock.Sword | InputBlock.LockOn) on aim start,
-        // released on aim end — together with the walk cap while aiming, both
-        // owned by a later component the lead adds once the gate is merged.
-        // Wire that component here when it exists. Until then LMB / RT while
-        // aiming also swing the sword / toggle lock-on.
+        // While aiming, fire (LMB / RT) must not also swing the sword or toggle
+        // lock-on, and the player walks: AimInputClaims claims the gate and caps
+        // the drive. The readers it claims against only listen once their gate
+        // field is set, so set it here too (Setup Dialogue sets the same one).
+        var lockOn = go.GetComponent<LockOnTargeting>();
+        var movementInput = go.GetComponent<PlayerMovementInput>();
+        Set(claims, ("caster", caster), ("inputGate", gate), ("lockOn", lockOn),
+            ("movementInput", movementInput));
+        var sword = go.GetComponentInChildren<SwordInput>(true);
+        if (sword != null) Set(sword, ("inputGate", gate));
+        else warnings.Add("no SwordInput on the player — nothing to keep from swinging while aiming");
+        if (lockOn != null) Set(lockOn, ("inputGate", gate));
+        else warnings.Add("no LockOnTargeting on the player (run Setup Lock-On) — nothing to release " +
+                          "or block while aiming");
+        if (movementInput == null)
+            warnings.Add("no PlayerMovementInput on the player — aiming will not slow it to a walk");
 
         bool cameraWired = false;
         if (orbit != null)
@@ -205,7 +223,7 @@ public static class MagicSetup
         EditorSceneManager.MarkSceneDirty(go.scene);
 
         summary = $"Magic set up on {go.name}: Mana ({ManaConfigPath}), SpellInput, SpellCaster casting " +
-                  $"{SpellPath} ({OrbPrefabPath}) from {OriginName}, " +
+                  $"{SpellPath} ({OrbPrefabPath}) from {OriginName}, AimInputClaims on the input gate, " +
                   (cameraWired ? $"{orbit.name}'s aim source, " : "") +
                   $"and the mana bar + crosshair under {HudName}. " +
                   "Hold right mouse / LT to aim, left mouse / RT to fire. " +

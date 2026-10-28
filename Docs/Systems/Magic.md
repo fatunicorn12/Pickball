@@ -12,7 +12,8 @@ Snapshot as of `f876b63` plus branch `feat/mana-magic`. Nothing here has been pl
 - **Prefab:** `Assets/_Project/Prefabs/Magic/MagicOrb.prefab`.
 - **Setup:** **Tools ▸ Pickleball ▸ Setup Magic** (`Scripts/Editor/MagicSetup.cs`), which calls
   `MagicOrbPrefabBuilder` and `MagicHudBuilder`.
-- **Tests:** `Assets/_Project/Tests/EditMode/Magic/` (`ManaPoolTests`, `ManaTests`, `OrbMathTests`).
+- **Tests:** `Assets/_Project/Tests/EditMode/Magic/` (`ManaPoolTests`, `ManaTests`, `OrbMathTests`,
+  `AimInputClaimsTests`).
 
 ## 1. Purpose and player-facing feel
 
@@ -269,15 +270,14 @@ aiming" component.
 - **Not play-tested.** The aim, the shoulder camera, the facing and the orb have only been
   compiled and EditMode-tested. Expect tuning of `aimMoveScale`, the camera shoulder offset,
   `orbSpeed` and the aim assist.
-- **No aim restrictions yet.** The aim's walk cap and the input claim move to a later component
-  the lead adds after the dialogue session's `PlayerInputGate` is merged. That component will call
-  `Claim(this, InputBlock.Sword | InputBlock.LockOn)` on aim start, release it on aim end, and set
-  `PlayerMovementInput.DriveLimit` to `spell.AimMoveScale` while aiming. `DriveLimit` exists and
-  works, but nothing lowers it yet, and `SpellCaster` has no reference to `PlayerMovementInput`.
-  Until then:
-  - left mouse while aiming both fires the orb and swings the sword;
-  - RT while aiming both fires and toggles lock-on;
-  - aiming doesn't slow the player, and sprint still works while aiming.
+- **Aim restrictions live in `AimInputClaims`.** On `AimStarted` it releases any held lock-on,
+  then claims `InputBlock.Sword | InputBlock.LockOn` on the player's `PlayerInputGate`, so left
+  mouse / RT only fire. While aiming it sets `PlayerMovementInput.DriveLimit` to
+  `spell.AimMoveScale` (a walk, no sprint), and on `AimEnded` or disable it releases its own claim
+  and puts the limit back to 1. A conversation claims `InputBlock.All`, which includes
+  `InputBlock.Spell`: `SpellInput` then reads every button as released, so aim ends and nothing
+  casts mid-conversation. None of this is play-tested yet; the claim and the cap have EditMode
+  tests (`AimInputClaimsTests`).
 - **Two bindings were taken away.** Right mouse no longer tethers (Q / LB still do), and the pad's
   sprint moved from LT to L3. Players who tether with the mouse lose that habit.
   `Docs/Systems/Movement.md` still lists "Q / right mouse" for tether and LT for sprint; its owner
@@ -291,7 +291,7 @@ aiming" component.
   the orb's flight and collisions, the input and the HUD are untested. The project has no PlayMode
   assembly yet.
 - **One spell, one caster.** No spell selection, no UI for spell choice.
-- **Scene-only setup.** Mana, SpellInput and SpellCaster are added to the open scene's player,
+- **Scene-only setup.** Mana, SpellInput, SpellCaster and AimInputClaims are added to the open scene's player,
   not to `Chibi.prefab`, the same as `LockOnTargeting`. Scenes that instantiate the prefab, such
   as SpacetimeLab, have no magic.
 - **Orbs are instantiated and destroyed,** one per cast. At 0.45 s per cast that is at most a
@@ -312,21 +312,22 @@ Replace these rows in "Pad and key layout contract":
 |---|---|---|
 | `PlayerMovementInput` | WASD / arrows; Shift sprint; Space jump; Ctrl crouch; F flip; R mount; E dash; **Q tether**; G anchor | Left stick; **L3 sprint**; South jump; East crouch; North flip; D-pad Right mount; RB dash; LB tether; R3 anchor |
 | `SpellInput` | **Right mouse hold aim; left mouse fire** (both ignored while the cursor is free, and on the re-lock frame) | **LT hold aim; RT fire** |
-| `SwordInput` | Left mouse (ignored while the cursor is free). *Should step aside while aiming once the input gate lands.* | West attack |
-| `LockOnTargeting` | Tab / middle mouse toggle. *Should step aside while aiming once the input gate lands.* | RT toggle, when not aiming |
+| `SwordInput` | Left mouse (ignored while the cursor is free, and while aiming: `AimInputClaims` claims `InputBlock.Sword`) | West attack |
+| `LockOnTargeting` | Tab / middle mouse toggle (dropped while aiming: `AimInputClaims` releases the lock and claims `InputBlock.LockOn`) | RT toggle, when not aiming |
 
 Add under the table: "Right mouse left the tether and LT left sprint for the spell's aim (feat/mana-magic).
 Players lose the right-mouse tether; Q and LB still tether. Left mouse and RT are shared between
-the spell's fire and the sword attack / lock-on toggle. Until the `PlayerInputGate` claim lands, a
-press while aiming triggers both."
+the spell's fire and the sword attack / lock-on toggle; while aiming, `AimInputClaims`' gate claim
+gives them to the spell alone."
 
 Add to "Decisions":
 
 > **Aiming is one read-only bit, `IAimState.IsAiming`.** `SpellCaster` implements it, and
 > `SandboxOrbitCamera` reads it through a serialized `aimSource` (a `MonoBehaviour` cast to the
-> interface). No source means never aiming. The camera never names magic. A later component
-> (after the dialogue merge) will use the same state to claim `PlayerInputGate` for
+> interface). No source means never aiming. The camera never names magic. `AimInputClaims` follows
+> the caster's `AimStarted` / `AimEnded` to claim `PlayerInputGate` for
 > `InputBlock.Sword | InputBlock.LockOn` and to lower `PlayerMovementInput.DriveLimit` to a walk.
+> `InputBlock.Spell` (in `All`) lets a conversation quiet the spell's own buttons.
 
 And in "Facing", item 1 is no longer "None is registered yet":
 
@@ -361,7 +362,7 @@ And in "Facing", item 1 is no longer "None is registered yet":
 - **Entry point for an orchestrator:** `MagicSetup.AttachToPlayer(ChibiLocomotion)`. It marks the
   scene dirty and saves nothing; call `AssetDatabase.SaveAssets` after it.
 - **Known hazards:**
-  - add Mana, SpellInput and SpellCaster to the "`Chibi.prefab` lags the scene" list;
+  - add Mana, SpellInput, SpellCaster and AimInputClaims to the "`Chibi.prefab` lags the scene" list;
   - add "FightHUD" (Setup Magic finds it by name too) and "SpellOrigin" to the "lookups by name"
     line;
   - Setup Magic finds the camera by type (`SandboxOrbitCamera`), not through `Camera.main`.

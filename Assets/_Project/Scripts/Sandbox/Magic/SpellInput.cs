@@ -23,6 +23,10 @@ namespace Pickleball.Sandbox.Magic
     /// <c>JustRelocked</c> covers the frame after (see SwordInput for the same
     /// bug on the sword). A pad never fights the Editor for the cursor, so its
     /// triggers always count.
+    ///
+    /// While the gate blocks <see cref="InputBlock.Spell"/> (a conversation)
+    /// every button reads as released, so aim ends. Aim is a hold: if the
+    /// button is still down when the claim lifts, aiming resumes.
     /// </summary>
     public class SpellInput : MonoBehaviour
     {
@@ -30,19 +34,25 @@ namespace Pickleball.Sandbox.Magic
                  "captured the cursor. Falls back to the main camera's rig when empty; " +
                  "with no rig at all the mouse always counts.")]
         [SerializeField] private SandboxOrbitCamera cameraRig;
+        [Tooltip("Optional. While Spell is blocked (a conversation), aim and fire read " +
+                 "as released. Empty: never blocked.")]
+        [SerializeField] private PlayerInputGate inputGate;
 
         InputAction _aimMouse, _aimPad, _fireMouse, _firePad;
 
         /// <summary>True every frame aim is held: right mouse (cursor captured) or LT.</summary>
-        public bool AimHeld => IsHeld(_aimPad) || (MouseCounts && IsHeld(_aimMouse));
+        public bool AimHeld => !Blocked && (IsHeld(_aimPad) || (MouseCounts && IsHeld(_aimMouse)));
 
         /// <summary>True every frame fire is held: left mouse (cursor captured) or RT.
         /// Read by auto-repeat spells.</summary>
-        public bool FireHeld => IsHeld(_firePad) || (MouseCounts && IsHeld(_fireMouse));
+        public bool FireHeld => !Blocked && (IsHeld(_firePad) || (MouseCounts && IsHeld(_fireMouse)));
 
         /// <summary>True on the one frame fire went down. The Input System's
         /// per-frame edge, so read it from Update.</summary>
-        public bool FirePressedThisFrame => WasPressed(_firePad) || (MouseCounts && WasPressed(_fireMouse));
+        public bool FirePressedThisFrame =>
+            !Blocked && (WasPressed(_firePad) || (MouseCounts && WasPressed(_fireMouse)));
+
+        bool Blocked => inputGate != null && inputGate.IsBlocked(InputBlock.Spell);
 
         /// <summary>Mouse buttons are the camera's while the cursor is free, and the
         /// re-capture click is the camera's on the frame after too.</summary>
