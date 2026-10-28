@@ -27,5 +27,8 @@ namespace Pickleball.Art
 
         /// <summary>Pickups and drops.</summary>
         Items,
+
+        /// <summary>Non-humanoid bosses animated in code (the Singularity).</summary>
+        Bosses,
     }
 }

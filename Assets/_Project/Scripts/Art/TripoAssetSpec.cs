@@ -58,6 +58,11 @@ namespace Pickleball.Art
                  "fix an export that faces the wrong way (props face +Z, projectiles fly +Z).")]
         [SerializeField] private Vector3 modelRotation = Vector3.zero;
 
+        [Tooltip("On: Unity generates Mesh LODs at import (Unity 6.2+), and each renderer draws a " +
+                 "coarser level as the object shrinks on screen. For meshes spawned in numbers " +
+                 "(apples, volley orbs). Costs some index memory; no extra asset.")]
+        [SerializeField] private bool generateMeshLods;
+
         [Header("Budget (mobile)")]
         [Tooltip("Triangles the asset plan targets. The import warns above it.")]
         [Min(1)] [SerializeField] private int triangleBudget = 3000;
@@ -79,6 +84,14 @@ namespace Pickleball.Art
         [Tooltip("Baked into the base map at import, as a brightness multiplier after the " +
                  "saturation change. 1 = unchanged; ~1.25 lifts a desaturated beige to off-white.")]
         [Range(0.5f, 2f)] [SerializeField] private float textureGain = 1f;
+
+        [Tooltip("Vertex-colour multiplier at the mesh's lowest point, baked at import. Leave " +
+                 "both gradient ends white for none. Any other value switches the material to " +
+                 "URP Particles/Lit, which multiplies vertex colour in (URP Lit ignores it).")]
+        [SerializeField] private Color gradientBottom = Color.white;
+
+        [Tooltip("Vertex-colour multiplier at the mesh's highest point (see Gradient Bottom).")]
+        [SerializeField] private Color gradientTop = Color.white;
 
         [Tooltip("Tint multiplied over the base map. White keeps the painted colours; for a " +
                  "geometry-only asset this is its whole colour.")]
@@ -117,9 +130,13 @@ namespace Pickleball.Art
                               Color? baseColor = null, Color? emissionColor = null,
                               Vector3? modelRotation = null, float sizeTolerance = 0.05f,
                               float textureSaturation = 1f, float textureGain = 1f,
-                              TripoRig rig = TripoRig.None)
+                              TripoRig rig = TripoRig.None, bool generateMeshLods = false,
+                              Color? gradientBottom = null, Color? gradientTop = null)
         {
             this.rig = rig;
+            this.generateMeshLods = generateMeshLods;
+            this.gradientBottom = gradientBottom ?? Color.white;
+            this.gradientTop = gradientTop ?? Color.white;
             this.textureSaturation = textureSaturation;
             this.textureGain = textureGain;
             this.id = id;
@@ -169,6 +186,10 @@ namespace Pickleball.Art
         public int TextureMaxSize => textureMaxSize;
         /// <summary>Whether this asset ships with a base colour map.</summary>
         public bool HasTexture => textureMaxSize > 0;
+        /// <summary>Whether Unity generates Mesh LODs at import.</summary>
+        public bool GenerateMeshLods => generateMeshLods;
+        /// <summary>Bottom-to-top vertex-colour gradient baked at import.</summary>
+        public TripoVertexGradient VertexGradient => new(gradientBottom, gradientTop);
         /// <summary>Colour correction baked into the base map at import.</summary>
         public TripoTextureGrade TextureGrade => new(textureSaturation, textureGain);
         /// <summary>Tint over the base map.</summary>

@@ -247,8 +247,9 @@ namespace Pickleball.EditorTools.Tripo
                 chibi.SetActive(true);
                 chibi.transform.position = Vector3.zero;
                 var cb = WorldBounds(chibi);
-                // Left of the prefab, a hand's width apart.
-                chibi.transform.position = new Vector3(b.min.x - 0.35f - cb.max.x, 0f, 0f);
+                // Left of the prefab, a hand's width apart, feet on the ground whatever
+                // pose a previous pose sheet left it in.
+                chibi.transform.position = new Vector3(b.min.x - 0.35f - cb.max.x, -cb.min.y, 0f);
             }
             var both = b;
             if (chibi != null) both.Encapsulate(WorldBounds(chibi));

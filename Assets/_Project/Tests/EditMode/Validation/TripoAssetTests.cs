@@ -23,6 +23,7 @@ namespace Pickleball.Tests.Validation
     public class TripoAssetTests
     {
         const string UrpLit = "Universal Render Pipeline/Lit";
+        const string UrpParticlesLit = "Universal Render Pipeline/Particles/Lit";
 
         static TripoAssetCatalog LoadCatalog() =>
             AssetDatabase.LoadAssetAtPath<TripoAssetCatalog>(TripoAssetCatalog.AssetPath);
@@ -71,6 +72,16 @@ namespace Pickleball.Tests.Validation
             int tris = TripoFit.CountTriangles(prefab);
             if (tris == 0) problems.Add("no mesh");
             if (tris > spec.TriangleCap) problems.Add($"{tris} triangles, over the cap of {spec.TriangleCap}");
+
+            foreach (var mf in prefab.GetComponentsInChildren<MeshFilter>(true))
+            {
+                var mesh = mf.sharedMesh;
+                if (mesh == null) continue;
+                if (spec.GenerateMeshLods && mesh.lodCount < 2)
+                    problems.Add($"{mesh.name}: Mesh LODs requested but the mesh has {mesh.lodCount} level");
+                if (!spec.VertexGradient.IsNeutral && !mesh.HasVertexAttribute(VertexAttribute.Color))
+                    problems.Add($"{mesh.name}: vertex gradient requested but the mesh has no vertex colours");
+            }
         }
 
         static void CheckMaterials(TripoAssetSpec spec, GameObject prefab, List<string> problems)
@@ -83,8 +94,10 @@ namespace Pickleball.Tests.Validation
                 foreach (var m in r.sharedMaterials)
                 {
                     if (m == null) { problems.Add($"{r.name}: empty material slot"); continue; }
-                    if (m.shader == null || m.shader.name != UrpLit)
-                        problems.Add($"{r.name}: material {m.name} uses {(m.shader != null ? m.shader.name : "no shader")}, not {UrpLit}");
+                    // URP Lit, or URP Particles/Lit for a vertex gradient (it multiplies vertex colour).
+                    string wanted = spec.VertexGradient.IsNeutral ? UrpLit : UrpParticlesLit;
+                    if (m.shader == null || m.shader.name != wanted)
+                        problems.Add($"{r.name}: material {m.name} uses {(m.shader != null ? m.shader.name : "no shader")}, not {wanted}");
                     if (spec.HasTexture && m.GetTexture("_BaseMap") == null)
                         problems.Add($"{r.name}: material {m.name} has no base map");
                 }

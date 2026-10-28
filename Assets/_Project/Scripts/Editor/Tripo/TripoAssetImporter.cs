@@ -43,6 +43,7 @@ namespace Pickleball.EditorTools.Tripo
     {
         const string MenuPath = "Tools/Pickleball/Tripo/Import Tripo Assets…";
         const string LitShader = "Universal Render Pipeline/Lit";
+        const string ParticlesLitShader = "Universal Render Pipeline/Particles/Lit";
         const string SourcePrefKey = "Pickleball.Tripo.LastSourceFolder";
         const string ModelChild = "Model";
         static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png" };
@@ -352,6 +353,28 @@ namespace Pickleball.EditorTools.Tripo
             if (spec.HasTexture && report.TextureSize > spec.TextureMaxSize)
                 report.Notes.Add($"texture imports at {report.TextureSize}, above the {spec.TextureMaxSize} cap");
             if (spec.Rig == TripoRig.Humanoid) CheckAvatar(spec, report);
+            if (spec.GenerateMeshLods) ReportMeshLods(model, report);
+        }
+
+        /// <summary>Lists the triangles of each generated Mesh LOD level, the number
+        /// that matters for meshes spawned in crowds.</summary>
+        static void ReportMeshLods(GameObject model, AssetReport report)
+        {
+            foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
+            {
+                var mesh = mf.sharedMesh;
+                if (mesh == null) continue;
+                var levels = new List<string>();
+                for (int lod = 0; lod < mesh.lodCount; lod++)
+                {
+                    int tris = 0;
+                    for (int s = 0; s < mesh.subMeshCount; s++) tris += (int)(mesh.GetLod(s, lod).indexCount / 3);
+                    levels.Add(tris.ToString());
+                }
+                report.Notes.Add(mesh.lodCount > 1
+                    ? $"Mesh LODs: {string.Join(" / ", levels)} triangles"
+                    : "Mesh LODs requested but none generated");
+            }
         }
 
         /// <summary>A humanoid row must import a valid human avatar with every
@@ -437,6 +460,9 @@ namespace Pickleball.EditorTools.Tripo
             changed |= Set(mi.addCollider, false, v => mi.addCollider = v);
             changed |= Set(mi.generateSecondaryUV, false, v => mi.generateSecondaryUV = v);
             changed |= Set(mi.importAnimation, false, v => mi.importAnimation = v);
+            changed |= Set(mi.generateMeshLods, spec.GenerateMeshLods, v => mi.generateMeshLods = v);
+            // Read back by TripoModelPostprocessor, which bakes the gradient into vertex colours.
+            changed |= Set(mi.userData ?? "", spec.VertexGradient.Encode(), v => mi.userData = v);
             if (spec.Rig == TripoRig.Humanoid)
             {
                 // Unity's auto-mapper recognises Tripo's Mixamo rig preset by name.
@@ -480,10 +506,14 @@ namespace Pickleball.EditorTools.Tripo
         static Bounds ModelBounds(TripoAssetSpec spec, GameObject model) =>
             TripoFit.MeshBounds(model, Matrix4x4.Rotate(Quaternion.Euler(spec.ModelRotation)));
 
+        /// <summary>URP Lit, or URP Particles/Lit (opaque) for a row with a vertex
+        /// gradient: it multiplies vertex colour into the albedo, URP Lit does not.</summary>
         static Material BuildMaterial(TripoAssetSpec spec, Texture2D baseMap, Texture2D normalMap)
         {
-            var shader = Shader.Find(LitShader);
-            if (shader == null) throw new InvalidOperationException($"Shader '{LitShader}' not found; is URP installed?");
+            bool gradient = !spec.VertexGradient.IsNeutral;
+            string shaderName = gradient ? ParticlesLitShader : LitShader;
+            var shader = Shader.Find(shaderName);
+            if (shader == null) throw new InvalidOperationException($"Shader '{shaderName}' not found; is URP installed?");
 
             var mat = AssetDatabase.LoadAssetAtPath<Material>(spec.MaterialPath);
             if (mat == null)
@@ -500,6 +530,20 @@ namespace Pickleball.EditorTools.Tripo
             mat.SetColor("_BaseColor", spec.BaseColor);
             mat.SetFloat("_Smoothness", spec.Smoothness);
             mat.SetFloat("_Metallic", spec.Metallic);
+            if (gradient)
+            {
+                // Opaque, back-face culled, vertex colour multiplied: the particle
+                // shader's defaults are transparent and two-sided.
+                mat.SetFloat("_Surface", 0f);
+                mat.SetFloat("_ColorMode", 0f);
+                mat.SetFloat("_Cull", (float)CullMode.Back);
+                mat.SetFloat("_ZWrite", 1f);
+                mat.SetFloat("_SrcBlend", (float)BlendMode.One);
+                mat.SetFloat("_DstBlend", (float)BlendMode.Zero);
+                mat.SetOverrideTag("RenderType", "Opaque");
+                mat.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                mat.renderQueue = (int)RenderQueue.Geometry;
+            }
 
             mat.SetTexture("_BumpMap", normalMap);
             if (normalMap != null) mat.EnableKeyword("_NORMALMAP");

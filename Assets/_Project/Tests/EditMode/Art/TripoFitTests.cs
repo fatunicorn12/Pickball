@@ -150,6 +150,39 @@ namespace Pickleball.Tests.TripoArt
         }
 
         [Test]
+        public void Gradient_RoundTripsAndRunsBottomToTop()
+        {
+            var bottom = new Color(0.3f, 0.32f, 0.4f);
+            var gradient = new TripoVertexGradient(bottom, Color.white);
+            Assert.That(TripoVertexGradient.TryDecode(gradient.Encode(), out var back), Is.True);
+            Assert.That(back.Bottom, Is.EqualTo(bottom));
+            Assert.That(back.Top, Is.EqualTo(Color.white));
+
+            AssertColour(gradient.Evaluate(0f), bottom, "bottom");
+            AssertColour(gradient.Evaluate(1f), Color.white, "top");
+            AssertColour(gradient.Evaluate(-1f), bottom, "clamped below");
+            float mid = gradient.Evaluate(0.5f).r;
+            Assert.That(mid, Is.EqualTo((bottom.r + 1f) * 0.5f).Within(1e-5f), "smoothstep is symmetric");
+            Assert.That(gradient.Evaluate(0.1f).r - bottom.r, Is.LessThan((1f - bottom.r) * 0.1f),
+                        "eases out of the bottom colour");
+        }
+
+        static void AssertColour(Color actual, Color expected, string what)
+        {
+            Assert.That(actual.r, Is.EqualTo(expected.r).Within(1e-5f), what);
+            Assert.That(actual.g, Is.EqualTo(expected.g).Within(1e-5f), what);
+            Assert.That(actual.b, Is.EqualTo(expected.b).Within(1e-5f), what);
+        }
+
+        [Test]
+        public void Gradient_Neutral_EncodesAsNothing()
+        {
+            Assert.That(new TripoVertexGradient(Color.white, Color.white).Encode(), Is.Empty);
+            Assert.That(TripoVertexGradient.TryDecode("tripo-grade:0.15;1.25", out _), Is.False,
+                        "a texture grade is not a gradient");
+        }
+
+        [Test]
         public void Grade_ZeroSaturation_IsGreyAndGainClamps()
         {
             var grey = new TripoTextureGrade(0f, 1f).Apply(new Color(1f, 0f, 0f));

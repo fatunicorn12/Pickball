@@ -63,8 +63,16 @@ row it:
    animation, cameras, lights or colliders, axis conversion baked. The scale factor is fitted
    so the model measures the row's target size along the row's axis. Humanoid rows import as a
    Unity Humanoid built from the model's own skeleton; Tripo's Mixamo rig preset auto-maps.
+   - **Mesh LODs** (row flag): Unity 6's built-in Mesh LOD is generated at import, so a renderer
+     draws a coarser level as the object shrinks on screen. Used for meshes spawned in crowds
+     (apples, volley orbs, triangle shots). No package and no extra asset.
+   - **Vertex gradient** (row colours): `TripoModelPostprocessor` bakes a bottom-to-top colour
+     multiplier into the vertex colours, for shading the texture lacks (the thundercloud's dark
+     underside). Like the texture grade, it lives in the importer's userData; the FBX is untouched.
 4. **Material:** one URP Lit material per asset (`<Name>.mat`), and every material slot of the
-   FBX is remapped to it, so code that instantiates the FBX directly gets it too.
+   FBX is remapped to it, so code that instantiates the FBX directly gets it too. A row with a
+   vertex gradient gets URP **Particles/Lit** (opaque) instead, because URP Lit ignores vertex
+   colour.
 5. **Prefab** `Prefabs/Tripo/<Name>.prefab`: the model under a `Model` child whose offset puts
    the origin at the row's pivot (props bottom-centre on the ground, projectiles and effects at
    the bounds centre) and whose rotation is the row's facing fix. Shadows on or off per row. A
@@ -90,10 +98,11 @@ or a wrong facing back to the generator rather than patching it here.
 ### 4. Validate
 
 `Tests/EditMode/Validation/TripoAssetTests.cs` (category `Assets`, read-only) checks every row:
-triangles under the cap, URP Lit with a base map, one material, size within tolerance, pivot,
-collider and shadow mode as the row says, no missing scripts or references, Read/Write off,
-texture caps, mobile overrides and, for Humanoid rows, a valid human avatar.
-`Tests/EditMode/Art/TripoFitTests.cs` covers the fitting maths and the colour grade.
+triangles under the cap, URP Lit (or Particles/Lit for a gradient row) with a base map, one
+material, size within tolerance, pivot, collider and shadow mode as the row says, no missing
+scripts or references, Read/Write off, texture caps, mobile overrides, Mesh LODs and vertex
+colours where the row asks for them and, for Humanoid rows, a valid human avatar.
+`Tests/EditMode/Art/TripoFitTests.cs` covers the fitting maths, the colour grade and the gradient.
 
 ## The catalog
 
@@ -108,9 +117,11 @@ references it at runtime. Row fields, all with tooltips:
 | Source | Which extraction was staged (written by the import) |
 | Size Axis, Target Size, Size Tolerance | What "1.6 m" means (Height, Largest Horizontal, Largest Extent), the metres, and the test's slack |
 | Pivot, Model Rotation | Bottom-centre or centre; a facing fix in degrees |
+| Generate Mesh Lods | Unity Mesh LOD at import, for meshes spawned in numbers |
 | Triangle Budget, Triangle Cap | Plan target (warning) and hard cap (error, test failure) |
 | Texture Max Size | 2048 characters, 1024 props, 512 small props and projectiles, 0 geometry-only |
 | Texture Saturation, Texture Gain | Colour grade baked into the base map |
+| Gradient Bottom, Gradient Top | Vertex-colour multiplier baked at import; white = none (switches the material to Particles/Lit) |
 | Base Color, Smoothness, Metallic, Emission | The URP Lit material |
 | Collider Shape, Cast Shadows | Box for solid props, None for anything code moves; shadows off for effect cores |
 
@@ -143,13 +154,23 @@ Measured by the import (prefab space, metres). "Unit" sizes are rescaled by game
 | Id | Prefab | Triangles (budget / cap) | Size W × H × D | Texture | Source | Verdict |
 |---|---|---|---|---|---|---|
 | NF-01 | GravityWellCore | 1,822 (2,000 / 2,500) | 0.93 × 1.00 × 0.92 (unit; the well scales it to 3.6 m) | 1024 | v2 (free retry) | Good: glossy black sphere in brass armillary rings |
-| NF-02 | FluxionPrism | 2,351 (2,500 / 3,000) | 0.44 × 0.38 × 0.50, apex +Z | 512 | v2 | Usable stopgap: square glass pyramid in a gear frame, but the glass texture is smeared; regenerate |
-| NF-03 | Apple | 768 (800 / 800) | 0.54 × 0.60 × 0.49 | 512 | v2 | Good: red apple, brown stalk, leaf |
-| NF-04 | InverseSquareOrb | 1,894 (2,000 / 2,000) | 1.00 × 0.55 × 1.00 (unit) | none | v3 | Good: clean tiny Saturn; gold Lit with emission |
+| NF-02 | FluxionPrism | 2,248 (2,500 / 3,000) | 0.21 × 0.17 × 0.50, lens +Z | 512 | v3 (image-to-3D) | Good: triangular glass bar, brass end frames, lens forward |
+| NF-03 | Apple | 768 (800 / 800); LODs 384 / 244 / 128 / 64 | 0.54 × 0.60 × 0.49 | 512 | v2 | Good: red apple, brown stalk, leaf |
+| NF-04 | InverseSquareOrb | 1,894 (2,000 / 2,000); LODs 960 / 512 / 256 / 128 / 62 | 1.00 × 0.55 × 1.00 (unit) | none | v3 | Good: clean tiny Saturn; gold Lit with emission |
 | NF-05 | Telescope | 2,855 (3,000 / 5,000) | 1.32 × 1.60 × 0.74 | 1024 | v1 | Good: chunky brass spyglass on a tripod (no side eyepiece) |
 | NF-06 | AppleCrate | 2,223 (2,500 / 5,000) | 0.90 × 0.96 × 0.89 | 1024 | v1 | Good |
 | NF-07 | LeibnizBust | 2,776 (3,000 / 5,000) | 0.99 × 1.40 × 0.84, turned to face +Z | 1024 | v2, graded to marble (saturation 0.15, gain 1.25) | Good: smug wigged bust, cracked plinth |
 | GD-01 | Pythagoras | 11,563 (10,000 / 15,000) | 2.15 (T-pose span) × 2.20 × 0.85 | 2048 | Blender-preset rig | Good: Humanoid, 52 bones mapped incl. fingers; retargets cleanly |
+| SP-01 | Fireball | 1,795 (1,500 / 2,000) | 0.71 × 0.88 × 1.00, tail −Z (turned 90°) | 512 | v1 | Good: molten core, three flame tongues; emissive |
+| SP-02 | LightningBolt | 976 (1,000 / 2,000) | 0.33 × 1.00 × 0.58, pivot at the bottom, tip down | none | v1 | Good: chunky cartoon bolt; blue-white emissive |
+| SP-03 | Thundercloud | 1,942 (2,000 / 2,500) | 1.60 × 0.86 × 1.12 (×2.5 in the Thunderbolt slot) | 1024 | v1, graded + vertex gradient | Good: puffy cloud, light top, dark underside (Particles/Lit) |
+| SP-04 | IceCrystalCluster | 1,761 (2,000 / 2,500) | 0.45 × 0.50 × 0.34 (1 m-radius convention: ×3 in play) | 1024 | v1 | Excellent: crisp hexagonal crystals on a frosty base |
+| SP-05 | IceSpike | 754 (800 / 2,000) | 0.65 × 1.00 × 0.32, leans ~25° toward +X | none | v2 | OK: slightly lumpy hexagonal column, for a ring |
+| SP-06 | HealLotus | 1,825 (2,000 / 2,500) | 1.00 × 0.46 × 0.95 | 1024 | v1 | Good: spiral green-gold petals, seed-pod centre (no lily pads) |
+| PJ-01 | TriangleShot | 1,651 (400 / 2,000); LODs 832 / 448 / 256 / 128 / 64 | 0.80 × 0.77 × 0.33, face ±Z | none | v2 (image-to-3D) | Good: clean right-triangle slab; rim and square unpainted |
+| PJ-02 | GoldenNautilus | 1,921 (2,000 / 2,500) | 0.95 × 1.00 × 0.41 | 1024 | v1 | Good: golden spiral shell, chambers visible |
+| IT-01 | PythagorasBean | 1,870 (500 / 2,000) | 0.30 × 0.15 × 0.12 | 512 | v2 | OK: reads as a bean; a small keyring-like loop at one end |
+| BS-01 | Singularity | 5,519 (6,000 / 10,000) | 5.0 × 4.3 × 5.0 (core ~3 m) | 2048 | v2 | OK: black sphere, white ring, one-sided crescent of marble shards |
 
 ## Known limitations
 
@@ -159,3 +180,7 @@ Measured by the import (prefab space, metres). "Unit" sizes are rescaled by game
 - Geometry-only FBXs (the orb) have no material slot to remap, so the raw FBX renders with
   Unity's default material; use the prefab, which has the asset's material.
 - The colour grade is a global desaturate-and-lift. It can't recolour one part of a texture.
+- Spell models are authored to their Magic slot's convention (Docs/Systems/Magic.md §4), not to
+  real size: the ice cluster is 0.5 m because the Freeze Zone multiplies by its 3 m radius, and
+  the thundercloud is 1.6 m because the Thunderbolt's shared `modelScale` (2.5, set for the
+  bolt) multiplies it. Change those rows together with the slot values.
