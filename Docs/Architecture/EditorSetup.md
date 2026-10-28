@@ -44,6 +44,7 @@ scripts:
    targeting), Newton Fight (the box goes inside FightHUD) and Spacetime (it gates the T toggle).
    NPC setups that call `DialogueSetup.MakeTalkable` can run before or after it. Then save the
    scene.
+   - **Setup Birdy NPC** right after it, with ChibiSandbox open (places Birdy under `AcademyNpcs`, which Build Training Stage strips; works before Setup Dialogue too), then save.
 9. **Build Training Stage**. It copies ChibiSandbox.
 10. **Spacetime ▸ Create Spacetime Lab Scene**
 

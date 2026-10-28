@@ -61,6 +61,7 @@ namespace Pickleball.Sandbox.Combat.Progression
             bool paired = health != null && health == _pending;
             _pending = null;
             if (!paired || level == null) return;
+            if (!health.GrantsXp) return;   // friendly NPCs pay nothing, and never reach the ledger
 
             var config = level.Config;
             float perDamage = config != null ? config.XpPerDamage : 1f;

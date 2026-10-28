@@ -26,6 +26,10 @@ namespace Pickleball.Sandbox
     {
         [SerializeField] private float maxHealth = 100f;
 
+        [Tooltip("Whether hurting and defeating this pays the player combat XP (Lemmas). " +
+                 "Off for friendly NPCs, so cutting one down is never a shortcut to a level.")]
+        [SerializeField] private bool grantsXp = true;
+
         [Header("Regain")]
         [Tooltip("Fraction of incoming recoverable damage that goes to the grey " +
                  "pool instead of being lost outright. 1 = every point is " +
@@ -51,6 +55,9 @@ namespace Pickleball.Sandbox
 
         public float Max => maxHealth;
         public bool IsDead => Current <= 0f;
+
+        /// <summary>Whether damage to this pays combat XP. False for friendly NPCs.</summary>
+        public bool GrantsXp => grantsXp;
 
         /// <summary>Normalised for UI. Recoverable is expressed as the far edge of
         /// the grey region so a bar can draw it as one span from Current.</summary>
