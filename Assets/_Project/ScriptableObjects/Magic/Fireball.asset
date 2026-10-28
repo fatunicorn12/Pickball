@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d366334a7334a0ebfa235da02e441a7, type: 3}
+  m_Name: Fireball
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Magic.SpellDefinition
+  displayName: Fireball
+  delivery: 0
+  themeColour: {r: 1, g: 0.55, b: 0.15, a: 1}
+  icon: {fileID: 21300000, guid: 3d312e288a7bac142a0929c1fbec133d, type: 3}
+  modelPrefab: {fileID: 0}
+  secondaryModelPrefab: {fileID: 0}
+  modelScale: 1
+  manaCost: 25
+  cooldown: 0.9
+  autoRepeat: 0
+  maxRange: 60
+  aimAssistRadius: 0.35
+  aimMoveScale: 0.45
+  minAimDistance: 1.5
+  orbPrefab: {fileID: 14412465630594493, guid: b273a2e3b62294e4e9c6f9892c7796c4, type: 3}
+  orbSpeed: 20
+  orbRadius: 0.25
+  orbLifetime: 2.5
+  homingTurnRate: 12
+  directDamage: 16
+  blastRadius: 3.2
+  blastDamageMax: 12
+  blastDamageMin: 5
+  knockback: 6
+  hitMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  burnPrefab: {fileID: 8825282042086335826, guid: 3ca6d2b6ed2a63d48b09c3dc97611419, type: 3}
+  burnDamagePerTick: 2.5
+  burnTickInterval: 0.5
+  burnDuration: 3
+  burnBlastVictims: 1
+  strikePrefab: {fileID: 0}
+  strikeDelay: 0.35
+  strikeTracksTarget: 1
+  staggerSeconds: 0
+  chainCount: 0
+  chainRadius: 5
+  chainDamage: 0
+  zonePrefab: {fileID: 0}
+  zoneRadius: 3
+  zoneHeight: 2.5
+  zoneDuration: 4
+  slowMultiplier: 0.3
+  slowLinger: 0.35
+  groundProbeDistance: 12
+  channelSeconds: 2
+  channelManaTiming: 0
+  healAmount: 30
+  channelMoveDeadzone: 0.2
+  refuseAtFullHealth: 1

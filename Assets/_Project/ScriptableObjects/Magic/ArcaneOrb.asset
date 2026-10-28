@@ -12,6 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1d366334a7334a0ebfa235da02e441a7, type: 3}
   m_Name: ArcaneOrb
   m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Magic.SpellDefinition
+  displayName: Arcane Orb
+  delivery: 0
+  themeColour: {r: 0.3, g: 0.88, b: 1, a: 1}
+  icon: {fileID: 21300000, guid: 7fb84d5c66e56454a88e4469bf6cb523, type: 3}
+  modelPrefab: {fileID: 0}
+  secondaryModelPrefab: {fileID: 0}
+  modelScale: 1
   manaCost: 15
   cooldown: 0.45
   autoRepeat: 0
@@ -32,3 +39,27 @@ MonoBehaviour:
   hitMask:
     serializedVersion: 2
     m_Bits: 4294967295
+  burnPrefab: {fileID: 0}
+  burnDamagePerTick: 0
+  burnTickInterval: 0.5
+  burnDuration: 0
+  burnBlastVictims: 1
+  strikePrefab: {fileID: 0}
+  strikeDelay: 0.35
+  strikeTracksTarget: 1
+  staggerSeconds: 0
+  chainCount: 0
+  chainRadius: 5
+  chainDamage: 0
+  zonePrefab: {fileID: 0}
+  zoneRadius: 3
+  zoneHeight: 2.5
+  zoneDuration: 4
+  slowMultiplier: 0.3
+  slowLinger: 0.35
+  groundProbeDistance: 12
+  channelSeconds: 2
+  channelManaTiming: 0
+  healAmount: 30
+  channelMoveDeadzone: 0.2
+  refuseAtFullHealth: 1

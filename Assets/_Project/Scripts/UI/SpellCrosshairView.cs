@@ -7,7 +7,8 @@ namespace Pickleball.UI
 {
     /// <summary>
     /// The spell's screen-centre crosshair: a dot, four ticks, a thin cooldown
-    /// ring and the cast cost underneath. It exists only while aiming — the
+    /// ring and the cast cost underneath. It exists only while aiming a spell
+    /// that uses it (<see cref="SpellCaster.ShowsCrosshair"/>; not Heal) — the
     /// rest of the game has no crosshair, and one left on screen would read as
     /// "you can shoot now" when you cannot.
     ///
@@ -210,7 +211,7 @@ namespace Pickleball.UI
             _snapTint = true;
         }
 
-        void OnCast(MagicOrb orb) => _bloom = 1f;
+        void OnCast(SpellDefinition spell) => _bloom = 1f;
 
         void OnCastFailed()
         {
@@ -223,7 +224,9 @@ namespace Pickleball.UI
         void Update()
         {
             float dt = Time.unscaledDeltaTime;
-            bool aiming = caster != null && caster.IsAiming;
+            // Not for a self-cast spell (Heal): it has no aim point, and the
+            // channel bar under screen centre speaks for it instead.
+            bool aiming = caster != null && caster.ShowsCrosshair;
             float goal = aiming ? 1f : 0f;
             _shown = fadeSeconds > 0f ? Mathf.MoveTowards(_shown, goal, dt / fadeSeconds) : goal;
             ApplyVisibility();

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Pickleball.Sandbox;
 using Pickleball.Sandbox.Combat;
@@ -8,27 +9,35 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 /// <summary>
 /// Tools ▸ Pickleball ▸ Setup Magic. Gives the player the Terraria-style mana
-/// pool and the aimed Arcane Orb spell, idempotently:
+/// pool and five spells — Arcane Orb, Fireball, Thunderbolt, Freeze Zone and
+/// Heal — with a selector, idempotently:
 ///
-///  1. <b>Data</b> — seeds ScriptableObjects/Magic/ManaConfig.asset and
-///     ArcaneOrb.asset from the code defaults. A seed is written ONLY when the
-///     asset does not exist yet; after that the asset is the source of truth and
-///     re-running never overwrites tuning (it only fills a blank orb prefab).
-///  2. <b>Prefab</b> — regenerates Prefabs/Magic/MagicOrb.prefab through
-///     <see cref="MagicOrbPrefabBuilder"/> (same content every run, GUID kept,
-///     so the spell's reference holds).
-///  3. <b>Scene</b> — adds Mana, SpellInput, SpellCaster and AimInputClaims to
-///     the player if missing (and the PlayerInputGate, if Setup Dialogue has not
-///     added it), a "SpellOrigin" child over the right shoulder, points the
-///     orbit camera's aim source at the caster, gates the spell, sword and
-///     lock-on inputs, and rebuilds the mana bar and the crosshair under the
-///     FightHUD canvas through <see cref="MagicHudBuilder"/>.
+///  1. <b>Data</b> — seeds ScriptableObjects/Magic/ManaConfig.asset and the five
+///     spell assets (ArcaneOrb from the code defaults, the other four from the
+///     seeds in this file). A seed is written ONLY when the asset does not exist
+///     yet; after that the asset is the source of truth and re-running never
+///     overwrites tuning (it only fills a blank prefab or icon).
+///  2. <b>Prefabs and art</b> — regenerates Prefabs/Magic/MagicOrb, Fireball,
+///     LightningStrike, FreezeZone and Burn through
+///     <see cref="MagicOrbPrefabBuilder"/> and <see cref="MagicSpellArtBuilder"/>
+///     (same content every run, GUIDs kept, so the spells' references hold), and
+///     the spells' HUD icons through <see cref="MagicHudBuilder.SpellIcon"/>.
+///  3. <b>Scene</b> — adds Mana, SpellInput, SpellCaster, AimInputClaims,
+///     SpellSelectInput and SpellSelector to the player if missing (and the
+///     PlayerInputGate, if Setup Dialogue has not added it), a "SpellOrigin"
+///     child over the right shoulder and a rebuilt "HealChannelVfx" child,
+///     points the orbit camera's aim source at the caster, gates the spell,
+///     sword and lock-on inputs, gives every TrainingDummy in the scene a
+///     StatusReceiver (so the Freeze Zone slows it and the Thunderbolt staggers
+///     it), and rebuilds the mana bar, spell selector, crosshair and channel bar
+///     under the FightHUD canvas through <see cref="MagicHudBuilder"/>.
 ///
-/// Data references on the player (the config, the spell) are filled only when
-/// blank, so a hand-assigned second spell survives a re-run. Component-to-
+/// Data references on the player (the config, the spell, the selector's spell
+/// list) are filled only when blank, so a hand-arranged loadout survives a re-run. Component-to-
 /// component references are rewritten every run, because they are wiring, not
 /// tuning — the same rule the other Setup menus follow.
 ///
@@ -47,8 +56,16 @@ public static class MagicSetup
     const string DataDir = "Assets/_Project/ScriptableObjects/Magic";
     const string ManaConfigPath = DataDir + "/ManaConfig.asset";
     const string SpellPath = DataDir + "/ArcaneOrb.asset";
+    const string FireballPath = DataDir + "/Fireball.asset";
+    const string ThunderboltPath = DataDir + "/Thunderbolt.asset";
+    const string FreezeZonePath = DataDir + "/FreezeZone.asset";
+    const string HealPath = DataDir + "/Heal.asset";
     const string PrefabDir = "Assets/_Project/Prefabs/Magic";
     const string OrbPrefabPath = PrefabDir + "/MagicOrb.prefab";
+    const string FireballPrefabPath = PrefabDir + "/Fireball.prefab";
+    const string StrikePrefabPath = PrefabDir + "/LightningStrike.prefab";
+    const string ZonePrefabPath = PrefabDir + "/FreezeZone.prefab";
+    const string BurnPrefabPath = PrefabDir + "/Burn.prefab";
 
     /// <summary>The fight canvas NewtonFightSetup.BuildHud makes; the mana bar
     /// sits above its PlayerHealthBar, so the two must share it.</summary>
@@ -128,7 +145,26 @@ public static class MagicSetup
         if (orbPrefab == null)
             warnings.Add($"the orb prefab did not build at {OrbPrefabPath} — the spell cannot fire " +
                          "until it does");
+        var fireballPrefab = MagicOrbPrefabBuilder.BuildFireball(FireballPrefabPath);
+        var burnPrefab = MagicSpellArtBuilder.BuildBurn(BurnPrefabPath);
+        var strikePrefab = MagicSpellArtBuilder.BuildStrike(StrikePrefabPath);
+        var zonePrefab = MagicSpellArtBuilder.BuildZone(ZonePrefabPath);
+        if (fireballPrefab == null || burnPrefab == null || strikePrefab == null || zonePrefab == null)
+            warnings.Add("a spell prefab did not build — that spell cannot fire until it does");
+
         var spell = EnsureSpell(orbPrefab);
+        var spellBook = new[]
+        {
+            spell,
+            EnsureSpellAsset(FireballPath, SeedFireball, ("orbPrefab", fireballPrefab), ("burnPrefab", burnPrefab),
+                             ("icon", MagicHudBuilder.SpellIcon(MagicHudBuilder.IconShape.Flame))),
+            EnsureSpellAsset(ThunderboltPath, SeedThunderbolt, ("strikePrefab", strikePrefab),
+                             ("icon", MagicHudBuilder.SpellIcon(MagicHudBuilder.IconShape.Bolt))),
+            EnsureSpellAsset(FreezeZonePath, SeedFreezeZone, ("zonePrefab", zonePrefab),
+                             ("icon", MagicHudBuilder.SpellIcon(MagicHudBuilder.IconShape.Snowflake))),
+            EnsureSpellAsset(HealPath, SeedHeal,
+                             ("icon", MagicHudBuilder.SpellIcon(MagicHudBuilder.IconShape.Cross))),
+        };
 
         // ---- components ----------------------------------------------------
         // Explicit null checks: `??` on a Unity object skips the "fake null"
@@ -141,6 +177,10 @@ public static class MagicSetup
         if (caster == null) caster = go.AddComponent<SpellCaster>();
         var claims = go.GetComponent<AimInputClaims>();
         if (claims == null) claims = go.AddComponent<AimInputClaims>();
+        var selectInput = go.GetComponent<SpellSelectInput>();
+        if (selectInput == null) selectInput = go.AddComponent<SpellSelectInput>();
+        var selector = go.GetComponent<SpellSelector>();
+        if (selector == null) selector = go.AddComponent<SpellSelector>();
         // The same single gate Setup Dialogue adds (DisallowMultipleComponent),
         // so the two menus can run in either order.
         var gate = go.GetComponent<PlayerInputGate>();
@@ -190,6 +230,30 @@ public static class MagicSetup
         if (movementInput == null)
             warnings.Add("no PlayerMovementInput on the player — aiming will not slow it to a walk");
 
+        // Heal restores this Health, and a hit or any movement input cancels its
+        // channel; the gate's Spell block cancels it too.
+        var health = go.GetComponent<Health>();
+        if (health == null)
+            warnings.Add("no Health on the player (run Setup Newton Fight) — Heal cannot be channelled");
+        Set(caster, ("health", health), ("movementInput", movementInput), ("inputGate", gate));
+
+        // Spell selection: number keys pick a slot; the pad cycles with d-pad
+        // up/down while aiming (see SpellSelectInput for why not left/right).
+        Set(selectInput, ("inputGate", gate), ("aimSource", caster));
+        Set(selector, ("caster", caster), ("input", selectInput));
+        FillArrayIfEmpty(selector, "spells", spellBook);
+        MagicSpellArtBuilder.BuildHealVfx(player.transform, caster);
+
+        // Training dummies opt in to the Freeze Zone's slow and the Thunderbolt's
+        // stagger. (Build Training Stage does the same for the dummies it makes.)
+        int receivers = 0;
+        foreach (var dummy in Object.FindObjectsByType<TrainingDummy>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (dummy.gameObject.scene != go.scene) continue;
+            MagicSpellArtBuilder.AttachStatusReceiver(dummy.gameObject);
+            receivers++;
+        }
+
         bool cameraWired = false;
         if (orbit != null)
         {
@@ -216,7 +280,7 @@ public static class MagicSetup
                          "health bar, then Setup Magic again so the mana bar sits on it");
         else if (!hud.activeInHierarchy)
             warnings.Add($"{HudName} is inactive — the mana bar and crosshair will not show until it is enabled");
-        MagicHudBuilder.Build(hud.transform, mana, caster);
+        MagicHudBuilder.Build(hud.transform, mana, caster, selector);
         EditorUtility.SetDirty(hud);
 
         EditorUtility.SetDirty(go);
@@ -224,9 +288,12 @@ public static class MagicSetup
 
         summary = $"Magic set up on {go.name}: Mana ({ManaConfigPath}), SpellInput, SpellCaster casting " +
                   $"{SpellPath} ({OrbPrefabPath}) from {OriginName}, AimInputClaims on the input gate, " +
+                  $"SpellSelector with {spellBook.Length} spells, the heal channel VFX, " +
+                  $"{receivers} training dummy status receiver(s), " +
                   (cameraWired ? $"{orbit.name}'s aim source, " : "") +
-                  $"and the mana bar + crosshair under {HudName}. " +
-                  "Hold right mouse / LT to aim, left mouse / RT to fire. " +
+                  $"and the mana bar, spell selector, crosshair and channel bar under {HudName}. " +
+                  "Hold right mouse / LT to aim, left mouse / RT to fire; 1-5 (or d-pad up/down while " +
+                  "aiming) pick the spell; Heal: hold fire and stand still. " +
                   "SAVE THE SCENE (Ctrl+S) to keep the wiring.";
         if (warnings.Count > 0)
         {
@@ -251,24 +318,143 @@ public static class MagicSetup
     }
 
     /// <summary>Created from the code defaults if missing. An existing asset is
-    /// only topped up: a blank orb prefab is filled, nothing else is touched.</summary>
+    /// only topped up: a blank orb prefab or icon is filled, nothing else is touched.</summary>
     static SpellDefinition EnsureSpell(MagicOrb orbPrefab)
+        => EnsureSpellAsset(SpellPath, null, ("orbPrefab", orbPrefab),
+                            ("icon", MagicHudBuilder.SpellIcon(MagicHudBuilder.IconShape.Orb)));
+
+    /// <summary>
+    /// Loads the spell at <paramref name="path"/>, or creates it and applies
+    /// <paramref name="seed"/> (the spell's tuning) when it does not exist yet.
+    /// Either way each reference in <paramref name="fillIfBlank"/> is written
+    /// only into an empty field — tuning on an existing asset is never touched.
+    /// </summary>
+    static SpellDefinition EnsureSpellAsset(string path, Action<SerializedObject> seed,
+                                            params (string field, Object value)[] fillIfBlank)
     {
-        var spell = AssetDatabase.LoadAssetAtPath<SpellDefinition>(SpellPath);
+        var spell = AssetDatabase.LoadAssetAtPath<SpellDefinition>(path);
         bool created = spell == null;
         if (created) spell = ScriptableObject.CreateInstance<SpellDefinition>();
 
         var so = new SerializedObject(spell);
-        var prefabProp = so.FindProperty("orbPrefab");
-        if (prefabProp == null)
-            Debug.LogError("SpellDefinition has no serialized 'orbPrefab' — the orb is not assigned.");
-        else if (prefabProp.objectReferenceValue == null && orbPrefab != null)
-            prefabProp.objectReferenceValue = orbPrefab;
+        if (created) seed?.Invoke(so);
+        foreach (var (field, value) in fillIfBlank)
+        {
+            var prop = so.FindProperty(field);
+            if (prop == null) Debug.LogError($"SpellDefinition has no serialized '{field}'.");
+            else if (prop.objectReferenceValue == null && value != null) prop.objectReferenceValue = value;
+        }
         bool changed = so.ApplyModifiedPropertiesWithoutUndo();
 
-        if (created) AssetDatabase.CreateAsset(spell, SpellPath);
+        if (created) AssetDatabase.CreateAsset(spell, path);
         else if (changed) EditorUtility.SetDirty(spell);
         return spell;
+    }
+
+    // ---- spell seeds -------------------------------------------------------
+    //
+    // Balanced against a 100-point bar that refills in ~10.7 s on the move and
+    // the Arcane Orb's 15 mana / 0.45 s (six casts a bar). Each spell trades
+    // cost for punch or utility: four Fireballs, three Thunderbolts, two
+    // Freeze Zones or two Heals empty a full bar. Written once, when the asset
+    // is created; tune the asset afterwards, not these numbers.
+
+    static void SeedFireball(SerializedObject so)
+    {
+        Seed(so, "displayName", "Fireball");
+        Seed(so, "delivery", (int)SpellDelivery.Orb);
+        Seed(so, "themeColour", new Color(1f, 0.55f, 0.15f, 1f));
+        Seed(so, "manaCost", 25);
+        Seed(so, "cooldown", 0.9f);
+        Seed(so, "orbSpeed", 20f);           // over twice the orb's 9 m/s
+        Seed(so, "orbRadius", 0.25f);
+        Seed(so, "orbLifetime", 2.5f);       // 50 m of reach
+        Seed(so, "homingTurnRate", 12f);     // fast shots need less help
+        Seed(so, "directDamage", 16f);
+        Seed(so, "blastRadius", 3.2f);       // the orb's is 2.2
+        Seed(so, "blastDamageMax", 12f);
+        Seed(so, "blastDamageMin", 5f);
+        Seed(so, "knockback", 6f);
+        Seed(so, "burnDamagePerTick", 2.5f); // 6 ticks over 3 s = 15 more
+        Seed(so, "burnTickInterval", 0.5f);
+        Seed(so, "burnDuration", 3f);
+        Seed(so, "burnBlastVictims", true);
+    }
+
+    static void SeedThunderbolt(SerializedObject so)
+    {
+        Seed(so, "displayName", "Thunderbolt");
+        Seed(so, "delivery", (int)SpellDelivery.Strike);
+        Seed(so, "themeColour", new Color(1f, 0.92f, 0.35f, 1f));
+        Seed(so, "manaCost", 30);
+        Seed(so, "cooldown", 1.5f);
+        Seed(so, "maxRange", 45f);
+        Seed(so, "aimAssistRadius", 0.5f);   // picking the target is the whole aim
+        Seed(so, "strikeDelay", 0.35f);
+        Seed(so, "strikeTracksTarget", true);
+        Seed(so, "directDamage", 34f);
+        Seed(so, "blastRadius", 1.6f);
+        Seed(so, "blastDamageMax", 12f);
+        Seed(so, "blastDamageMin", 5f);
+        Seed(so, "knockback", 3f);
+        Seed(so, "staggerSeconds", 0.6f);
+        Seed(so, "chainCount", 2);
+        Seed(so, "chainRadius", 6f);
+        Seed(so, "chainDamage", 10f);
+        Seed(so, "groundProbeDistance", 12f);
+    }
+
+    static void SeedFreezeZone(SerializedObject so)
+    {
+        Seed(so, "displayName", "Freeze Zone");
+        Seed(so, "delivery", (int)SpellDelivery.Zone);
+        Seed(so, "themeColour", new Color(0.55f, 0.9f, 1f, 1f));
+        Seed(so, "manaCost", 35);
+        Seed(so, "cooldown", 6f);
+        Seed(so, "maxRange", 30f);
+        Seed(so, "zoneRadius", 3f);
+        Seed(so, "zoneHeight", 2.5f);
+        Seed(so, "zoneDuration", 4f);
+        Seed(so, "slowMultiplier", 0.3f);
+        Seed(so, "slowLinger", 0.35f);
+        Seed(so, "groundProbeDistance", 12f);
+        Seed(so, "directDamage", 0f);
+        Seed(so, "blastRadius", 0f);
+    }
+
+    static void SeedHeal(SerializedObject so)
+    {
+        Seed(so, "displayName", "Heal");
+        Seed(so, "delivery", (int)SpellDelivery.Channel);
+        Seed(so, "themeColour", new Color(0.45f, 1f, 0.55f, 1f));
+        Seed(so, "manaCost", 40);
+        Seed(so, "cooldown", 3f);
+        Seed(so, "channelSeconds", 2f);
+        Seed(so, "channelManaTiming", (int)ChannelManaTiming.OnCompletion);
+        Seed(so, "healAmount", 30f);
+        Seed(so, "channelMoveDeadzone", 0.2f);
+        Seed(so, "refuseAtFullHealth", true);
+        Seed(so, "directDamage", 0f);
+        Seed(so, "blastRadius", 0f);
+    }
+
+    static void Seed(SerializedObject so, string field, object value)
+    {
+        var p = so.FindProperty(field);
+        if (p == null)
+        {
+            Debug.LogError($"Setup Magic: SpellDefinition has no serialized '{field}' to seed.");
+            return;
+        }
+        switch (value)
+        {
+            case float f: p.floatValue = f; break;
+            case int i: p.intValue = i; break;
+            case bool b: p.boolValue = b; break;
+            case string str: p.stringValue = str; break;
+            case Color c: p.colorValue = c; break;
+            default: Debug.LogError($"Setup Magic: cannot seed '{field}' with a {value?.GetType().Name}."); break;
+        }
     }
 
     // ------------------------------------------------------------------ scene
@@ -359,6 +545,24 @@ public static class MagicSetup
         }
         if (p.objectReferenceValue != null) return;
         p.objectReferenceValue = value;
+        so.ApplyModifiedPropertiesWithoutUndo();
+        EditorUtility.SetDirty(target);
+    }
+
+    /// <summary>Writes <paramref name="values"/> into an object-reference array
+    /// only when it is empty, so a hand-arranged list survives a re-run.</summary>
+    static void FillArrayIfEmpty<T>(Object target, string field, T[] values) where T : Object
+    {
+        var so = new SerializedObject(target);
+        var p = so.FindProperty(field);
+        if (p == null || !p.isArray)
+        {
+            Debug.LogError($"Setup Magic: {target.GetType().Name} has no serialized array '{field}'.");
+            return;
+        }
+        if (p.arraySize > 0) return;
+        p.arraySize = values.Length;
+        for (int i = 0; i < values.Length; i++) p.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
         so.ApplyModifiedPropertiesWithoutUndo();
         EditorUtility.SetDirty(target);
     }

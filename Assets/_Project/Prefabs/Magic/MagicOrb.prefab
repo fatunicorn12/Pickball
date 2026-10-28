@@ -5909,6 +5909,7 @@ MonoBehaviour:
   fizzleSeconds: 0.25
   fizzleSwell: 1.5
   fizzleSparkCount: 10
+  modelSpinDegreesPerSecond: 180
   lingerSeconds: 0.6
 --- !u!1 &7838786115467873218
 GameObject:

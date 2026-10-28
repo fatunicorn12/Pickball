@@ -6,9 +6,12 @@ using Object = UnityEngine.Object;
 namespace Pickleball.Sandbox.Magic
 {
     /// <summary>
-    /// One arcane orb in flight: a slow, gently homing ball that bursts on the
-    /// first thing it touches, damaging what it hit directly and everything
-    /// else damageable in a radius with falloff.
+    /// One orb in flight: a gently homing ball that bursts on the first thing it
+    /// touches, damaging what it hit directly and everything else damageable in
+    /// a radius with falloff. The Arcane Orb is slow and violet; the Fireball is
+    /// the same component with faster numbers, a bigger blast and a burn
+    /// (<see cref="BurnStatus"/>) on what the burst hits, all from its
+    /// <see cref="SpellDefinition"/>.
     ///
     /// Simulation only. It moves in Update (the Sandbox's variable-dt clock),
     /// deals damage and raises <see cref="Launched"/>, <see cref="Burst"/> and
@@ -258,8 +261,25 @@ namespace Pickleball.Sandbox.Magic
                 }
             }
 
+            IgniteStruck(target != null);
             Burst?.Invoke(this, centre, hits);
             Destroy(gameObject);
+        }
+
+        /// <summary>
+        /// Sets what the burst damaged alight, for a spell that burns (the
+        /// Fireball): the direct hit, plus every blast victim unless the spell
+        /// limits it to the direct hit. A spell without a burn (the Arcane Orb)
+        /// does nothing here. Runs after all the burst damage, so the burn's
+        /// first tick is always its own, an interval later.
+        /// </summary>
+        void IgniteStruck(bool hadDirectHit)
+        {
+            if (!_spell.Burns) return;
+            int count = _spell.BurnBlastVictims ? _struckCount : (hadDirectHit ? Mathf.Min(1, _struckCount) : 0);
+            for (int i = 0; i < count; i++)
+                BurnStatus.Ignite(_spell.BurnPrefab, _struck[i], _spell.BurnDamagePerTick,
+                                  _spell.BurnTickInterval, _spell.BurnDuration);
         }
 
         void Fizzle()

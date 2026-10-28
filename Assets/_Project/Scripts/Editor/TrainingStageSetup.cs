@@ -403,6 +403,8 @@ public static class TrainingStageSetup
         var so = new SerializedObject(dummy);
         so.FindProperty("visual").objectReferenceValue = visual;
         so.ApplyModifiedPropertiesWithoutUndo();
+        // Opts the dummy in to the Freeze Zone's slow and the Thunderbolt's stagger.
+        MagicSpellArtBuilder.AttachStatusReceiver(root);
         return health;
     }
 
