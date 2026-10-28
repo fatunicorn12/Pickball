@@ -43,15 +43,39 @@ public static class MagicHudBuilder
     public enum IconShape { Orb, Flame, Bolt, Snowflake, Cross }
 
     // Selector slot size and spacing, in canvas pixels, and its gap from the
-    // mana bar's right end.
-    const float SlotSize = 40f;
-    const float SlotGap = 10f;
+    // right end of the bar stack (whichever of health and mana reaches further).
+    // Sized for a phone at 1080p (QA F-5): slots 56 px, key digits 20 px, the
+    // name row 30 px, all on a dark plate so they read on the white floor.
+    const float SlotSize = 56f;
+    const float SlotGap = 12f;
     const float SelectorGap = 26f;
+    const float KeyFontSize = 20f;
+    const float NameFontSize = 30f;
+    const float NameRowHeight = 38f;
+    // Above the row top, clear of the selected slot's 1.2x scale.
+    const float NameRowLift = 12f;
 
-    // Channel bar size and its drop below screen centre (below the crosshair's
-    // cost label), in canvas pixels.
-    static readonly Vector2 ChannelBarSize = new(280f, 14f);
+    // Channel bar size and its drop below screen centre, in canvas pixels, and
+    // its text: the spell name / result word above, the how-to line below.
+    static readonly Vector2 ChannelBarSize = new(420f, 20f);
     const float ChannelBarDrop = 112f;
+    const float ChannelLabelFontSize = 32f;
+    const float ChannelLabelHeight = 42f;
+    const float ChannelHintFontSize = 22f;
+    const float ChannelHintHeight = 30f;
+    const float ChannelTextGap = 8f;
+
+    /// <summary>The dark rounded plate laid behind the selector and the channel
+    /// bar, so white text reads on the near-white training floor (QA F-5).</summary>
+    static readonly Color PlateColour = new(0.02f, 0.03f, 0.08f, 0.66f);
+    const float PlatePad = 12f;
+
+    // SwordAbilitySetup's level readout ("LV 1 · 0 / 50 Lemmas"), on its own
+    // canvas, which it places just above the health bar: where the mana bar
+    // goes. MagicHudBuilder lifts it above the mana bar (QA F-6).
+    const string SwordHudName = "SwordHUD";
+    const string LevelLabelName = "LevelLabel";
+    const float LevelLabelGap = 6f;
     const string HealthBarName = "PlayerHealthBar";
     const string DamageNumbersName = "DamageNumbers";
 
@@ -122,6 +146,7 @@ public static class MagicHudBuilder
         var bar = BuildManaBar(canvas, mana, caster, style);
         var crosshair = BuildCrosshair(canvas, caster, style);
         SetDrawOrder(canvas, bar, crosshair);
+        LiftLevelLabel((RectTransform)bar);
         var picker = BuildSelector(canvas, selector, (RectTransform)bar, style);
         var channel = BuildChannelBar(canvas, caster, style);
         // The selector sits beside the mana bar and never overlaps it; the
@@ -376,7 +401,7 @@ public static class MagicHudBuilder
         ir.sizeDelta = new Vector2(30f, 30f);
         ir.anchoredPosition = new Vector2(15f - FrameOutset, 0f);
 
-        var value = AddText(body, "Value", s, 15f, TextAlignmentOptions.Right);
+        var value = AddText(body, "Value", s, 18f, TextAlignmentOptions.Right);
         Stretch(value.rectTransform);
         value.rectTransform.offsetMax = new Vector2(-10f, 0f);
         value.color = new Color(1f, 1f, 1f, 0.95f);
@@ -457,6 +482,32 @@ public static class MagicHudBuilder
         bar.pivot = Vector2.zero;
         bar.sizeDelta = BarSize;
         bar.anchoredPosition = topLeft + new Vector2(0f, FrameOutset + GapAboveHealth + FrameOutset);
+    }
+
+    /// <summary>
+    /// Stacks health, then mana, then the level label: moves SwordAbilitySetup's
+    /// "LevelLabel" (on the "SwordHUD" canvas) so its bottom sits
+    /// <see cref="LevelLabelGap"/> above the mana bar's frame. Derived from the
+    /// mana bar's place, never from the label's current one, so a re-run moves
+    /// nothing twice. Both canvases scale the same way (1920 x 1080 reference,
+    /// bottom-left anchors), so the mana bar's canvas pixels are the label's.
+    /// Re-running Setup Sword Abilities puts the label back on the bar; re-run
+    /// Setup Magic after it.
+    /// </summary>
+    static void LiftLevelLabel(RectTransform bar)
+    {
+        var hud = GameObject.Find(SwordHudName);
+        var label = hud != null ? hud.transform.Find(LevelLabelName) as RectTransform : null;
+        if (label == null) return;
+        if (label.anchorMin != bar.anchorMin || label.anchorMax != bar.anchorMax)
+        {
+            Debug.LogWarning($"MagicHudBuilder: {SwordHudName}/{LevelLabelName} is anchored differently from " +
+                             "the mana bar; left where it is. Check it does not overlap the mana bar.", label);
+            return;
+        }
+        float bottom = bar.anchoredPosition.y + BarSize.y + FrameOutset + LevelLabelGap;
+        label.anchoredPosition = new Vector2(label.anchoredPosition.x, bottom + label.pivot.y * label.sizeDelta.y);
+        EditorUtility.SetDirty(label);
     }
 
     // ---- crosshair -------------------------------------------------------
@@ -553,10 +604,11 @@ public static class MagicHudBuilder
     // ---- spell selector ----------------------------------------------------
 
     /// <summary>
-    ///   SpellSelector (CanvasGroup) — beside the mana bar's right end
+    ///   SpellSelector (CanvasGroup) — right of the health / mana stack
+    ///     Plate (dark, behind everything)
     ///     Slot0..n (scaled for selection)
     ///       Well → Icon → Cooldown (Radial 360 sweep) → Frame → Key
-    ///     Name (selected spell) · Cost
+    ///     Name ("Fireball · 25", white) → Underline (spell colour)
     /// </summary>
     static Transform BuildSelector(Transform canvas, SpellSelector selector, RectTransform bar, HudStyle s)
     {
@@ -564,14 +616,31 @@ public static class MagicHudBuilder
         var root = NewRect(SelectorName, canvas);
         int count = selector != null ? selector.Count : 0;
 
+        // Right of the whole bar stack (the health bar is the wider one) and
+        // centred on it, so the bigger slots never overlap either bar.
+        var health = canvas.Find(HealthBarName) as RectTransform;
+        float right = bar.anchoredPosition.x + BarSize.x + FrameOutset;
+        float bottom = bar.anchoredPosition.y;
+        if (health != null && health.anchorMin == health.anchorMax && health.anchorMin == bar.anchorMin)
+        {
+            right = Mathf.Max(right, health.offsetMax.x + FrameOutset);
+            bottom = health.offsetMin.y;
+        }
+        float top = bar.anchoredPosition.y + BarSize.y;
+
         root.anchorMin = root.anchorMax = bar.anchorMin;
         root.pivot = new Vector2(0f, 0.5f);
-        root.sizeDelta = new Vector2(Mathf.Max(1, count) * (SlotSize + SlotGap), SlotSize);
-        root.anchoredPosition = bar.anchoredPosition + new Vector2(BarSize.x + FrameOutset + SelectorGap, BarSize.y * 0.5f);
+        root.sizeDelta = new Vector2(Mathf.Max(1, count) * (SlotSize + SlotGap) - SlotGap, SlotSize);
+        root.anchoredPosition = new Vector2(right + SelectorGap, (bottom + top) * 0.5f);
 
         var group = root.gameObject.AddComponent<CanvasGroup>();
         group.interactable = false;
         group.blocksRaycasts = false;
+
+        // Behind the slots and the name row.
+        var plate = AddImage(root, "Plate", PlateColour, s.Mask, Image.Type.Sliced);
+        plate.rectTransform.offsetMin = new Vector2(-PlatePad, -PlatePad);
+        plate.rectTransform.offsetMax = new Vector2(PlatePad, NameRowLift + NameRowHeight + PlatePad * 0.5f);
 
         var slots = new RectTransform[count];
         var frames = new Image[count];
@@ -599,7 +668,7 @@ public static class MagicHudBuilder
             sweep.fillAmount = 0f;
             var frame = AddImage(slot, "Frame", FrameColour, s.SlotFrame, Image.Type.Simple);
 
-            var key = AddText(slot, "Key", s, 13f, TextAlignmentOptions.BottomRight);
+            var key = AddText(slot, "Key", s, KeyFontSize, TextAlignmentOptions.BottomRight);
             Stretch(key.rectTransform);
             key.rectTransform.offsetMin = new Vector2(0f, -2f);
             key.rectTransform.offsetMax = new Vector2(-3f, 0f);
@@ -613,25 +682,27 @@ public static class MagicHudBuilder
             keys[i] = key;
         }
 
-        var name = AddText(root, "Name", s, 18f, TextAlignmentOptions.BottomLeft);
+        // One line, white, the cost right after the name ("Fireball · 25"),
+        // underlined in the spell's colour. The view writes both.
+        var name = AddText(root, "Name", s, NameFontSize, TextAlignmentOptions.BottomLeft);
+        name.fontStyle = FontStyles.Bold;
         var nr = name.rectTransform;
         nr.anchorMin = new Vector2(0f, 1f);
         nr.anchorMax = new Vector2(1f, 1f);
         nr.pivot = new Vector2(0f, 0f);
-        nr.sizeDelta = new Vector2(0f, 24f);
-        nr.anchoredPosition = new Vector2(0f, 6f);
+        nr.sizeDelta = new Vector2(0f, NameRowHeight);
+        nr.anchoredPosition = new Vector2(0f, NameRowLift);
+        name.color = Color.white;
         var selected = selector != null ? selector.Selected : null;
         name.text = selected != null ? selected.DisplayName : "";
 
-        var cost = AddText(root, "Cost", s, 15f, TextAlignmentOptions.BottomRight);
-        var cr = cost.rectTransform;
-        cr.anchorMin = new Vector2(0f, 1f);
-        cr.anchorMax = new Vector2(1f, 1f);
-        cr.pivot = new Vector2(1f, 0f);
-        cr.sizeDelta = new Vector2(0f, 22f);
-        cr.anchoredPosition = new Vector2(0f, 7f);
-        cost.color = CostColour;
-        cost.text = selected != null && selected.ManaCost > 0 ? selected.ManaCost.ToString() : "";
+        var underline = AddImage(nr, "Underline", selected != null ? selected.ThemeColour : Color.white, null,
+                                 Image.Type.Simple);
+        var ur = underline.rectTransform;
+        ur.anchorMin = ur.anchorMax = Vector2.zero;
+        ur.pivot = new Vector2(0f, 1f);
+        ur.sizeDelta = new Vector2(120f, 3f);   // the view sizes it to the name
+        ur.anchoredPosition = new Vector2(0f, -1f);
 
         var view = root.gameObject.AddComponent<SpellSelectorView>();
         var so = new SerializedObject(view);
@@ -643,7 +714,8 @@ public static class MagicHudBuilder
         SetArray(so, "cooldowns", sweeps);
         SetArray(so, "keys", keys);
         Set(so, "nameText", name);
-        Set(so, "costText", cost);
+        Set(so, "costText", null);
+        Set(so, "nameUnderline", underline);
         so.ApplyModifiedPropertiesWithoutUndo();
         return root;
     }
@@ -653,6 +725,7 @@ public static class MagicHudBuilder
     /// <summary>
     ///   SpellChannelBar (CanvasGroup; hidden until a channel spell is aimed)
     ///     Body (shaken on a cancel)
+    ///       Plate (dark, behind the text and bar)
     ///       Track → Fill (Horizontal) → Frame
     ///       Label (spell name / result) above, Hint below
     /// </summary>
@@ -672,6 +745,11 @@ public static class MagicHudBuilder
         var body = NewRect("Body", root);
         Stretch(body);
 
+        // Behind the label, the bar and the hint; inside Body so it shakes too.
+        var plate = AddImage(body, "Plate", PlateColour, s.Mask, Image.Type.Sliced);
+        plate.rectTransform.offsetMin = new Vector2(-PlatePad * 2f, -(ChannelTextGap + ChannelHintHeight + PlatePad * 0.5f));
+        plate.rectTransform.offsetMax = new Vector2(PlatePad * 2f, ChannelTextGap + ChannelLabelHeight + PlatePad * 0.5f);
+
         var track = AddImage(body, "Track", WellColour, s.Mask, Image.Type.Sliced);
         track.gameObject.AddComponent<Mask>().showMaskGraphic = true;
         var fill = AddFill(track.rectTransform, "Fill", new Color(0.45f, 1f, 0.55f), s.Fill);
@@ -679,22 +757,23 @@ public static class MagicHudBuilder
         var frame = AddImage(body, "Frame", FrameColour, s.Frame, Image.Type.Sliced);
         Outset(frame.rectTransform, FrameOutset);
 
-        var label = AddText(body, "Label", s, 22f, TextAlignmentOptions.Bottom);
+        var label = AddText(body, "Label", s, ChannelLabelFontSize, TextAlignmentOptions.Bottom);
+        label.fontStyle = FontStyles.Bold;
         var lr = label.rectTransform;
         lr.anchorMin = new Vector2(0f, 1f);
         lr.anchorMax = new Vector2(1f, 1f);
         lr.pivot = new Vector2(0.5f, 0f);
-        lr.sizeDelta = new Vector2(80f, 30f);
-        lr.anchoredPosition = new Vector2(0f, 8f);
+        lr.sizeDelta = new Vector2(80f, ChannelLabelHeight);
+        lr.anchoredPosition = new Vector2(0f, ChannelTextGap);
 
-        var hint = AddText(body, "Hint", s, 15f, TextAlignmentOptions.Top);
+        var hint = AddText(body, "Hint", s, ChannelHintFontSize, TextAlignmentOptions.Top);
         var hr = hint.rectTransform;
         hr.anchorMin = new Vector2(0f, 0f);
         hr.anchorMax = new Vector2(1f, 0f);
         hr.pivot = new Vector2(0.5f, 1f);
-        hr.sizeDelta = new Vector2(120f, 22f);
-        hr.anchoredPosition = new Vector2(0f, -8f);
-        hint.color = new Color(1f, 1f, 1f, 0.85f);
+        hr.sizeDelta = new Vector2(120f, ChannelHintHeight);
+        hr.anchoredPosition = new Vector2(0f, -ChannelTextGap);
+        hint.color = Color.white;
 
         var view = root.gameObject.AddComponent<SpellChannelView>();
         var so = new SerializedObject(view);

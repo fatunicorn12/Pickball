@@ -13,7 +13,14 @@ namespace Pickleball.Sandbox.Magic
     /// starts the cooldown, raises the events.
     ///
     /// <b>Order of reasons.</b> When several apply on one frame, the most
-    /// specific is reported: blocked, hurt, busy, airborne, moved, released.
+    /// specific is reported: blocked, hurt, busy, airborne, moved, displaced,
+    /// released.
+    ///
+    /// <b>Standing still means it.</b> Besides movement input, the body being
+    /// carried more than <see cref="MaxDrift"/> from where it began (a gravity
+    /// well, a push, anything) cancels as <see cref="ChannelStopReason.Displaced"/>.
+    /// Damage interrupts only by <see cref="HitInterrupts"/>: a real hit does, a
+    /// sub-threshold tick does not.
     /// "You were hit" says more than "you let go" when both happened because
     /// the hit knocked the stick.
     ///
@@ -54,6 +61,33 @@ namespace Pickleball.Sandbox.Magic
         /// <see cref="ChannelStopReason.None"/> after a completion.</summary>
         public ChannelStopReason LastStop { get; private set; }
 
+        /// <summary>Where the body stood when the running (or last) channel began.</summary>
+        public Vector3 Origin { get; private set; }
+
+        /// <summary>Metres across the ground the body may be moved from
+        /// <see cref="Origin"/> before the channel cancels as
+        /// <see cref="ChannelStopReason.Displaced"/>; 0 or less = no limit.</summary>
+        public float MaxDrift { get; private set; }
+
+        /// <summary>
+        /// The one damage rule for a channel: a hit of at least
+        /// <paramref name="minDamage"/> interrupts it; anything smaller (a gravity
+        /// well's core tick, a burn, a beam's chip) does not. A non-positive
+        /// <paramref name="minDamage"/> means any damage above zero interrupts.
+        /// </summary>
+        public static bool HitInterrupts(float damage, float minDamage)
+            => damage > 0f && damage >= minDamage;
+
+        /// <summary>True when <paramref name="now"/> is more than
+        /// <paramref name="maxDrift"/> metres across the ground (height ignored)
+        /// from <paramref name="origin"/>. A non-positive limit never drifts.</summary>
+        public static bool Drifted(Vector3 origin, Vector3 now, float maxDrift)
+        {
+            if (maxDrift <= 0f) return false;
+            float dx = now.x - origin.x, dz = now.z - origin.z;
+            return dx * dx + dz * dz > maxDrift * maxDrift;
+        }
+
         /// <summary>
         /// The first rule <paramref name="signals"/> break, in reporting order, or
         /// <see cref="ChannelStopReason.None"/>. Shared by starting and ticking,
@@ -83,8 +117,11 @@ namespace Pickleball.Sandbox.Magic
         /// <see cref="ChannelStopReason.None"/> with no effect: the running one
         /// carries on.
         /// </summary>
+        /// <param name="maxDrift">Metres the body may be moved from where it stands
+        /// now (<see cref="ChannelSignals.Position"/>) before the channel cancels as
+        /// <see cref="ChannelStopReason.Displaced"/>; 0 = no limit.</param>
         public ChannelStopReason TryBegin(in ChannelSignals signals, float duration, int cost,
-                                          ChannelManaTiming timing, Mana mana)
+                                          ChannelManaTiming timing, Mana mana, float maxDrift = 0f)
         {
             if (IsChanneling) return ChannelStopReason.None;
 
@@ -116,6 +153,8 @@ namespace Pickleball.Sandbox.Magic
             Cost = cost;
             Timing = timing;
             Paid = paid || cost <= 0;
+            Origin = signals.Position;
+            MaxDrift = maxDrift;
             LastStop = ChannelStopReason.None;
             return ChannelStopReason.None;
         }
@@ -131,7 +170,12 @@ namespace Pickleball.Sandbox.Magic
         {
             if (!IsChanneling) return ChannelStep.Idle;
 
+            // Displacement ranks after movement input ("Moved" says more when the
+            // player walked) and before letting go.
             var reason = Interruption(signals);
+            if ((reason == ChannelStopReason.None || reason == ChannelStopReason.Released)
+                && Drifted(Origin, signals.Position, MaxDrift))
+                reason = ChannelStopReason.Displaced;
             if (reason != ChannelStopReason.None)
             {
                 Stop(reason);

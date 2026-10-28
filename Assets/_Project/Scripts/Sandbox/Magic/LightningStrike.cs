@@ -30,6 +30,8 @@ namespace Pickleball.Sandbox.Magic
     ///  - <b>Never hurts its owner,</b> like the orb.
     ///  - <b>The chain jumps from link to link,</b> nearest first, so it reads
     ///    as one arc travelling through a crowd.
+    ///  - <b>No direct victim, no chain.</b> The chain starts from the struck
+    ///    enemy; a bolt on empty ground is a miss (splash only).
     /// </summary>
     public class LightningStrike : MonoBehaviour
     {
@@ -227,11 +229,14 @@ namespace Pickleball.Sandbox.Magic
                 }
             }
 
-            // ---- chain
-            hits += Chain();
+            // ---- chain: only from a struck victim. A bolt on empty ground is a
+            // miss and never arcs to a bystander.
+            if (direct != null) hits += Chain();
 
             Struck?.Invoke(this, _point, hits);
-            Destroy(gameObject);
+            // DestroyImmediate only outside Play mode (EditMode tests drive Tick).
+            if (Application.isPlaying) Destroy(gameObject);
+            else DestroyImmediate(gameObject);
         }
 
         /// <summary>Arcs to up to ChainCount unstruck damageables near the impact,

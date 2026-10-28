@@ -234,7 +234,9 @@ namespace Pickleball.UI
 
             var mana = caster.Mana;
             int cost = caster.Cost;
-            bool affordable = cost <= 0 || (mana != null && mana.CanAfford(cost));
+            // Short of mana, or a ground spell with no floor under the crosshair
+            // (the sky): either way a press would be refused, so it shows red.
+            bool affordable = (cost <= 0 || (mana != null && mana.CanAfford(cost))) && caster.AimPlaceable;
             bool onTarget = affordable && caster.AimOnTarget;
 
             _onTarget = Mathf.Lerp(_onTarget, onTarget ? 1f : 0f, 1f - Mathf.Exp(-dt / targetSmoothing));

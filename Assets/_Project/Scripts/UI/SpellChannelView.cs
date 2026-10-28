@@ -12,8 +12,9 @@ namespace Pickleball.UI
     ///  - <b>how</b>, while aiming with the spell selected: the spell's name and
     ///    cost and "hold fire · stand still";
     ///  - <b>how far</b>, while channelling: a bar filling over the channel time;
-    ///  - <b>what happened</b>, for a moment after: a gold "+30" on completion, or
-    ///    the broken rule in red ("Moved", "Hit!", "Not enough mana") with a
+    ///  - <b>what happened</b>, for a moment after: a gold "+N" on completion (the
+    ///    health actually restored), or the broken rule in red ("Moved", "Pulled",
+    ///    "Hit!", "Not enough mana") with a
     ///    shake on a cancel or a refusal.
     ///
     /// Presentation only: it polls <see cref="SpellCaster"/> for the state and
@@ -113,7 +114,9 @@ namespace Pickleball.UI
         void OnCompleted(SpellDefinition spell)
         {
             _failed = false;
-            _resultWord = spell != null && spell.HealAmount > 0f ? $"+{Mathf.RoundToInt(spell.HealAmount)}" : "Done";
+            // What was actually restored, not the spell's amount: 5 missing heals 5.
+            float healed = caster != null ? caster.LastHealed : 0f;
+            _resultWord = spell != null && spell.HealAmount > 0f ? $"+{Mathf.RoundToInt(healed)}" : "Done";
             StartResult();
         }
 
@@ -189,7 +192,7 @@ namespace Pickleball.UI
                     if (hint != null)
                     {
                         hint.text = spell != null && spell.ManaCost > 0 ? $"{HintText} · {spell.ManaCost} mana" : HintText;
-                        hint.alpha = 0.85f;
+                        hint.alpha = 1f;
                     }
                     if (fill != null) fill.color = fillColour;
                     break;
@@ -223,6 +226,7 @@ namespace Pickleball.UI
             ChannelStopReason.Airborne => "Jumped",
             ChannelStopReason.Busy => "Interrupted",
             ChannelStopReason.Hurt => "Hit!",
+            ChannelStopReason.Displaced => "Pulled",
             ChannelStopReason.NoMana => "Not enough mana",
             ChannelStopReason.FullHealth => "Health is full",
             ChannelStopReason.Unavailable => "Can't heal",

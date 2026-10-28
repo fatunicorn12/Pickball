@@ -205,7 +205,7 @@ namespace Pickleball.Sandbox.Magic
 
         [Tooltip("Metres a Zone or Strike looks straight down from the aim point for the floor " +
                  "(a crosshair on a wall or a chest lands on the ground beneath). Nothing " +
-                 "found = it lands at the aim point itself.")]
+                 "found (the sky, a deep pit) = the cast is refused, free.")]
         [Min(0f)] [SerializeField] private float groundProbeDistance = 12f;
 
         [Header("Channel (hold still to cast)")]
@@ -225,6 +225,16 @@ namespace Pickleball.Sandbox.Magic
 
         [Tooltip("On: a channel cannot start at full health (no mana is risked for nothing).")]
         [SerializeField] private bool refuseAtFullHealth = true;
+
+        [Tooltip("Metres across the ground the body may be carried from where the channel " +
+                 "began (a gravity well's pull, a push) before it cancels, input or not. " +
+                 "0 = no limit.")]
+        [Min(0f)] [SerializeField] private float channelMaxDrift = 0.4f;
+
+        [Tooltip("Smallest single hit that interrupts a channel, in health points. Smaller " +
+                 "ticks (a gravity well's core, a burn, a beam's chip) never do; a real hit " +
+                 "does. 0 = any damage interrupts.")]
+        [Min(0f)] [SerializeField] private float channelInterruptDamage = 1f;
 
         /// <summary>Name for the HUD.</summary>
         public string DisplayName => string.IsNullOrEmpty(displayName) ? name : displayName;
@@ -380,5 +390,12 @@ namespace Pickleball.Sandbox.Magic
 
         /// <summary>True when a channel refuses to start at full health.</summary>
         public bool RefuseAtFullHealth => refuseAtFullHealth;
+
+        /// <summary>Metres a channel's body may be carried from its start before it
+        /// cancels; 0 = no limit.</summary>
+        public float ChannelMaxDrift => channelMaxDrift;
+
+        /// <summary>Smallest single hit that interrupts a channel; 0 = any damage.</summary>
+        public float ChannelInterruptDamage => channelInterruptDamage;
     }
 }
