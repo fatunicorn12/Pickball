@@ -916,6 +916,8 @@ public static class BirdyNpcSetup
             hso.FindProperty("maxHealth").floatValue = MaxHealth;
             // No grey pool: there is no fight to win it back in.
             hso.FindProperty("regainShare").floatValue = 0f;
+            // A friendly NPC: cutting Birdy down must not be a 310-Lemma shortcut.
+            hso.FindProperty("grantsXp").boolValue = false;
             hso.ApplyModifiedPropertiesWithoutUndo();
 
             var talkable = GetOrAdd<Talkable>(root);

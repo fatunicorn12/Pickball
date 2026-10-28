@@ -73,6 +73,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Health
   maxHealth: 40
+  grantsXp: 0
   regainShare: 0
   regainGrace: 2.5
   regainDecay: 14
