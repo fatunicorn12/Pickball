@@ -3,13 +3,42 @@
 Wii-Sports-Tennis-style arcade pickleball. Low-poly primitives, floaty exaggerated ball
 physics, fixed camera behind the player. Targets Android/iOS. Proof of concept.
 
-## Architecture
+## Start here: the repo has grown past the pickleball POC
 
-Modular components wired together in the scene via the Inspector. Systems never reference each
-other directly — they communicate through `ScriptableObject` **event channel** assets
-(`Scripts/Events/EventChannels.cs`). All tunables live on `BallConfig` / `AIConfig` / `GameConfig`
-assets. UniTask only (no coroutines). The only per-frame loop is `BallController.FixedUpdate`
-(manual gravity); everything else is event- or UniTask-driven.
+Most active work is now the **Sandbox**, "The Guardians of Mathematics" (`ROADMAP.md`):
+- a chibi player with Sunshine-style movement, sword combat and abilities, lock-on and tether;
+- the Newton boss fight;
+- Spacetime (4D worldlines), which is off by default.
+
+It lives in `Scripts/Sandbox/` and the `ChibiSandbox`, `TrainingStage` and `SpacetimeLab`
+scenes. The rest of this file covers the original pickleball game. Read these before changing code:
+
+| Doc | What it holds |
+|---|---|
+| `Docs/CodingStandards.md` | The rules every change follows (separation, data-driven tuning, hot-reload safety, tests, parallel work) |
+| `Docs/Systems/<System>.md` | One doc per system (Movement, SwordAbilities, WeaponClearance, Spacetime), each owned by that system's agent |
+| `Docs/Architecture/` | Cross-system decisions that aren't in the system docs: communication patterns, the combat↔movement seam, runtime conventions, editor setup scripts, and interim notes for the pickleball core and Newton boss. Start at its `README.md`. |
+| `Docs/Testing/` | How to write and run tests (`README.md`) and the prioritized list of what still needs tests and the known bugs (`QA-Assessment.md`) |
+
+**Shared Unity Editor.** Several agent sessions share one Editor. Ask the agent-manager session
+("Agent task conflict management") before Play mode, test runs, recompiles or setup menus. Never
+save a `.cs` file while the Editor is in Play mode.
+
+**Tests.** There is one EditMode assembly, `Assets/_Project/Tests/EditMode/`
+(`Pickleball.Tests.EditMode`, which references `Pickleball.Runtime`). There is no PlayMode
+assembly yet. Put logic in plain C# classes and test it there. Headless command lines and
+conventions are in `Docs/Testing/README.md`.
+
+## Architecture (pickleball core)
+
+Modular components wired together in the scene via the Inspector. They communicate through
+`ScriptableObject` **event channel** assets (`Scripts/Events/EventChannels.cs`), except that
+`GameStateManager`, `PlayerController` and `AIController` also call `BallController` directly
+(`ResetTo`, `Hit`, `PredictLanding`). The Sandbox uses C# events and interfaces instead; see
+`Docs/Architecture/Communication.md`. All tunables live on `BallConfig` / `AIConfig` /
+`GameConfig` assets. UniTask only (no coroutines). `BallController.FixedUpdate` (manual gravity)
+is the project's only `FixedUpdate`. The AI also polls every frame through `UniTask.Yield` loops,
+and the Sandbox simulates in `Update`.
 
 **Coordinate convention:** X = court width, Z = court length (player baseline at −Z, AI at +Z,
 net at Z=0), Y = up (surface top at Y=0).
@@ -33,8 +62,15 @@ Assets/_Project/Scripts/
   Input/   InputReader (new Input System, tap/swipe; no Update loop)
   AI/      AIController, AIConfig
   GameState/ GameStateManager, GameConfig
-  UI/      ScoreView (TextMeshPro)
-  Editor/  PickleballSceneBuilder → Tools ▸ Pickleball ▸ Create Assets
+  UI/      ScoreView (TextMeshPro); also the Sandbox HUD (HealthBarView, DamageNumbers, BarkView)
+  Sandbox/ the Guardians of Mathematics game: Movement/, Combat/, Boss/, Spacetime/, Weapon/,
+           Cloth/, Training/, plus lock-on, tether, camera and dash components
+  Editor/  PickleballSceneBuilder → Tools ▸ Pickleball ▸ Create Assets, plus the Sandbox setup
+           menus (Tools ▸ Pickleball ▸ Setup …; see Docs/Architecture/EditorSetup.md)
+  Pickleball.Runtime.asmdef (all runtime code); Editor/Pickleball.Editor.asmdef;
+  Editor/WorldLook/Pickleball.Editor.WorldLook.asmdef (needs URP)
+Assets/_Project/Tests/EditMode/   Pickleball.Tests.EditMode (Combat/, Movement/, Weapon/, boss, spacetime)
+Docs/                             CodingStandards, Systems/, Architecture/, Testing/
 ```
 
 ## Event channel wiring (which asset goes where)
@@ -49,6 +85,12 @@ Assets/_Project/Scripts/
 
 The **same asset instance** must be dragged into every component that shares it.
 
+> **Known issue (as of `a930952`):** the five channel assets in `ScriptableObjects/Events/` don't
+> load; `AssetDatabase` returns null for them. The four channel classes share one file, and
+> Unity binds a ScriptableObject asset only to a class whose file name matches. Split each class
+> into its own file and re-run **Create Assets** before wiring a scene. See
+> `Docs/Architecture/Communication.md`.
+
 ## Setup (do this once)
 
 1. Open in Unity 6 (6000.3.5f2); let packages resolve. **UniTask installs from a git URL**, so git
@@ -58,6 +100,11 @@ The **same asset instance** must be dragged into every component that shares it.
 3. If TMP text is invisible: **Window ▸ TextMeshPro ▸ Import TMP Essential Resources** (one-time).
 
 ## Build the scene (manual, inspector-wired)
+
+> **Note:** the committed `Scenes/GameScene.unity` is an unwired stub. It has no camera, AI,
+> `GameStateManager`, `HitZone` or UI, and its references are unassigned. These manual steps are
+> the only way to get a playable pickleball scene. Unlike the Sandbox, which is built by setup
+> menus as `Docs/CodingStandards.md` §4 requires, no menu builds it.
 
 Create these GameObjects and assign references in the Inspector (`PlayerBaselineZ ≈ −6.7`,
 `AiBaselineZ ≈ +6.7`):

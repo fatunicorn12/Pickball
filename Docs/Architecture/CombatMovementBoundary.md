@@ -1,0 +1,95 @@
+# The combat ↔ movement ↔ lock-on boundary
+
+Snapshot as of `a930952`. Movement and sword combat each have a system doc
+(`Docs/Systems/Movement.md`, `Docs/Systems/SwordAbilities.md`). This page records how the three
+player systems meet, because that seam belongs to neither doc and is where regressions hide.
+
+## The chain
+
+```
+MeleeCombat ──(ICombatMovement, ICombatImpulses)──▶ ChibiMovementAdapter
+                                                         │  (public facade API only)
+                                                         ▼
+LockOnTargeting ◀──reads── ChibiLocomotion (facade + glue, IFacingSource) ──▶ MovementMotor
+                                   │                                             (states)
+                                   └── reads MeleeCombat.IsAttacking (known back-edge)
+```
+
+## Decisions
+
+**Combat sees movement only through two small interfaces.** `ICombatMovement` (`IsGrounded`,
+`IsBusy`, `Velocity`, `IsMovementLocked`) and `ICombatImpulses` (`AddImpulse`, `LockMovement`).
+`ChibiMovementAdapter` is the one file that changes when movement changes; the combo code never
+names a movement class. `MeleeCombat` takes the source as a serialized `MonoBehaviour` cast to
+the interface, falling back to `GetComponent`.
+- *Unused today:* `Velocity`, `IsMovementLocked` and `LockMovement`.
+- `AddImpulse` maps to `AddMomentum`, which **drops the y component**. A step's lunge is applied
+  once at step start, never per frame (see the `ICombatImpulses` docs).
+
+**No movement means a free swordsman.** With no movement source, combat treats the player as
+grounded and never busy. Test rigs can rely on this: a bare object with `MeleeCombat` still swings.
+
+**`IsBusy` is "an exclusive move is running".** It is `MoveKind.IsExclusive()`: Dash, Tether and
+Skate. `MeleeCombat` won't start a swing while it is true, and a press during it is dropped, not
+buffered.
+
+**`ChibiLocomotion` is a facade, not the movement system.** It was a 1,342-line monolith. It now
+forwards a frozen API (`IsBusy`, `IsGrounded`, `Velocity`, `AddMomentum`, `AddAcceleration`,
+`AppliedFieldVelocity`, `LockMovement`, `IsMovementLocked`, `IsAnchored`) to `MovementMotor`.
+MeleeCombat, the Newton fight and the setup scripts depend on that API. New code should read
+`ChibiLocomotion.Movement` (the motor) instead.
+
+**Facing: lock-on and combat decide where, movement decides when.** `ChibiLocomotion` implements
+`IFacingSource` and installs itself on the motor in `OnEnable`. Priority order:
+1. A registered combat facing source (`SetCombatFacingSource`). None is registered yet.
+2. The lock-on target, which is *urgent* while `MeleeCombat.IsAttacking` and only applied once
+   the player stops otherwise.
+
+Reading `MeleeCombat.IsAttacking` is the one remaining movement-side dependency on combat. It
+is meant to go once combat pushes its own facing request.
+
+**Lock-on feeds the combo resolver, not the swing code.** `MeleeCombat` passes `hasTarget` and
+the horizontal *edge* distance (`AimPoint − TargetRadius`) to `ComboResolver`. Abilities use those
+values in `ComboCondition` (`requireLockOn`, min/max distance), for example to pick a gap-closer
+or a finisher.
+
+**While locked, camera look turns into target flicks.** `SandboxOrbitCamera` ignores mouse and
+right-stick look, and `LockOnTargeting` reads them as left/right target hops. The lock's aim point
+is measured once, at lock time, so the camera doesn't "breathe".
+
+**Grounding is deliberately asymmetric.** Landing refills the air chain at once (commit
+`1e38c1c`); leaving the ground waits `airborneGraceSeconds`. *Known gap:* the ground/air **track**
+for a new swing is chosen from the raw `IsGrounded`, so a one-frame grounded flicker can still
+start an air step and drop the ground chain.
+
+**Vertical levers exist but are not wired.** `ChibiLocomotion.SetVerticalVelocity` and
+`SuspendGravity` (commit `657117d`) forward to the motor, but nothing calls them, and neither the
+adapter nor the interfaces expose them. They have not been play-tested.
+`MovementMotor.SuspendGravity`'s timer only counts down and is not cleared on landing, so leftover
+hang time can freeze a later fall. Fix that before combat starts using it.
+
+## Pad and key layout contract
+
+There is no `.inputactions` asset for the Sandbox. Each component builds its own `InputAction`s
+in code, and `SandboxOrbitCamera` and `TrainingStage` poll `Gamepad.current` / `Keyboard.current`
+directly. Grep for `AddBinding`, `Button(` and `.current` across `Sandbox/` before binding
+anything new.
+
+| Owner | Keyboard / mouse | Gamepad |
+|---|---|---|
+| `PlayerMovementInput` | WASD / arrows; Shift sprint; Space jump; Ctrl crouch; F flip; R mount; E dash; Q / right mouse tether; G anchor | Left stick; LT sprint; South jump; East crouch; North flip; **D-pad Right mount**; RB dash; LB tether; R3 anchor |
+| `SwordInput` | Left mouse (ignored while the cursor is free) | **West** attack |
+| `LockOnTargeting` | Tab / middle mouse toggle | RT toggle |
+| `SandboxOrbitCamera` | Mouse look (polled) | Right stick look, D-pad Up/Down zoom (polled) |
+| `SpacetimeView` | T | D-pad Left (both bound **only while Spacetime is enabled**) |
+| `TrainingStage` | Backspace respawn; Shift+Backspace also revokes abilities (polled) | — |
+
+Mount moved from West to D-pad Right in `ddb5c9d`, which resolved the "pad clash" with attack.
+
+## Testing implications
+
+- `MeleeCombat` can be tested in PlayMode with a stub `ICombatMovement`/`ICombatImpulses`
+  component (settable `IsGrounded`/`IsBusy`) and `QueueAttack()`, with no motor at all.
+- The motor's state `Next()` reads `Time.time` and motor internals directly, so state
+  transitions can't be unit-tested until there is a context interface. See
+  `Docs/Testing/QA-Assessment.md`.
