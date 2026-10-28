@@ -61,11 +61,14 @@ public static class BirdyNpcSetup
     /// without changing the chibi's files). Chosen by sampling candidates on
     /// Birdy (Report Birdy Poses):
     ///   idle  : the unarmed Idle. The wings hang folded at the sides.
-    ///   death : sword-and-shield death (2), a 3.9 s collapse that starts
-    ///           from standing and ends lying down. Mixamo "Falling Flat
-    ///           Impact" was rejected: it begins mid-fall, so Birdy would pop
-    ///           0.8 m into the air before landing. Death (1) ends with the
-    ///           rotor 0.37 m into the floor against (2)'s 0.21 m.
+    ///   death : sword-and-shield death (2), a 3.9 s collapse from a wide
+    ///           stance to the knees and onto the belly. A weapon clip, but
+    ///           every non-weapon option rendered worse on Birdy: Mixamo
+    ///           "Falling Flat Impact" begins mid-fall (whole, Birdy pops
+    ///           0.8 m up; trimmed, he ends 0.4-0.7 m underground), death (1)
+    ///           flails backward from the same guard stance, and (2) trimmed
+    ///           past the stance drops straight from the idle into a crouch.
+    ///           Its end sink is corrected by the config's death lift.
     /// </summary>
     static readonly (string file, string source)[] FallbackCopies =
     {

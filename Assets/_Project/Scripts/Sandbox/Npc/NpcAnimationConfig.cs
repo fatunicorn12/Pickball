@@ -45,14 +45,16 @@ namespace Pickleball.Sandbox.Npc
         [Header("Death")]
         [Tooltip("How far the model is eased up over the death clip, m, so the body ends lying " +
                  "on the ground instead of in it (Mixamo deaths are made for a thinner body). " +
-                 "RE-TUNE THIS FOR EVERY NEW DEATH CLIP: measure it with Tools ▸ Pickleball ▸ " +
-                 "Diagnostics ▸ Report Birdy Poses (the 'death sink' line). 0 = no lift.")]
-        [SerializeField, Min(0f)] private float deathGroundLift = 0.19f;
+                 "RE-TUNE THIS FOR EVERY NEW DEATH CLIP: read the 'death sink' line of Tools ▸ " +
+                 "Pickleball ▸ Diagnostics ▸ Report Birdy Poses, and look at the end pose: lifting " +
+                 "the big helmet fully clear floats the belly, so pick the value where the body " +
+                 "rests on the ground. 0 = no lift.")]
+        [SerializeField, Min(0f)] private float deathGroundLift = 0.06f;
 
         [Tooltip("Normalised time in the death clip at which the lift starts easing in (it is " +
                  "complete at the clip's end). Set it to where the body starts to go down, so " +
                  "the standing part of the death does not float. Re-tune per death clip.")]
-        [SerializeField, Range(0f, 1f)] private float deathLiftStart = 0.45f;
+        [SerializeField, Range(0f, 1f)] private float deathLiftStart = 0.6f;
 
         [Header("Idling")]
         [Tooltip("With several idle clips: chance, after each loop of the main idle, that it " +
