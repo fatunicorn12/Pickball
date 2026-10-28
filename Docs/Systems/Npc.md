@@ -107,11 +107,22 @@ time and would freeze while the conversation pauses the game.
    *Normal map*, 2048.
 3. **Material.** URP Lit `Birdy.mat` (base + normal, smoothness 0.15), remapped onto the FBX's
    one material slot.
-4. **Skin fix (on every import, `BirdyModelPostprocessor`).** Tripo skinned the rotor about 97%
-   to Head and the rest to the arm twist bones, so folding the wings bent the blades down across
-   the face (up to 0.37 m of drift). The rotor part (average Head weight ≥ 0.9) is made 100% Head,
-   and every other vertex with Head weight ≥ 0.9 too. Rotor drift relative to the head is now
-   0.0 cm in every state. It touches no other model.
+4. **Skin fix (on every import, `BirdyModelPostprocessor`; Birdy.fbx only).** Tripo got the
+   weights wrong in ways that show when the wings (the arm chain) move:
+   - *Accessories followed the wings.* The right shoulder strap (`tripo_part_15`) was 61%
+     `R_UpperarmTwist02` while its left mirror (`tripo_part_14`) follows the spine, and the back
+     radio (`tripo_part_9`) was 15% right forearm. The head, helmet, harness and compass carried
+     11–38% clavicle and arm weight.
+     - The right strap now copies its left mirror's weights vertex by vertex: nearest mirrored
+       vertex, L/R bones swapped, 1.8 cm worst match.
+     - Every non-wing part with more than 5% arm-chain weight (Clavicle, Upperarm, Forearm, Hand,
+       twists) has that share moved per vertex to the nearest spine bone (Waist, Spine01, Spine02).
+     - The wing planks (`tripo_part_4/5`) keep theirs.
+     - Report Birdy Poses' "arm-chain weight share" line reads 0% for every non-wing part.
+   - *The rotor bent across the face.* It was skinned about 97% to Head and the rest to the arm
+     twist bones, giving up to 0.37 m of drift. The rotor part (average Head weight ≥ 0.9) is made
+     100% Head, and every other vertex with Head weight ≥ 0.9 too. Rotor drift relative to the
+     head is now 0.0 cm in every state.
 5. **Rig.** `globalScale` is solved so the model is `TargetHeight` (1.15 m) tall: the renderer
    bounds measure 0.986 m at scale 1, so the scale is **1.166**. Humanoid, *Create From This
    Model*, with the shared Tripo bone map (`ChibiSandboxSetup.SetupRigPublic`, the same map as
@@ -273,12 +284,13 @@ until then it falls back to Talk.
 
 - **Waiting on real clips.** The Mixamo talk, idle and death clips need the user's Adobe sign-in.
   Until they land, talk is the idle at a different speed and death is a weapon clip.
-- **White tears at the wing roots and the harness** when the wings fold. Narrowing the fold
-  (40°, and tried at 25°) does not close them. They come from Tripo's skinning: the wings are flat
-  planks hinged at the shoulder, so folding them opens the joint; the right shoulder strap
-  (`tripo_part_15`) is weighted 61% to `R_UpperarmTwist02` while its left mirror (`tripo_part_14`)
-  follows the spine; and the back radio (`tripo_part_9`) is 15% `R_ForearmTwist01`. A weight
-  clean-up (in Blender, or more rules in `BirdyModelPostprocessor`) would fix it.
+- **White slivers at the wing roots** when the wings fold. The harness tears are gone: the
+  accessories no longer follow the arms (import step 4). What remains is the seam where each
+  wing plank meets the body, at the front and back of the shoulder. The wings are flat planks
+  hinged at the shoulder, so folding them opens that joint. Narrowing the fold (40°, tried at 25°)
+  doesn't close it. It needs modelled geometry or blended weights across the seam (in Blender).
+- **The tail follows the left leg.** `tripo_part_3` (the tail) is weighted 61% to `L_CalfTwist01`.
+  It barely shows in the idle, but a walking or kicking clip would swing it.
 - **The death is only approximately grounded.** One lift for the whole model can't ground a body
   whose helmet sinks 19 cm while its belly sinks 2 cm (section 3). The shipped 0.06 m leaves the
   helmet 13 cm in, so the face is half in the floor. A bird-specific death (head turned sideways)

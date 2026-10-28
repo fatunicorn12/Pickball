@@ -116,10 +116,10 @@ public static class BirdyNpcSetup
     /// the fallback idle then folds the wings 80° and presses them into the
     /// body. At 40° they fold 70° and sit just off it, which still reads as
     /// folded. Rendered at 40° and at 25° (61–65°): neither closed the white
-    /// tears at the wing roots and harness. Those come from Tripo's skin
-    /// weights (the wing planks are hinged at the shoulder, and the right
-    /// strap part is weighted to the right arm while its left mirror is not),
-    /// so this is kept at 40° for the look, not as a fix for them.
+    /// tears. The harness tears came from accessories skinned to the arms,
+    /// which BirdyModelPostprocessor now rebinds to the spine; the slivers
+    /// left at the wing roots are the hinge seam of the flat wing planks. So
+    /// this is kept at 40° for the look, not as a fix for either.
     /// </summary>
     const float WingFoldDegrees = 40f;
 
@@ -1488,6 +1488,33 @@ public static class BirdyNpcSetup
             {
                 var (body, rotorLow, top, _) = Measure(0f);
                 lines.Add($"  {"bind pose (no animation)",-30} soles {body:+0.000;-0.000} m, rotor low {rotorLow:+0.00;-0.00} m, top {top:0.00} m");
+            }
+            // How much of each part follows the wings (BirdyModelPostprocessor
+            // moves accessories' arm-chain weight to the spine): every non-wing
+            // part should read ~0%.
+            {
+                var shares = new List<string>();
+                foreach (var smr in smrs)
+                {
+                    float arm = 0f, total = 0f;
+                    var bones = smr.bones;
+                    foreach (var w in smr.sharedMesh.boneWeights)
+                    {
+                        void Add(int i, float x)
+                        {
+                            if (x <= 0f || i < 0 || i >= bones.Length || bones[i] == null) return;
+                            total += x;
+                            if (BirdyModelPostprocessor.IsArmChain(bones[i].name)) arm += x;
+                        }
+                        Add(w.boneIndex0, w.weight0); Add(w.boneIndex1, w.weight1);
+                        Add(w.boneIndex2, w.weight2); Add(w.boneIndex3, w.weight3);
+                    }
+                    float share = total > 0f ? arm / total : 0f;
+                    if (share > 0.001f || BirdyModelPostprocessor.IsWingPart(smr.name))
+                        shares.Add($"{smr.name.Replace("tripo_part_", "p")}{(BirdyModelPostprocessor.IsWingPart(smr.name) ? " (wing)" : "")} {share * 100f:0}%");
+                }
+                lines.Add("  arm-chain weight share by part (non-wing parts should be 0%): " +
+                          (shares.Count > 0 ? string.Join(", ", shares) : "none"));
             }
 
             var sm = controller.layers[0].stateMachine;
