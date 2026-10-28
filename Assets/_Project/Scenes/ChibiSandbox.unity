@@ -36622,6 +36622,8 @@ MonoBehaviour:
   - The fluxion of your position, student. Move and pay for it.
   - Stand still. Or do you not understand rates of change?
   - Leibniz would call this a 'derivative'. Plagiarist.
+  beamWarning:
+  - 'Observe: the beam prices motion. Stand perfectly still, student.'
   volley:
   - Closer, and it hurts the square of closer.
   - One over r squared. Memorise it on the way down.
@@ -36675,7 +36677,7 @@ MonoBehaviour:
   wellIntervalPhaseTwo: 6.5
   maxLiveWells: 3
   wellRetryInterval: 0.25
-  wellMinDistanceFromPlayer: 5
+  wellMinDistanceFromPlayer: 7
   wellPlacementRadius: 11
   beam: {fileID: 5358166292882913621}
   beamIntervalPhaseOne: 9
@@ -36683,7 +36685,7 @@ MonoBehaviour:
   volley: {fileID: 5358166292882913620}
   volleyIntervalPhaseOne: 6
   volleyIntervalPhaseTwo: 4.5
-  volleyCloseUrgency: 2.5
+  volleyCloseUrgency: 1.4
   barrage: {fileID: 5358166292882913622}
   barrageOnDuration: 6
   barrageOffDuration: 5
@@ -36721,10 +36723,11 @@ MonoBehaviour:
   maxTravel: 20
   flightHeight: 0.45
   windUp: 0.55
-  baseDamage: 8
+  baseDamage: 7
   referenceDistance: 4
   minDamage: 1
-  maxDamage: 30
+  maxDamage: 18
+  ringHitGrace: 0.5
   orbRadius: 0.35
   orbPrefab: {fileID: 2653355931895936845, guid: 2e4ebbc703325794a9d6fe59308df772, type: 3}
   orbVisualSizeAtReference: 0.6
@@ -36740,11 +36743,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5c2b5ef6a551b3343a34993eafd83f6b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.FluxionBeam
-  chargeTime: 1.1
-  fireTime: 2.4
-  damagePerSpeed: 3
+  chargeTime: 1.6
+  fireTime: 2
+  damagePerSpeed: 1.5
   speedDeadzone: 0.35
-  maxDamagePerSecond: 30
+  maxDamagePerSecond: 18
+  maxDamagePerFire: 30
   speedSmoothing: 0.06
   chargeForFieldMotion: 0
   muzzle: {fileID: 775008280}
