@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a93615f41f44b6aa542a9a0a03fefea, type: 3}
+  m_Name: Birdy_Intro
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Dialogue.DialogueDefinition
+  speakerName: Birdy
+  lines:
+  - text: Whirr-whirr! A real Guardian of Mathematics! I saw your compass-blade glinting
+      from the rooftops!
+    emote: 1
+  - text: 'I''m Birdy. My rotor runs on pure geometry: one perfect circle, spinning
+      very, very fast.'
+    emote: 0
+  - text: You'll be wanting Sir Isaac. He paces the courtyard all day, muttering
+      about falling bodies...
+    emote: 2
+  - text: His gravity wells will drag you in. But his weak spot is the inverse square.
+      Distance is everything.
+    emote: 2
+  - text: Halve the distance and your blows land four times as hard! So get close.
+      Brave-close!
+    emote: 1
+  - text: And when the apples start raining, watch the ground for their marks. I'll
+      cheer from a safe altitude!
+    emote: 0
