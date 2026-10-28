@@ -24,7 +24,8 @@ off about Newton.
 
 ## 1. Purpose and player-facing feel
 
-Birdy stands near the player's spawn in ChibiSandbox, idling, in the middle of the starting view.
+Birdy stands near the player's spawn in ChibiSandbox, idling, on the same level as the spawn,
+5.5 m away to one side and behind the starting camera. Turn around and he is there.
 Walk up (or lock on) and talk: the game pauses, Birdy turns to face you (on unscaled time,
 easing in, capped so a 180° turn is a pivot rather than a snap), and gestures each line with
 the line's emote: ordinary **Talk**, big **Excited** delivery, or slow **Thinking**. When a line
@@ -152,13 +153,26 @@ time and would freeze while the conversation pauses the game.
    Talkable's registry is set to `DialogueSetup.EnsureTalkableSet()`, which creates the shared
    set if Setup Dialogue hasn't run yet, so walk-up talk works whichever menu runs first.
 10. **Placement** (ChibiSandbox only; any other open scene only gets the prefab updated). One
-    instance named `Birdy` under the `AcademyNpcs` root, facing the spawn, on flat ground within
-    1 m of spawn height that has room for it and can be seen from the player's eye; at least 7 m
-    from Newton, 3 m from training dummies, 2 m from other NPCs, and clear of every pickup's and
-    tether anchor's renderer footprint (plus 0.8 / 0.6 m). Among those, the spot most central in
-    the starting camera's view at about 6 m wins; only if none is on screen does it fall back to
-    a ring around the spawn. An existing instance is left where it is (delete it to re-place). The
-    scene is marked dirty, never saved.
+    instance named `Birdy` under the `AcademyNpcs` root, facing the spawn.
+    - **Every candidate must pass all of these:**
+      - 36 directions × 3.5–12 m around the spawn;
+      - flat ground within 1 m of spawn height, with room for Birdy;
+      - at least 7 m from Newton, 3 m from training dummies and 2 m from other NPCs;
+      - clear of every pickup's and tether anchor's renderer footprint (plus 0.8 / 0.6 m);
+      - a **level talk ring**. On the half facing the spawn, at 1, 1.7 and 2.4 m out, the ground
+        must sit within ±0.3 m of Birdy's. Otherwise the player stands a step above or below him
+        to talk, the prompt's height margin shrinks, he hides behind the player in the orbit view,
+        and the dialogue shot looks steeply down on him.
+    - **Then, in order of preference:**
+      1. in the starting camera's view and in sight of the player's eye: the most central at
+         about 6 m, nearest spawn height;
+      2. in sight but off the starting screen;
+      3. out of sight.
+
+      Visibility is relaxed before levelness, never the reverse.
+    - **An existing instance** is kept where it is if its own talk ring is level, and moved if
+      not, so a re-run with a valid Birdy changes nothing.
+    - The scene is marked dirty, never saved.
 11. **Saving.** Only Birdy's own assets are written (`SaveAssetIfDirty`), never
     `AssetDatabase.SaveAssets()`, which would also rewrite the TMP example fonts that loading
     ChibiSandbox upgrades in memory.
@@ -298,10 +312,22 @@ until then it falls back to Talk.
 - **Lock-on treats Birdy like an enemy.** `LockOnTargeting` takes any live `Health`, with no
   priority for hostiles, so Tab can pick Birdy in the Newton fight, and when Newton dies the lock
   hands over to Birdy if Birdy is on screen. Both need changes in `LockOnTargeting`.
-- **Birdy stands 7.7 m from Newton.** The starting camera looks toward Newton, and the only flat,
-  open, central spots near the spawn are 7.3–7.7 m from him. Placement chose
-  (9.22, -1.35, 5.57): 4.6 m from the spawn, at viewport x 0.56 of the starting camera, on ground
-  0.8 m below the spawn. The previous spot (8 m out, viewport x 0.92) was easy to miss.
+- **Birdy is not in the starting view.** Of 648 candidates (36 directions × 3.5–12 m), none
+  that is level enough to talk on is on the starting screen. The view looks down onto a lawn a
+  terrace below the spawn: its near edge is the step, and the rest is taken by Newton's 7 m
+  clearance, the tether-anchor and pickup footprints, or uneven ground.
+  - Placement therefore relaxed visibility and chose **(6.46, -0.49, 14.21)**, 5.5 m from the
+    spawn on its own level (+0.06 m), in sight of the player's eye but behind and to the side of
+    the starting camera.
+  - Ground around him, relative to his root, at 1 / 1.7 / 2.4 m:
+    - toward the spawn: −0.02 / +0.03 / +0.07
+    - worst on the approach side: +0.22 m, at −90° and 2.4 m
+    - behind him: −0.01 / +0.02 / −0.01
+  - The earlier spot, (9.22, -1.35, 5.57), was in view but on that lower lawn. The player
+    walking up stood 0.83 m above him (QA); the levelness check measures a 1.01 m step there and
+    moves such an instance.
+  - To put Birdy in the starting view, clear room on the lawn (move a tether anchor) or move the
+    starting camera.
 - **No hit reaction.** A sword hit only shows the sword's own flash and hitstop. No flinch clip,
   no damage numbers, no health bar. The boss bar and `DamageNumbers` are wired by Setup Newton
   Fight to exactly Newton and the player, and rewritten on every run of that menu, so adding

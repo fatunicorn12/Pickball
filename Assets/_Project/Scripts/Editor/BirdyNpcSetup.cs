@@ -154,6 +154,20 @@ public static class BirdyNpcSetup
     const float MaxGroundStep = 1f;
     const float MaxGroundSlope = 15f;
 
+    /// <summary>Largest step, m, allowed between Birdy's ground and any sample
+    /// of his talk ring on the approach side (<see cref="LevelApproach"/>).</summary>
+    const float TalkRingStep = 0.3f;
+    /// <summary>Talk-ring sample distances from Birdy, m: where the player stands to talk.</summary>
+    static readonly float[] TalkRingRadii = { 1f, 1.7f, 2.4f };
+    /// <summary>Talk-ring sample directions, ° from the direction toward the spawn.</summary>
+    static readonly float[] TalkRingAngles = { -90f, -60f, -30f, 0f, 30f, 60f, 90f };
+
+    /// <summary>Candidate distances from the spawn, m. Out to 12 m because the
+    /// ground in ChibiSandbox's starting view is a lawn a terrace below the
+    /// spawn, and only its middle is level all round.</summary>
+    static readonly float[] CandidateDistances =
+        { 3.5f, 4f, 4.5f, 5f, 5.5f, 6f, 6.5f, 7f, 7.5f, 8f, 8.5f, 9f, 9.5f, 10f, 10.5f, 11f, 11.5f, 12f };
+
     // ================================================================= menus
 
     [MenuItem("Tools/Pickleball/Setup Birdy NPC")]
@@ -1094,11 +1108,12 @@ public static class BirdyNpcSetup
     // ============================================================ the scene
 
     /// <summary>
-    /// One Birdy in the open ChibiSandbox, under the AcademyNpcs root, on flat
-    /// open ground in view of the player's spawn and well clear of Newton, the
-    /// pickups, the tether anchors and any training dummy, facing the spawn.
-    /// An existing instance is kept where it is (extra ones are removed). Any
-    /// other open scene only gets the prefab updated.
+    /// One Birdy in the open ChibiSandbox, under the AcademyNpcs root, facing
+    /// the spawn (see <see cref="ChooseSpot"/> for where). An existing
+    /// instance is kept where it is unless its spot fails the levelness check
+    /// (<see cref="LevelApproach"/>), in which case it is moved; a re-run with
+    /// a valid Birdy changes nothing. Extra instances are removed. Any other
+    /// open scene only gets the prefab updated.
     /// </summary>
     static void PlaceInOpenScene(GameObject prefab, Bounds bounds)
     {
@@ -1126,7 +1141,17 @@ public static class BirdyNpcSetup
             changed = true;
         }
 
-        GameObject birdy;
+        var player = Object.FindFirstObjectByType<ChibiLocomotion>();
+        if (player == null && instances.Count == 0)
+        {
+            Debug.LogWarning("Setup Birdy NPC: no ChibiLocomotion in the scene, so there is no spawn " +
+                             "to place Birdy near. Prefab updated; nothing placed.");
+            return;
+        }
+        Physics.SyncTransforms();   // autoSyncTransforms is off in this project
+
+        GameObject birdy = null;
+        bool needsSpot = true;
         if (instances.Count > 0)
         {
             birdy = instances[0];
@@ -1148,17 +1173,22 @@ public static class BirdyNpcSetup
                 PrefabUtility.RecordPrefabInstancePropertyModifications(birdy);
                 changed = true;
             }
-            Debug.Log($"Birdy already placed at {birdy.transform.position}; left where it is.");
+
+            Vector3 at = birdy.transform.position;
+            float worst = 0f;
+            needsSpot = player != null &&
+                        !LevelApproach(at, player.transform.position - at, player.transform, out worst);
+            if (!needsSpot)
+                Debug.Log($"Birdy already placed at {at}; its talk ring is level; left where it is.\n" +
+                          RingReport(at, player != null ? player.transform.position - at : Vector3.forward,
+                                     player != null ? player.transform : null));
+            else
+                Debug.Log($"Birdy at {at} stands where the talk ring is not level (worst step {worst:0.00} m " +
+                          "within 2.4 m on the approach side); moving him.");
         }
-        else
+
+        if (needsSpot)
         {
-            var player = Object.FindFirstObjectByType<ChibiLocomotion>();
-            if (player == null)
-            {
-                Debug.LogWarning("Setup Birdy NPC: no ChibiLocomotion in the scene, so there is no spawn " +
-                                 "to place Birdy near. Prefab updated; nothing placed.");
-                return;
-            }
             Vector3 spawn = player.transform.position;
             var cam = Camera.main;
             Vector3 view = cam != null ? cam.transform.forward : player.transform.forward;
@@ -1168,16 +1198,20 @@ public static class BirdyNpcSetup
 
             float height = Mathf.Max(bounds.size.y, 0.2f);
             float radius = Mathf.Max(Mathf.Min(bounds.extents.x, bounds.extents.z) * CapsuleRadiusShare, 0.1f);
-            if (!ChooseSpot(spawn, view, cam, height, radius, player.transform, out var spot, out string why))
+            var ignore = birdy != null ? birdy.transform : null;
+            if (!ChooseSpot(spawn, view, cam, height, radius, player.transform, ignore, out var spot, out string why))
             {
                 spot = spawn + view * 4f;
                 Debug.LogWarning($"Setup Birdy NPC: no clear spot found ({why}); placed at {spot}. " +
                                  "Move him by hand.");
             }
 
-            birdy = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
-            birdy.name = InstanceName;
-            birdy.transform.SetParent(npcRoot.transform, false);
+            if (birdy == null)
+            {
+                birdy = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
+                birdy.name = InstanceName;
+                birdy.transform.SetParent(npcRoot.transform, false);
+            }
             Vector3 look = spawn - spot;
             look.y = 0f;
             birdy.transform.SetPositionAndRotation(
@@ -1188,8 +1222,10 @@ public static class BirdyNpcSetup
             PrefabUtility.RecordPrefabInstancePropertyModifications(birdy.transform);
             PrefabUtility.RecordPrefabInstancePropertyModifications(birdy);
             changed = true;
-            Debug.Log($"Birdy placed at {spot} ({Vector3.Distance(spot, spawn):0.0} m from the spawn), " +
-                      $"facing it. {why}");
+            Physics.SyncTransforms();
+            Debug.Log($"Birdy placed at {spot} ({Vector3.Distance(spot, spawn):0.0} m from the spawn, " +
+                      $"{spot.y - spawn.y:+0.00;-0.00} m from its height), facing it. {why}\n" +
+                      RingReport(spot, spawn - spot, player.transform));
         }
 
         if (changed) EditorSceneManager.MarkSceneDirty(scene);
@@ -1202,16 +1238,20 @@ public static class BirdyNpcSetup
     }
 
     /// <summary>
-    /// Where Birdy stands: the candidate around the spawn that is on flat
-    /// ground near spawn height, has room for him, keeps clear of Newton,
-    /// training dummies, other NPCs and the footprint of every pickup and
-    /// tether anchor, can be seen from the player's eye, and is most central in
-    /// the starting camera's view at about <see cref="PreferredDistance"/>.
-    /// If nothing in view qualifies, the first clear spot in a ring around
-    /// the spawn (side away from Newton first) is used instead.
+    /// Where Birdy stands. Every candidate (36 directions × 3.5–12 m around the
+    /// spawn) must be on flat ground within 1 m of spawn height, have room for
+    /// him, keep clear of Newton, training dummies, other NPCs and the
+    /// footprint of every pickup and tether anchor, and have a level talk
+    /// ring (<see cref="LevelApproach"/>), so the player stands at his height
+    /// when they talk. Among those, in order of preference:
+    /// 1. in the starting camera's view and in sight of the player's eye: the
+    ///    most central at about <see cref="PreferredDistance"/>, nearest spawn height;
+    /// 2. in sight of the player's eye but off the starting screen;
+    /// 3. level but out of sight.
+    /// Visibility is relaxed before levelness, never the other way round.
     /// </summary>
     static bool ChooseSpot(Vector3 spawn, Vector3 view, Camera cam, float height, float radius,
-                           Transform player, out Vector3 spot, out string why)
+                           Transform player, Transform ignore, out Vector3 spot, out string why)
     {
         Physics.SyncTransforms();   // autoSyncTransforms is off in this project
         var circles = new List<(Vector3 at, float clearance, string what)>();
@@ -1220,7 +1260,8 @@ public static class BirdyNpcSetup
         foreach (var d in Object.FindObjectsByType<TrainingDummy>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             circles.Add((d.transform.position, DummyClearance, "a training dummy"));
         foreach (var n in Object.FindObjectsByType<Talkable>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            circles.Add((n.transform.position, NpcClearance, n.name));
+            if (ignore == null || !n.transform.IsChildOf(ignore))
+                circles.Add((n.transform.position, NpcClearance, n.name));
         // Pickups and anchors by their footprint: a pendulum frame is wide, a
         // pickup is small, and a fixed radius was either too strict or too loose.
         var boxes = new List<Bounds>();
@@ -1244,74 +1285,126 @@ public static class BirdyNpcSetup
 
         float baseYaw = Mathf.Atan2(view.x, view.z) * Mathf.Rad2Deg;
         Vector3 eye = spawn + Vector3.up * 1.4f;
-        int tried = 0, noGround = 0, crowded = 0, noRoom = 0, hidden = 0, offscreen = 0;
-        bool Usable(Vector3 probe, out Vector3 ground)
-        {
-            tried++;
-            if (!GroundAt(probe, spawn.y, player, out ground)) { noGround++; return false; }
-            if (Blocked(ground)) { crowded++; return false; }
-            if (!HasRoom(ground, height, radius, player)) { noRoom++; return false; }
-            if (!Visible(eye, ground + Vector3.up * height * 0.6f, player)) { hidden++; return false; }
-            return true;
-        }
-        string Counts() => $"{tried} tried: no flat ground {noGround}, too close to something {crowded}, " +
-                           $"no room {noRoom}, out of sight {hidden}, off the starting screen {offscreen}";
+        int tried = 0, noGround = 0, crowded = 0, noRoom = 0, notLevel = 0, hidden = 0, offscreen = 0;
+        var best = new (bool found, float score, Vector3 spot, float angle, float distance, float vx, float level)[3];
+        for (int i = 0; i < best.Length; i++) best[i].score = float.PositiveInfinity;
 
-        // ---- in the starting view, most central first -------------------------
-        bool found = false;
-        float bestScore = float.PositiveInfinity, bestAngle = 0f, bestDistance = 0f, bestVx = 0f;
-        spot = default;
-        for (float a = -60f; a <= 60f; a += 10f)
-            foreach (float d in new[] { 4.5f, 5f, 5.5f, 6f, 6.5f, 7f, 7.5f, 8f })
+        for (float a = -180f; a < 180f; a += 10f)
+            foreach (float d in CandidateDistances)
             {
+                tried++;
                 Vector3 dir = Quaternion.Euler(0f, baseYaw + a, 0f) * Vector3.forward;
-                if (!Usable(spawn + dir * d, out var ground)) continue;
-                float vx = 0.5f;
+                if (!GroundAt(spawn + dir * d, spawn.y, player, out var ground)) { noGround++; continue; }
+                if (Blocked(ground)) { crowded++; continue; }
+                if (!HasRoom(ground, height, radius, player, ignore)) { noRoom++; continue; }
+                if (!LevelApproach(ground, spawn - ground, player, out float worst)) { notLevel++; continue; }
+
+                bool inSight = Visible(eye, ground + Vector3.up * height * 0.6f, player, ignore);
+                float vx = float.NaN;
+                bool onScreen = false;
                 if (cam != null)
                 {
                     var vp = cam.WorldToViewportPoint(ground + Vector3.up * height * 0.75f);
-                    if (vp.z <= 0f || vp.x < 0.15f || vp.x > 0.85f || vp.y < 0f || vp.y > 1f)
-                    {
-                        offscreen++;
-                        continue;
-                    }
+                    onScreen = vp.z > 0f && vp.x >= 0.15f && vp.x <= 0.85f && vp.y >= 0f && vp.y <= 1f;
                     vx = vp.x;
                 }
-                float score = Mathf.Abs(vx - 0.5f) * 2f + Mathf.Abs(d - PreferredDistance) * 0.15f;
-                if (score >= bestScore) continue;
-                bestScore = score;
-                spot = ground;
-                bestAngle = a;
-                bestDistance = d;
-                bestVx = vx;
-                found = true;
+                if (!inSight) hidden++;
+                else if (!onScreen) offscreen++;
+
+                int tier = inSight && onScreen ? 0 : inSight ? 1 : 2;
+                float score = Mathf.Abs(d - PreferredDistance) * 0.15f + Mathf.Abs(ground.y - spawn.y) * 0.5f +
+                              (tier == 0 ? Mathf.Abs(vx - 0.5f) * 2f : Mathf.Abs(a) / 180f);
+                if (score >= best[tier].score) continue;
+                best[tier] = (true, score, ground, a, d, vx, worst);
             }
-        if (found)
+
+        string Counts() => $"{tried} tried: no flat ground near spawn height {noGround}, too close to " +
+                           $"something {crowded}, no room {noRoom}, talk ring not level {notLevel}; of the " +
+                           $"level ones, out of sight {hidden}, off the starting screen {offscreen}";
+        string[] tierNames =
         {
-            why = $"Chose {bestAngle:+0;-0}° off the start view, {bestDistance} m out, at viewport x " +
-                  $"{bestVx:0.00} of the starting camera ({Counts()}).";
+            "in the starting view",
+            "in sight of the spawn but off the starting screen (nothing level was on screen)",
+            "OUT OF SIGHT of the spawn (nothing level was in sight)",
+        };
+        for (int tier = 0; tier < best.Length; tier++)
+        {
+            if (!best[tier].found) continue;
+            var b = best[tier];
+            spot = b.spot;
+            why = $"Chose {b.angle:+0;-0}° off the start view, {b.distance} m out, {tierNames[tier]}" +
+                  (tier == 0 ? $" at viewport x {b.vx:0.00}" : "") +
+                  $"; talk ring level to {b.level:0.00} m ({Counts()}).";
             return true;
         }
-
-        // ---- anywhere clear around the spawn, away from Newton first ---------
-        float side = 1f;
-        var newton = circles.FirstOrDefault(c => c.what == "Newton");
-        if (newton.what != null)
-        {
-            Vector3 to = newton.at - spawn;
-            if (Mathf.DeltaAngle(baseYaw, Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg) > 0f) side = -1f;
-        }
-        foreach (float a in new[] { 75f, -75f, 105f, -105f, 140f, -140f, 180f })
-            foreach (float d in new[] { 4.5f, 5.5f, 3.5f, 6.5f, 8f })
-            {
-                Vector3 dir = Quaternion.Euler(0f, baseYaw + a * side, 0f) * Vector3.forward;
-                if (!Usable(spawn + dir * d, out var ground)) continue;
-                spot = ground;
-                why = $"Nothing clear in the starting view; chose {a * side:+0;-0}° off it, {d} m out ({Counts()}).";
-                return true;
-            }
+        spot = default;
         why = $"no candidate qualified ({Counts()})";
         return false;
+    }
+
+    /// <summary>
+    /// Whether the ground around <paramref name="ground"/> is level enough to
+    /// talk on: on the half facing <paramref name="towardSpawn"/> (the way the
+    /// player walks up), at 1, 1.7 and 2.4 m out, every sample must be within
+    /// <see cref="TalkRingStep"/> of Birdy's own ground. Otherwise the player
+    /// stands on a step above or below him: the talk prompt's height margin
+    /// shrinks, he hides behind the player in the orbit view, and the dialogue
+    /// shot looks steeply down (QA: a 0.83 m terrace step at 1.5 m).
+    /// </summary>
+    static bool LevelApproach(Vector3 ground, Vector3 towardSpawn, Transform player, out float worst)
+    {
+        worst = 0f;
+        towardSpawn.y = 0f;
+        if (towardSpawn.sqrMagnitude < 1e-4f) towardSpawn = Vector3.forward;
+        float baseYaw = Mathf.Atan2(towardSpawn.x, towardSpawn.z) * Mathf.Rad2Deg;
+        foreach (float a in TalkRingAngles)
+            foreach (float r in TalkRingRadii)
+            {
+                Vector3 p = ground + Quaternion.Euler(0f, baseYaw + a, 0f) * Vector3.forward * r;
+                if (!RingGround(p, ground.y, player, out float y))
+                {
+                    worst = float.PositiveInfinity;
+                    return false;
+                }
+                worst = Mathf.Max(worst, Mathf.Abs(y - ground.y));
+            }
+        return worst <= TalkRingStep;
+    }
+
+    /// <summary>The ground height under <paramref name="p"/>, searched from
+    /// 1.5 m above <paramref name="y"/> down to 1.5 m below it.</summary>
+    static bool RingGround(Vector3 p, float y, Transform player, out float groundY)
+    {
+        groundY = float.NegativeInfinity;
+        var from = new Vector3(p.x, y + 1.5f, p.z);
+        foreach (var h in Physics.RaycastAll(from, Vector3.down, 3f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if ((player != null && h.transform.IsChildOf(player)) || h.collider.GetComponentInParent<Health>() != null)
+                continue;
+            groundY = Mathf.Max(groundY, h.point.y);
+        }
+        return !float.IsNegativeInfinity(groundY);
+    }
+
+    /// <summary>Ground heights all round a spot, relative to it, for the log.</summary>
+    static string RingReport(Vector3 ground, Vector3 towardSpawn, Transform player)
+    {
+        towardSpawn.y = 0f;
+        if (towardSpawn.sqrMagnitude < 1e-4f) towardSpawn = Vector3.forward;
+        float baseYaw = Mathf.Atan2(towardSpawn.x, towardSpawn.z) * Mathf.Rad2Deg;
+        var rows = new List<string>();
+        foreach (float a in new[] { 0f, 45f, -45f, 90f, -90f, 135f, -135f, 180f })
+        {
+            var cells = new List<string>();
+            foreach (float r in TalkRingRadii)
+            {
+                Vector3 p = ground + Quaternion.Euler(0f, baseYaw + a, 0f) * Vector3.forward * r;
+                cells.Add(RingGround(p, ground.y, player, out float y) ? $"{y - ground.y:+0.00;-0.00}" : "none");
+            }
+            rows.Add($"{(a == 0f ? "toward spawn" : $"{a:+0;-0}°"),12}: {string.Join(" / ", cells)}");
+        }
+        return "  ground around Birdy relative to his root, at " +
+               string.Join(" / ", TalkRingRadii.Select(r => $"{r} m")) + ":\n    " + string.Join("\n    ", rows);
     }
 
     /// <summary>XZ footprint of a scene object's renderers, grown by <paramref name="margin"/>.</summary>
@@ -1343,22 +1436,24 @@ public static class BirdyNpcSetup
         return found && Mathf.Abs(ground.y - spawnY) <= MaxGroundStep;
     }
 
-    static bool HasRoom(Vector3 ground, float height, float radius, Transform player)
+    /// <summary>No collider (other than the player's and the Birdy being
+    /// moved, <paramref name="ignore"/>) inside a capsule a little bigger than his.</summary>
+    static bool HasRoom(Vector3 ground, float height, float radius, Transform player, Transform ignore)
     {
         const float lift = 0.25f, margin = 0.3f;
         float r = radius + margin;
         var a = ground + Vector3.up * (lift + r);
         var b = ground + Vector3.up * Mathf.Max(lift + r, height - r);
         foreach (var c in Physics.OverlapCapsule(a, b, r, ~0, QueryTriggerInteraction.Ignore))
-            if (!c.transform.IsChildOf(player)) return false;
+            if (!c.transform.IsChildOf(player) && (ignore == null || !c.transform.IsChildOf(ignore))) return false;
         return true;
     }
 
-    static bool Visible(Vector3 eye, Vector3 target, Transform player)
+    static bool Visible(Vector3 eye, Vector3 target, Transform player, Transform ignore)
     {
         Vector3 d = target - eye;
         foreach (var h in Physics.RaycastAll(eye, d.normalized, d.magnitude, ~0, QueryTriggerInteraction.Ignore))
-            if (!h.transform.IsChildOf(player)) return false;
+            if (!h.transform.IsChildOf(player) && (ignore == null || !h.transform.IsChildOf(ignore))) return false;
         return true;
     }
 
