@@ -14,7 +14,8 @@ namespace Pickleball.Sandbox.Dialogue
     /// <see cref="ConversationStarting"/>; the camera starts to push in.</item>
     /// <item><b>Settling</b> for <see cref="DialogueConfig.SettleSeconds"/>: the
     /// world keeps running with the player's input blocked, so he slows to idle
-    /// instead of freezing mid-stride.</item>
+    /// instead of freezing mid-stride, and (<see cref="DialogueConfig.TurnToFaceNpc"/>)
+    /// turns to face the NPC through <see cref="TalkFacing"/>.</item>
     /// <item><c>Time.timeScale</c> goes to 0, the previous value kept. If time
     /// is already stopped by someone else by then, the talk is aborted rather
     /// than recording 0 as the value to restore.</item>
@@ -109,6 +110,7 @@ namespace Pickleball.Sandbox.Dialogue
         float _clock;
         float _cooldownUntil;
         Health _currentHealth;
+        TalkFacing _facing;
 
         /// <summary>Current phase.</summary>
         public Phase State { get; private set; } = Phase.Idle;
@@ -232,6 +234,7 @@ namespace Pickleball.Sandbox.Dialogue
             _advancePressed = false;
 
             if (inputGate != null) inputGate.Claim(this, InputBlock.All);
+            if (config.TurnToFaceNpc) (_facing ??= new TalkFacing()).Begin(partner, talkable.FocusPosition);
             Raise(ConversationStarting, talkable);
             if (State == Phase.Settling && config.SettleSeconds <= 0f) EnterPause();
             return true;
@@ -305,6 +308,8 @@ namespace Pickleball.Sandbox.Dialogue
 
         void EnterPause()
         {
+            // The motor stops with time: the turn is over, hand facing back.
+            _facing?.End();
             // Someone else stopped time during the settle (a second director, a
             // menu): their 0 must never become ours to restore.
             if (!Pause.Hold(config.PauseAudio))
@@ -358,6 +363,7 @@ namespace Pickleball.Sandbox.Dialogue
                 }
                 finally
                 {
+                    _facing?.End();
                     Pause.Release();
                     State = Phase.Releasing;
                     Current = null;

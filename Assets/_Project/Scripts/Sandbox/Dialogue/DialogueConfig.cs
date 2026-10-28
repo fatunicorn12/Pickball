@@ -54,6 +54,9 @@ namespace Pickleball.Sandbox.Dialogue
                  "input blocked, before time stops. He slows to idle instead of freezing " +
                  "mid-stride, and the camera starts pushing in. 0 stops time at once.")]
         [SerializeField, Min(0f)] private float settleSeconds = 0.25f;
+        [Tooltip("Turn the player to face the NPC during the settle, quickly, as Link does. " +
+                 "Off leaves him facing wherever he was going.")]
+        [SerializeField] private bool turnToFaceNpc = true;
 
         // ---------------------------------------------------------------- text
         [Header("Text — the typewriter")]
@@ -105,6 +108,11 @@ namespace Pickleball.Sandbox.Dialogue
         [SerializeField, Min(0f)] private float npcHalfWidth = 0.3f;
         [Tooltip("Largest sideways offset, m, however close the NPC stands.")]
         [SerializeField, Min(0f)] private float maxSideOffset = 2f;
+        [Tooltip("Share of the shot's distance (0-1) a wall or slope may take before the shot " +
+                 "counts as crowded against the player and the other shoulder is tried. The " +
+                 "other shoulder is also tried when scenery hides the NPC. 1 never swaps for a " +
+                 "pull-in.")]
+        [SerializeField, Range(0f, 1f)] private float shoulderSwapPullIn = 0.25f;
 
         [Header("Camera — composition")]
         [Tooltip("Screen height of the NPC's head (its focus point), 0 bottom to 1 top. 0.62–0.67 " +
@@ -133,8 +141,42 @@ namespace Pickleball.Sandbox.Dialogue
         [SerializeField, Min(0.01f)] private float cameraCollisionRadius = 0.2f;
         [Tooltip("Closest the camera may be pulled to the pivot, m.")]
         [SerializeField, Min(0f)] private float minCameraDistance = 0.4f;
-        [Tooltip("Layers that block the camera.")]
+        [Tooltip("Layers that block the camera, for the push-in and for looking around. Walls " +
+                 "and terrain on these layers pull the camera in; the player and the NPC never do.")]
         [SerializeField] private LayerMask cameraObstructionMask = ~0;
+
+        [Header("Camera — looking around")]
+        [Tooltip("Let the player orbit the camera round the NPC during a talk, with the mouse " +
+                 "(while the cursor is captured) or the right stick. The world stays stopped. Off " +
+                 "keeps the scripted shot.")]
+        [SerializeField] private bool lookEnabled = true;
+        [Tooltip("Degrees of turn per mouse count. 0.12 matches the orbit camera's Sensitivity, " +
+                 "so the mouse feels the same in a talk as outside one.")]
+        [SerializeField, Min(0f)] private float lookMouseSensitivity = 0.12f;
+        [Tooltip("Right-stick turn rate at full tilt, °/s. 200 matches the orbit camera.")]
+        [SerializeField, Min(0f)] private float lookStickYawSpeed = 200f;
+        [Tooltip("Right-stick up/down rate at full tilt, °/s. 120 matches the orbit camera.")]
+        [SerializeField, Min(0f)] private float lookStickPitchSpeed = 120f;
+        [Tooltip("Stick tilt below this is ignored, 0–1, so a worn stick does not drift the " +
+                 "camera. 0.15 matches the orbit camera.")]
+        [SerializeField, Range(0f, 0.5f)] private float lookStickDeadzone = 0.15f;
+        [Tooltip("Stick response curve past the deadzone. 1 is linear; higher gives finer " +
+                 "control near the centre. 1.6 matches the orbit camera.")]
+        [SerializeField, Range(1f, 3f)] private float lookStickExponent = 1.6f;
+        [Tooltip("Stick up looks down instead of up.")]
+        [SerializeField] private bool lookInvertStickY;
+        [Tooltip("Lowest the camera may swing, as its elevation above the NPC's head, ° " +
+                 "(negative: below it, looking up). Lower risks the ground filling the shot.")]
+        [SerializeField, Range(-80f, 0f)] private float lookMinPitch = -10f;
+        [Tooltip("Highest the camera may swing, as its elevation above the NPC's head, °. " +
+                 "Higher looks straight down on the NPC.")]
+        [SerializeField, Range(0f, 85f)] private float lookMaxPitch = 60f;
+        [Tooltip("Damping between input and camera, s (time constant). Small feels direct; " +
+                 "larger floats. 0 follows at once.")]
+        [SerializeField, Min(0f)] private float lookSmoothTime = 0.08f;
+        [Tooltip("How gently the camera eases back out after a wall pulled it in, s (time " +
+                 "constant). It always comes in at once, so it never sits inside the wall.")]
+        [SerializeField, Min(0f)] private float lookPullOutSeconds = 0.2f;
 
         // ----------------------------------------------------------------- box
         [Header("Dialogue box")]
@@ -201,6 +243,8 @@ namespace Pickleball.Sandbox.Dialogue
         public float RestartCooldownSeconds => restartCooldownSeconds;
         /// <summary>Seconds of running time, input blocked, between the talk press and the pause.</summary>
         public float SettleSeconds => settleSeconds;
+        /// <summary>Whether the player turns to face the NPC during the settle.</summary>
+        public bool TurnToFaceNpc => turnToFaceNpc;
 
         /// <summary>Typewriter speed, characters per second; 0 or less is instant.</summary>
         public float CharactersPerSecond => charactersPerSecond;
@@ -227,6 +271,10 @@ namespace Pickleball.Sandbox.Dialogue
         public float MinCameraDistance => minCameraDistance;
         /// <summary>Layers that block the camera.</summary>
         public LayerMask CameraObstructionMask => cameraObstructionMask;
+        /// <summary>Pull-in share above which the other shoulder is tried.</summary>
+        public float ShoulderSwapPullIn => shoulderSwapPullIn;
+        /// <summary>Whether the player may orbit the camera during a talk.</summary>
+        public bool LookEnabled => lookEnabled;
 
         /// <summary>Box fade-in time, s.</summary>
         public float BoxFadeInSeconds => boxFadeInSeconds;
@@ -285,6 +333,22 @@ namespace Pickleball.Sandbox.Dialogue
             NpcScreenSide = npcScreenSide,
             MinFieldOfView = minFieldOfView,
             MaxFieldOfView = Mathf.Max(minFieldOfView, maxFieldOfView),
+        };
+
+        /// <summary>How looking around feels, for <see cref="DialogueLookInput"/> and
+        /// <see cref="DialogueOrbit"/>.</summary>
+        public DialogueLookSettings Look => new()
+        {
+            MouseSensitivity = lookMouseSensitivity,
+            StickYawSpeed = lookStickYawSpeed,
+            StickPitchSpeed = lookStickPitchSpeed,
+            StickDeadzone = lookStickDeadzone,
+            StickExponent = lookStickExponent,
+            InvertStickY = lookInvertStickY,
+            MinPitch = Mathf.Min(lookMinPitch, lookMaxPitch),
+            MaxPitch = lookMaxPitch,
+            SmoothTime = lookSmoothTime,
+            PullOutSeconds = lookPullOutSeconds,
         };
 
         /// <summary>The typewriter timing for <see cref="DialogueRunner"/>.</summary>
