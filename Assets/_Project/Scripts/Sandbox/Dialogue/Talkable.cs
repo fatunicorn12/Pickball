@@ -32,7 +32,15 @@ namespace Pickleball.Sandbox.Dialogue
         [Min(0f)]
         [SerializeField] private float fallbackFocusHeight = 1.2f;
 
+        [Tooltip("Runtime set the player's interactor scans for nearby talkers. Filled by " +
+                 "DialogueSetup.MakeTalkable. Empty: the character can still be talked to " +
+                 "while the player is locked on to it, but never by walking up to it.")]
+        [SerializeField] private TalkableSet registry;
+
         Health _health;
+
+        /// <summary>The runtime set this character joins while enabled; may be null.</summary>
+        public TalkableSet Registry => registry;
 
         /// <summary>The conversation this character holds; may be null.</summary>
         public DialogueDefinition Dialogue => dialogue;
@@ -81,6 +89,19 @@ namespace Pickleball.Sandbox.Dialogue
                 if (_health == null) _health = GetComponent<Health>();
                 return _health;
             }
+        }
+
+        // Joins and leaves the runtime set with the component, so a disabled or
+        // destroyed character drops out of the interactor's scan at once, and a
+        // script reload (which re-runs OnEnable) re-registers it.
+        void OnEnable()
+        {
+            if (registry != null) registry.Add(this);
+        }
+
+        void OnDisable()
+        {
+            if (registry != null) registry.Remove(this);
         }
 
         /// <summary>Director only: a conversation with <paramref name="partner"/> has begun.</summary>

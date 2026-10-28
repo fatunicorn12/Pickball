@@ -29,5 +29,18 @@ namespace Pickleball.Sandbox.Dialogue
 
         /// <summary>The line at <paramref name="index"/> (0-based, below <see cref="LineCount"/>).</summary>
         public DialogueLine GetLine(int index) => lines[index];
+
+        /// <summary>
+        /// Builds an unsaved definition in code, for tests and for setup menus
+        /// that seed content before saving it with <c>AssetDatabase.CreateAsset</c>.
+        /// The line array is copied, so the caller's array can be reused.
+        /// </summary>
+        public static DialogueDefinition CreateRuntime(string speakerName, params DialogueLine[] lines)
+        {
+            var definition = CreateInstance<DialogueDefinition>();
+            definition.speakerName = speakerName ?? string.Empty;
+            definition.lines = lines != null ? (DialogueLine[])lines.Clone() : Array.Empty<DialogueLine>();
+            return definition;
+        }
     }
 }
