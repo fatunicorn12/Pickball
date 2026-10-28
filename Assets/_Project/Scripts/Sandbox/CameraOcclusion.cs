@@ -38,5 +38,21 @@ namespace Pickleball.Sandbox
             if (maxLag < 0f) return current;
             return Mathf.Clamp(current, wanted - maxLag, wanted + maxLag);
         }
-    }
+    
+        /// <summary>
+        /// How far (metres, along the camera's up axis) to move the camera so a
+        /// point at viewport height <paramref name="viewY"/> and distance
+        /// <paramref name="depth"/> in front of the lens lands inside
+        /// [<paramref name="min"/>, <paramref name="max"/>]. Zero inside the band.
+        /// Negative = move down. Independent of dt: it is a position correction,
+        /// not a rate.
+        /// </summary>
+        public static float SafeBandShift(float viewY, float depth, float tanHalfFov, float min, float max)
+        {
+            if (depth <= 1e-3f || tanHalfFov <= 0f) return 0f;
+            float clamped = Mathf.Clamp(viewY, min, max);
+            if (Mathf.Approximately(clamped, viewY)) return 0f;
+            return ((2f * viewY - 1f) - (2f * clamped - 1f)) * tanHalfFov * depth;
+        }
+}
 }
