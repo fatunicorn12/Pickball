@@ -9,8 +9,9 @@ namespace Pickleball.Sandbox.Magic
     /// <see cref="SpellCaster"/> so the caster can be driven by a test or an AI
     /// that never touches a device.
     ///
-    /// Polled, like <c>PlayerMovementInput</c>, because the caster needs held
-    /// state every frame, not just press callbacks. The actions are built in
+    /// Held state (aim, auto-repeat fire) is polled, like
+    /// <c>PlayerMovementInput</c>; the fire press is latched from its callback
+    /// (<see cref="FirePressedThisFrame"/>), so no press is lost. The actions are built in
     /// code (the project has no shared InputActions asset yet) and rebuilt in
     /// OnEnable, so a script reload in Play mode re-creates them instead of
     /// leaving disposed actions behind.
@@ -47,12 +48,39 @@ namespace Pickleball.Sandbox.Magic
         /// Read by auto-repeat spells.</summary>
         public bool FireHeld => !Blocked && (IsHeld(_firePad) || (MouseCounts && IsHeld(_fireMouse)));
 
-        /// <summary>True on the one frame fire went down. The Input System's
-        /// per-frame edge, so read it from Update.</summary>
-        public bool FirePressedThisFrame =>
-            !Blocked && (WasPressed(_firePad) || (MouseCounts && WasPressed(_fireMouse)));
+        /// <summary>
+        /// True through this frame's Update when fire went down since the last
+        /// frame's LateUpdate. Every reader in the frame sees the same answer;
+        /// <c>LateUpdate</c> clears it, whether anyone used it or not, so a press
+        /// made while not aiming never fires on the next aim. A press while
+        /// Spell is blocked reads false and is cleared the same way: dropped,
+        /// not saved for the release.
+        /// </summary>
+        public bool FirePressedThisFrame => !Blocked && _firePressed;
 
         bool Blocked => inputGate != null && inputGate.IsBlocked(InputBlock.Spell);
+
+        // Latched from the actions' performed callbacks rather than polled with
+        // WasPressedThisFrame (playtest M-1). Polling only sees a press made in
+        // the same input update that Update runs after; input processed
+        // elsewhere (a manual InputSystem.Update, an unfocused Editor, another
+        // update mode) performs the action but is never "this frame", and the
+        // shot is silently lost. A press processed after this frame's
+        // LateUpdate is kept for the next frame's Update. Same idea as
+        // SpacetimeView and LockOnTargeting, which take their latch in Update;
+        // this one is cleared here so the caster can keep reading a property.
+        bool _firePressed;
+
+        void LateUpdate() => _firePressed = false;
+
+        // The mouse is judged when the press lands: the click that re-captures
+        // the cursor arrives while the cursor is still free, so it is dropped here.
+        void OnFireMouse(InputAction.CallbackContext _)
+        {
+            if (MouseCounts) _firePressed = true;
+        }
+
+        void OnFirePad(InputAction.CallbackContext _) => _firePressed = true;
 
         /// <summary>Mouse buttons are the camera's while the cursor is free, and the
         /// re-capture click is the camera's on the frame after too.</summary>
@@ -70,10 +98,16 @@ namespace Pickleball.Sandbox.Magic
             _aimPad = Button("SpellAimPad", "<Gamepad>/leftTrigger");
             _fireMouse = Button("SpellFireMouse", "<Mouse>/leftButton");
             _firePad = Button("SpellFirePad", "<Gamepad>/rightTrigger");
+            _fireMouse.performed += OnFireMouse;
+            _firePad.performed += OnFirePad;
         }
 
         void OnDisable()
         {
+            // A press latched just before disabling must not fire on re-enable.
+            _firePressed = false;
+            if (_fireMouse != null) _fireMouse.performed -= OnFireMouse;
+            if (_firePad != null) _firePad.performed -= OnFirePad;
             Dispose(ref _aimMouse);
             Dispose(ref _aimPad);
             Dispose(ref _fireMouse);
@@ -81,8 +115,6 @@ namespace Pickleball.Sandbox.Magic
         }
 
         static bool IsHeld(InputAction action) => action != null && action.IsPressed();
-
-        static bool WasPressed(InputAction action) => action != null && action.WasPressedThisFrame();
 
         static InputAction Button(string name, string path)
         {
