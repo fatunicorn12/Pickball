@@ -3,17 +3,20 @@
 How tests are organised and run in this project, and the conventions new tests should follow.
 For **what** still needs testing, see [QA-Assessment.md](QA-Assessment.md).
 
-## What exists (as of `a930952`)
+## What exists (as of the P0 batch, on top of `f876b63`)
 
 | Assembly | Folder | State |
 |---|---|---|
-| `Pickleball.Tests.EditMode` | `Assets/_Project/Tests/EditMode/` | 178 tests, all passing. References `Pickleball.Runtime` only. |
+| `Pickleball.Tests.EditMode` | `Assets/_Project/Tests/EditMode/` | 275 tests: 267 pass, 8 skipped as known bugs. References `Pickleball.Runtime` only. |
 | PlayMode | — | **None yet.** See "Adding the PlayMode assembly" below. |
 | Editor-tool tests | — | **None.** No test assembly references `Pickleball.Editor`, so setup menus can't be tested. |
 | CI | — | **None.** There is no `.github/` and no build or test scripts. |
 
-Subfolders mirror `Scripts/Sandbox/`: `Combat/`, `Movement/`, `Weapon/`. The boss and Spacetime
-tests sit at the root of `EditMode/`.
+Subfolders mirror `Scripts/Sandbox/`: `Combat/`, `Movement/`, `Weapon/`, `Boss/`, `Cloth/`.
+`PickleballCore/` covers the original game. Its namespace avoids `…Tests.Pickleball` and
+`…Tests.Court`, which would shadow the `Pickleball` namespace and the `Court` type. `Validation/`
+holds the read-only shipped-asset checks. The older boss and Spacetime tests sit at the root of
+`EditMode/`.
 
 ## Conventions for EditMode tests
 
@@ -46,14 +49,19 @@ tests sit at the root of `EditMode/`.
   must read shipped assets (asset validation) use `AssetDatabase.LoadAssetAtPath` read-only and
   get a category (below).
 
-## Categories (proposed; none are in use yet)
+## Categories
 
 | Category | For | Run in the shared Editor? |
 |---|---|---|
 | *(none)* | Pure logic and component tests | Yes |
-| `Assets` | Read-only validation of shipped ScriptableObjects, prefabs, controllers and scenes | Yes |
-| `Ship` | Release guards, for example "Spacetime is off in the shipped settings asset". These fail on purpose while a local test toggle is on. | Optional |
-| `EditorSetup` | Smoke and idempotency tests that **run setup menus and write tracked assets** | **No.** Run only in a disposable worktree. |
+| `Assets` (in use: `Validation/`) | Read-only validation of shipped ScriptableObjects, prefabs, controllers and scenes. Reads YAML and `AssetDatabase`, and never opens a scene or writes an asset. | Yes |
+| `Ship` (proposed) | Release guards, for example "Spacetime is off in the shipped settings asset". Mark them `[Explicit]` too, because they fail on purpose while a local test toggle is on. | Only when run explicitly |
+| `EditorSetup` (proposed) | Smoke and idempotency tests that **run setup menus and write tracked assets** | **No.** Run only in a disposable worktree. |
+
+**Known-bug tests.** A test that pins a bug from `QA-Assessment.md` §2 is committed with
+`[Ignore("Known bug <ID>: … See Docs/Testing/QA-Assessment.md.")]`. The suite stays green and the
+bug shows as a skipped test with its ID. Whoever fixes the bug deletes the `Ignore` in the same
+commit.
 
 ## Running tests
 
@@ -66,7 +74,10 @@ mode. Run tests from **Window ▸ General ▸ Test Runner**, or with the Unity M
 ### Headless (batch mode)
 
 The shared Editor holds the main checkout's project lock, so batch runs must target a **separate
-worktree**. Run each command from PowerShell:
+worktree**. A fresh worktree has no `Library/`, and a full import takes a long time. Seed it
+instead by copying the `Library/` of another worktree whose Editor is closed (no
+`Temp/UnityLockfile`). Ask the agent-manager session which one is free. Unity re-imports only
+what differs. Run each command from PowerShell:
 
 ```powershell
 & "C:\Program Files\Unity\Hub\Editor\6000.3.5f2\Editor\Unity.exe" -batchmode -nographics -projectPath C:\path\to\worktree -runTests -testPlatform EditMode -assemblyNames Pickleball.Tests.EditMode -testResults C:\path\to\worktree\Logs\editmode-results.xml -logFile C:\path\to\worktree\Logs\editmode.log
