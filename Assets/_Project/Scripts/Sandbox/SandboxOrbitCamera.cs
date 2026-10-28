@@ -52,7 +52,7 @@ namespace Pickleball.Sandbox
         [Tooltip("Read for the locked target. Found on the follow target if empty.")]
         [SerializeField] private LockOnTargeting lockOn;
         [Tooltip("How quickly the camera swings round to keep the target framed.")]
-        [SerializeField] private float lockTurnSmoothTime = 0.12f;
+        [SerializeField] private float lockTurnSmoothTime = 0.2f;
         [Tooltip("Downward look while locked. Looking down past the player puts " +
                  "the target above him on screen instead of behind his head.")]
         [SerializeField] private float lockPitch = 16f;
@@ -60,7 +60,7 @@ namespace Pickleball.Sandbox
                  "follows. 0 ignores it; 1 aims straight at a target overhead.")]
         [SerializeField, Range(0f, 1f)] private float lockPitchFollow = 0.5f;
         [Tooltip("Extra pull-back while locked, so player and target both fit.")]
-        [SerializeField] private float lockDistanceBonus = 1.2f;
+        [SerializeField] private float lockDistanceBonus = 0.6f;
         [Tooltip("Recentre behind the player (lock pressed with nothing to lock).")]
         [SerializeField] private float recenterSmoothTime = 0.12f;
 

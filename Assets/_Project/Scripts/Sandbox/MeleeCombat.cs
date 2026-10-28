@@ -76,6 +76,20 @@ namespace Pickleball.Sandbox
                  "soon after a real jump still plays a ground step.")]
         [Range(0f, 0.3f)] [SerializeField] private float airborneGraceSeconds = 0.08f;
 
+        [Tooltip("Seconds after a swing ends during which a press still continues " +
+                 "the chain instead of restarting it. R1: 0.9 s-apart clicks always reset.")]
+        [Range(0f, 1f)] [SerializeField] private float chainGraceSeconds = 0.45f;
+
+        [Header("Lunge homing")]
+        [Tooltip("A locked target within this many metres bends the lunge toward it. 0 = off.")]
+        [Min(0f)] [SerializeField] private float homingRange = 6f;
+        [Tooltip("Max degrees per second the lunge direction may turn toward the target " +
+                 "(applied over the swing's length).")]
+        [Min(0f)] [SerializeField] private float homingTurnRate = 360f;
+        [Tooltip("Gap to the target surface, in metres, under which the lunge is skipped " +
+                 "so the player is not shoved through it.")]
+        [Min(0f)] [SerializeField] private float homingStopGap = 0.8f;
+
         /// <summary>A step has started. Raised for every step, chained or not.</summary>
         public event Action<ResolvedStep> SwingStarted;
 
@@ -140,6 +154,7 @@ namespace Pickleball.Sandbox
         float _hitstopLeft;
         bool _queued;
         float _startBufferedUntil = -1f;
+        ChainGrace _grace;
 
         /// <summary>One ring in flight. Pooled: a finisher every second must not
         /// allocate.</summary>
@@ -185,6 +200,7 @@ namespace Pickleball.Sandbox
             for (int i = 0; i < _bursts.Length; i++) _bursts[i] = new ActiveBurst();
             _sweep = new BladeSweep();
             _contact = new GroundContact();
+            _grace = new ChainGrace();
             _segments = new (Vector3, Vector3)[BladeSweep.MaxSegments];
             _hitstopLeft = 0f;
             _queued = false;
@@ -245,6 +261,7 @@ namespace Pickleball.Sandbox
             if (!_timeline.IsRunning)
             {
                 _sweep.Reset();    // no swing: the next one must not sweep from a stale pose
+                if (_grace.Tick(dt)) _progress.DropChain();
                 if (Time.time <= _startBufferedUntil && TryStartStep())
                     _startBufferedUntil = -1f;
                 return;
@@ -263,7 +280,23 @@ namespace Pickleball.Sandbox
                 _queued = false;
                 if (TryStartStep()) return;
             }
-            if ((signal & SwingSignal.Finished) != 0) FinishChain();
+            if ((signal & SwingSignal.Finished) != 0) EndSwing();
+        }
+
+        /// <summary>The swing ran out. A finisher ends the chain outright; any
+        /// other step keeps the chain alive for <c>chainGraceSeconds</c> so a
+        /// late press continues it.</summary>
+        void EndSwing()
+        {
+            if (_current.IsLast || chainGraceSeconds <= 0f) { FinishChain(); return; }
+            var ended = _current;
+            if (_timeline.IsRunning && (_timeline.Stop() & SwingSignal.BladeOff) != 0)
+                BladeLiveChanged?.Invoke(false);
+            _queued = false;
+            _alreadyHit.Clear();
+            _sweep.Reset();
+            _grace.Start(chainGraceSeconds);
+            ChainEnded?.Invoke(ended);
         }
 
         /// <summary>
@@ -320,13 +353,25 @@ namespace Pickleball.Sandbox
             _progress.RecordStep(placement.Track);
             _timeline.Start(step);
             _queued = false;
+            _grace.Cancel();
             _alreadyHit.Clear();
             // The sweep history is kept across a chain: the blade moves
             // continuously from one step into the next.
 
             // An impulse, once — see ICombatImpulses for why never per frame.
             if (step.LungeSpeed > 0f && _impulses != null)
-                _impulses.AddImpulse(Flat(transform.forward) * step.LungeSpeed);
+            {
+                Vector3 dir = Flat(transform.forward);
+                float speed = step.LungeSpeed;
+                if (lockOn != null && lockOn.IsLocked && homingRange > 0f)
+                {
+                    Vector3 to = lockOn.AimPoint - transform.position;
+                    dir = HomingLunge.Direction(dir, to, homingRange, homingTurnRate, step.Duration);
+                    to.y = 0f;
+                    speed = HomingLunge.Speed(speed, to.magnitude - lockOn.TargetRadius, homingStopGap);
+                }
+                if (speed > 0f) _impulses.AddImpulse(dir * speed);
+            }
 
             SwingStarted?.Invoke(placement);
         }
@@ -340,6 +385,7 @@ namespace Pickleball.Sandbox
             _alreadyHit.Clear();
             _sweep.Reset();
             _progress.DropChain();
+            _grace.Cancel();
             ChainEnded?.Invoke(ended);
         }
 

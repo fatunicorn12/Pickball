@@ -22,7 +22,7 @@ MonoBehaviour:
     activeStart: 0.25
     activeEnd: 0.6
     comboOpen: 0.6
-    comboClose: 0.9
+    comboClose: 1
   hit:
     damage: 12
     knockback: 3

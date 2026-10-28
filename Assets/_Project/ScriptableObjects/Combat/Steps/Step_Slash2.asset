@@ -22,13 +22,13 @@ MonoBehaviour:
     activeStart: 0.35
     activeEnd: 0.62
     comboOpen: 0.62
-    comboClose: 0.92
+    comboClose: 1
   hit:
     damage: 12
-    knockback: 4
+    knockback: 2
     launchSpeed: 0
     hitstop: 0.05
-  lungeSpeed: 0
+  lungeSpeed: 1.2
   burst:
     enabled: 0
     triggerAt: 0
