@@ -47,9 +47,9 @@ namespace Pickleball.Sandbox.Npc
                  "on the ground instead of in it (Mixamo deaths are made for a thinner body). " +
                  "RE-TUNE THIS FOR EVERY NEW DEATH CLIP: read the 'death sink' line of Tools ▸ " +
                  "Pickleball ▸ Diagnostics ▸ Report Birdy Poses, and look at the end pose: lifting " +
-                 "the big helmet fully clear floats the belly, so pick the value where the body " +
-                 "rests on the ground. 0 = no lift.")]
-        [SerializeField, Min(0f)] private float deathGroundLift = 0.06f;
+                 "the deepest part (Birdy's rotor and tail) fully clear floats the body, so pick " +
+                 "the value where the body rests on the ground. 0 = no lift.")]
+        [SerializeField, Min(0f)] private float deathGroundLift = 0.08f;
 
         [Tooltip("Normalised time in the death clip at which the lift starts easing in (it is " +
                  "complete at the clip's end). Set it to where the body starts to go down, so " +

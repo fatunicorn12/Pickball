@@ -24,8 +24,8 @@ off about Newton.
 
 ## 1. Purpose and player-facing feel
 
-Birdy stands near the player's spawn in ChibiSandbox, idling, on the same level as the spawn,
-5.5 m away to one side and behind the starting camera. Turn around and he is there.
+Birdy stands near the player's spawn in ChibiSandbox, idling, on ground level enough that the
+player walks right up to him to talk (where exactly, and why: section 5, placement).
 Walk up (or lock on) and talk: the game pauses, Birdy turns to face you (on unscaled time,
 easing in, capped so a 180° turn is a pivot rather than a snap), and gestures each line with
 the line's emote: ordinary **Talk**, big **Excited** delivery, or slow **Thinking**. When a line
@@ -35,9 +35,9 @@ for a moment (`minGestureSeconds`), so skipping never reads as Birdy freezing. A
 conversation Birdy keeps watching you while you stay within 4 m, and turns back to the way it
 was facing once you walk off.
 
-Birdy has 40 HP. The sword can kill it; it plays its death once and stays down, the model is
-eased up a little over the fall so the body rests on the ground (the big helmet still dips into
-it), its collider switches
+Birdy has 40 HP. The sword can kill it; it plays its death once (a stagger and a fall onto its
+back) and stays down, the model is eased up a little over the fall so the body rests on the
+ground (the rotor and tail, which stick out behind, still dip into it), its collider switches
 off so the body is not an invisible pillar, and the Talkable stops offering a conversation
 (`Talkable.CanTalk` checks the `Health` on the same object). Killing Birdy pays no XP
 (`Health.grantsXp` is off on its prefab).
@@ -140,8 +140,8 @@ time and would freeze while the conversation pauses the game.
    Twist bones (`*Twist01/02`), `Pelvis`, `NeckTwist02` and `Root` stay unmapped. The wings are
    the arm chain: the wing meshes are skinned to `L/R_Upperarm…Hand` and their twist bones.
 6. **Wing fold.** The upper arms' Down-Up muscle range is narrowed from Unity's 60° to
-   `WingFoldDegrees` (40°), which scales every clip's arm-down motion: the fallback idle's wings
-   fold 70° instead of 80° and sit just off the body.
+   `WingFoldDegrees` (40°), which scales every clip's arm-down motion: the idles' wings hang
+   about 60–70° below horizontal and sit just off the body.
 7. **T-pose.** Tripo binds the arms (wings) a few degrees below horizontal (3–8° measured). Unity
    treats the avatar's reference pose as the T-pose, which would add that droop to every
    gesture, so each upper arm and forearm in the stored reference skeleton is rotated to point
@@ -199,22 +199,41 @@ rotation, height and XZ all **baked into the pose** (based upon *Original*, heig
 *Feet*). Birdy never travels and its Animator has root motion off, so nothing drifts, and the
 death lands on the ground instead of at standing height.
 
-A role with no clip in `Animation/Birdy/` uses `Animation/Birdy/Fallback/`. The menu copies these
-in when they are missing (copies, so their import settings can change without touching the
-chibi's files):
-- `Idle_ChibiIdle.fbx`, a copy of `Animation/Chibi/Idle.fbx`. The wings hang folded at the sides.
-- `Death_SwordShieldDeath2.fbx`, a copy of `Animation/Chibi/SwordShield/sword and shield death (2).fbx`:
-  a 3.9 s collapse from a wide stance to the knees, then forward onto the belly. It is a weapon
-  clip, and its first second is a fighting crouch, which is odd for a friendly bird. Every
-  non-weapon option was rendered on Birdy and was worse. Mixamo *Falling Flat Impact* (local
-  inbox) starts mid-fall, so whole it pops Birdy 0.8 m up, and trimmed it buries him 0.4–0.7 m.
-  *Sword and shield death* (1) flails backward and also starts in a guard stance. (2) trimmed to
-  skip the stance starts already crouched, which drops instantly from the idle. No other
-  humanoid clip in the repo or the inbox is a death.
+**Shipped clips.** Mixamo offered a primary and an alternative for each role. Both were rendered
+on Birdy through the shipped controller (contact sheets at 0.1 / 0.3 / 0.5 / 0.7 / 0.9 of the
+clip, plus soles, hand-to-head and hand-to-body distances), and only the winner was kept, saved
+under the role name:
 
-There are no talk fallbacks, so the talk states play the main idle sped up (Talk ×1.2,
-Excited ×1.5) or slowed (Thinking ×0.8) until real talk clips land. Only the first clip per
-talk emote and the first death clip are used.
+| File | Mixamo clip | Length | Why this one |
+|---|---|---|---|
+| `Idle.fbx` (main idle) | *Happy Idle* v1 | 2.0 s | A calm sway that loops cleanly. |
+| `Idle_HappyV2.fbx` | *Happy Idle* v2 | 2.9 s | The alternative idle. It reads well as a fidget, so it is kept as a second variant rather than dropped. |
+| `Idle_LookAround.fbx` | *Unarmed Idle Looking Ver. 2* | 7.8 s | The only look-around offered. |
+| `Talk_Talk.fbx` | *Talking, General Conversation* | 10.3 s | Primary. Varied gestures over a long loop, so repeats aren't obvious. The alternative, *Asking A Question With Two Hands*, is one gesture and then stands still for half the loop. |
+| `Talk_Excited.fbx` | *Excited, Super Excited* | 6.6 s | Primary. Big waves while staying grounded. The alternative, *Joyful Jump*, lifts the soles 0.35 m off the ground mid-line. |
+| `Talk_Thinking.fbx` | *Thinking While Standing* | 4.2 s | Primary. A hand to the chin reads as thinking at a glance. The alternative, *Thoughtful Head Shake*, is a subtle shake that reads as idling. |
+| `Death.fbx` | *Standing React Death Backward* | 3.6 s | Primary. Starts from a neutral stance, so the cut from idle or talk is clean, and falls onto the back. The alternative, *Falling Back Death*, starts fists-up (a fighting pose) and brings the hands to within 1 cm of the body axis, so the wings cut into the belly. |
+
+Measured through the Animator with foot IK:
+- **Soles** stay within −3 … +2 mm in every idle and talk state, so `ModelYOffset` (0.008 m)
+  still holds.
+- **Loops:** Loop Pose closes the seam on every looping clip.
+- **Rigid parts:** rotor drift relative to the head is 0.0 cm in every state, and no non-wing
+  part carries arm-chain weight, so the accessory rebinding holds under the real clips.
+
+The rejected alternatives are not in the repo.
+
+**Fallbacks.** A role with no clip in `Animation/Birdy/` uses `Animation/Birdy/Fallback/`. Every
+role has a real clip now, so these are unused, but they stay as a safety net. The menu copies
+them in when they are missing (copies, so their import settings can change without touching the
+chibi's files):
+- `Idle_ChibiIdle.fbx`, a copy of `Animation/Chibi/Idle.fbx`.
+- `Death_SwordShieldDeath2.fbx`, a copy of `Animation/Chibi/SwordShield/sword and shield death (2).fbx`,
+  a weapon clip whose first second is a fighting crouch.
+
+There are no talk fallbacks: a talk emote with no clip of its own plays the Talk clip, and with
+no Talk clip either, the main idle sped up (Talk ×1.2, Excited ×1.5) or slowed (Thinking ×0.8).
+Only the first clip per talk emote and the first death clip are used.
 
 ## 3. How to tune
 
@@ -238,13 +257,29 @@ talk emote and the first death clip are used.
 The blend, exit-time and fallback-speed fields are baked into the controller: run
 **Rebuild Birdy Animator** after changing them. The rest are read live.
 
-The shipped death lift is **0.06 m from t = 0.6**, chosen by looking at the fallback death's end
-pose, which was rendered at 0, 0.06, 0.10 and 0.19 m. Measured per mesh part through the Animator, the end pose
-without a lift has the belly 2 cm into the floor, the body 6 cm, and the big helmet 19 cm, with
-the rotor 18 cm. Lifting by the lowest point (0.19 m) puts the helmet on the ground but floats
-the whole body 17 cm, which is plainly worse. At 0.06 m the body and wings rest on the ground,
-the belly is 4 cm up, and the helmet is 13 cm in. It reads as face-down on the ground. The kneel
-mid-clip (t ≈ 0.5–0.7) still pushes a foot about 11 cm into the floor.
+The shipped death lift is **0.08 m from t = 0.6**, tuned for *Standing React Death Backward* by
+looking at its end pose rendered at 0, 0.05, 0.08, 0.10, 0.12, 0.15, 0.2 and 0.3 m.
+- **Without a lift**, measured per mesh part through the Animator at the clip's end:
+
+  | Part | Depth into the floor |
+  |---|---|
+  | rotor and tail (which stick out behind) | 34 cm |
+  | lower body | 14 cm |
+  | radio | 11 cm |
+  | head | 9 cm |
+  | helmet | 6 cm |
+  | wings | 2–6 cm |
+
+  The feet rest at the floor.
+- **Lifting by the lowest point** (0.34 m) floats the whole bird in mid-air with its feet up,
+  which is plainly worse.
+- **At 0.08 m** the round lower body sits 6 cm into the floor and reads as resting on it, the head
+  is at the floor, and the feet are raised about 9 cm, like legs kicked up after a fall onto the
+  back. The rotor and tail stay 26 cm in: the rotor plane stands upright with its blades half in
+  the floor.
+- **At 0.10 m and above**, the radio box shows under the body and the shadow separates.
+- **The body starts going down at t ≈ 0.6** (lower body −6 cm). A leg slam at t ≈ 0.8 still dips
+  a foot 13 cm into the floor for a moment, with the lift half in.
 
 In `BirdyNpcSetup` (code constants, since they define the asset):
 - `TargetHeight` (1.15 m) and `MaxHealth` (40).
@@ -254,7 +289,7 @@ In `BirdyNpcSetup` (code constants, since they define the asset):
 - `WingFoldDegrees` (40°), and the placement clearances.
 
 Change them and re-run **Setup Birdy NPC**. The prefab's own Health and capsule values are
-rewritten on every run. When real clips land, run **Diagnostics ▸ Report Birdy Poses** and
+rewritten on every run. When clips change, run **Diagnostics ▸ Report Birdy Poses** and
 re-check `ModelYOffset` against the idle's "soles" value and the death lift against
 "death sink".
 
@@ -266,7 +301,9 @@ never overwritten.
 **Add clips to Birdy (the Mixamo scout's path):**
 1. Download from Mixamo as *FBX for Unity*, *Without Skin*, 30 fps.
 2. Save into `Assets/_Project/Animation/Birdy/` as `Idle_<Name>.fbx`, `Talk_Talk_<Name>.fbx`,
-   `Talk_Excited_<Name>.fbx`, `Talk_Thinking_<Name>.fbx` or `Death_<Name>.fbx`.
+   `Talk_Excited_<Name>.fbx`, `Talk_Thinking_<Name>.fbx` or `Death_<Name>.fbx`. Trial candidates
+   outside this folder: every `Idle*` file in it becomes an idle variant, and for the other roles
+   the first file by name wins.
 3. Run **Tools ▸ Pickleball ▸ Rebuild Birdy Animator** (or Setup Birdy NPC). A role that now has
    a real clip stops using its fallback.
 4. Run **Diagnostics ▸ Report Birdy Poses**. Re-tune `ModelYOffset` against the idle's soles,
@@ -296,19 +333,25 @@ until then it falls back to Talk.
 
 ## 5. Known limitations and open questions
 
-- **Waiting on real clips.** The Mixamo talk, idle and death clips need the user's Adobe sign-in.
-  Until they land, talk is the idle at a different speed and death is a weapon clip.
+- **Human clips on a bird.** The clips are Mixamo's, made for a thin human, so:
+  - In *Thinking While Standing* the raised wing crosses the chest and passes close to the beak
+    (hand 15 cm from the head bone), with a slight overlap.
+  - The death can't be fully grounded (next point).
+  - There are no beak, rotor-spin or wing-flap motions. The rotor is rigid to the head and never
+    turns.
 - **White slivers at the wing roots** when the wings fold. The harness tears are gone: the
   accessories no longer follow the arms (import step 4). What remains is the seam where each
   wing plank meets the body, at the front and back of the shoulder. The wings are flat planks
   hinged at the shoulder, so folding them opens that joint. Narrowing the fold (40°, tried at 25°)
   doesn't close it. It needs modelled geometry or blended weights across the seam (in Blender).
 - **The tail follows the left leg.** `tripo_part_3` (the tail) is weighted 61% to `L_CalfTwist01`.
-  It barely shows in the idle, but a walking or kicking clip would swing it.
+  It barely shows in the idles and talks. In the death's stagger (t ≈ 0.5–0.6, before the lift
+  starts) the left leg steps back and pushes the tail 12–15 cm into the floor.
 - **The death is only approximately grounded.** One lift for the whole model can't ground a body
-  whose helmet sinks 19 cm while its belly sinks 2 cm (section 3). The shipped 0.06 m leaves the
-  helmet 13 cm in, so the face is half in the floor. A bird-specific death (head turned sideways)
-  would fix it.
+  whose rotor and tail sink 34 cm while its feet stay at the floor (section 3). The shipped
+  0.08 m leaves the rotor and tail 26 cm in, with the rotor blades standing upright out of the
+  floor. Two things would fix it: a death that lands on the side or front, or tilting the rotor
+  flat to the ground once Birdy is down.
 - **Lock-on treats Birdy like an enemy.** `LockOnTargeting` takes any live `Health`, with no
   priority for hostiles, so Tab can pick Birdy in the Newton fight, and when Newton dies the lock
   hands over to Birdy if Birdy is on screen. Both need changes in `LockOnTargeting`.
@@ -328,6 +371,10 @@ until then it falls back to Talk.
     moves such an instance.
   - To put Birdy in the starting view, clear room on the lawn (move a tether anchor) or move the
     starting camera.
+  - The committed ChibiSandbox has Birdy where the manager placed him, at
+    **(3.87, -1.48, 4.86)**. His talk ring there passes the levelness check, so the menu leaves
+    him there; whether that spot is on the starting screen hasn't been measured. The spot above
+    is what the menu picks in a scene without him.
 - **No hit reaction.** A sword hit only shows the sword's own flash and hitstop. No flinch clip,
   no damage numbers, no health bar. The boss bar and `DamageNumbers` are wired by Setup Newton
   Fight to exactly Newton and the player, and rewritten on every run of that menu, so adding
