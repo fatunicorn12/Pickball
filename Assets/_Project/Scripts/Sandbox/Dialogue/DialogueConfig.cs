@@ -21,16 +21,14 @@ namespace Pickleball.Sandbox.Dialogue
     {
         // --------------------------------------------------------- interaction
         [Header("Interaction — who can be talked to")]
-        [Tooltip("Furthest an NPC can be talked to by walking up to it, m, measured flat " +
-                 "from the player to the NPC's focus point. Larger finds people from further " +
-                 "away but makes the prompt pop up while just passing by.")]
+        [Tooltip("Furthest an NPC can be talked to, m, measured flat from the player to the " +
+                 "NPC's focus point; locked on or not (lock-on only lifts the facing cone). " +
+                 "Larger finds people from further away but makes the prompt pop up while just " +
+                 "passing by, and the talk shot is built for distances up to about 2.5 m.")]
         [SerializeField, Min(0.1f)] private float talkRange = 2.4f;
         [Tooltip("Widest angle off the player's facing an NPC can be in and still get the " +
                  "prompt, °. Smaller means you have to face who you want; 180 ignores facing.")]
         [SerializeField, Range(5f, 180f)] private float facingConeDegrees = 70f;
-        [Tooltip("Furthest a LOCKED-ON NPC can be talked to, m. Lock-on is an explicit " +
-                 "choice, so it reaches further than walking up and ignores facing.")]
-        [SerializeField, Min(0.1f)] private float lockedTalkRange = 4.5f;
         [Tooltip("Largest height difference between the player's focus height and the NPC's " +
                  "focus point, m. Stops talking to someone on the balcony above.")]
         [SerializeField, Min(0.1f)] private float maxHeightDifference = 1.6f;
@@ -47,8 +45,9 @@ namespace Pickleball.Sandbox.Dialogue
         [Tooltip("Seconds of being airborne that still count as grounded for the prompt. " +
                  "Covers one-frame ground-check flickers on slopes and steps.")]
         [SerializeField, Min(0f)] private float groundedGraceSeconds = 0.15f;
-        [Tooltip("Seconds after a conversation closes before another can start. Stops the E " +
-                 "press that closed it from opening it again.")]
+        [Tooltip("Quiet time after a conversation closes before another can start, s. Every " +
+                 "Interact press inside it starts it again, so mashing E through the last line " +
+                 "never reopens the talk: E has to be left alone this long first.")]
         [SerializeField, Min(0f)] private float restartCooldownSeconds = 0.35f;
         [Tooltip("Seconds the world keeps running after the talk press, with the player's " +
                  "input blocked, before time stops. He slows to idle instead of freezing " +
@@ -73,6 +72,13 @@ namespace Pickleball.Sandbox.Dialogue
         [Tooltip("Seconds between the conversation starting and the first letter typing. " +
                  "Lets the box fade in and the camera get going first.")]
         [SerializeField, Min(0f)] private float textStartDelaySeconds = 0.2f;
+        [Tooltip("The first line waits while the NPC is still turning toward the player and " +
+                 "more than this far off facing him, °. An NPC that isn't turning never holds " +
+                 "the text up. 180 never waits.")]
+        [SerializeField, Range(0f, 180f)] private float waitForNpcFacingDegrees = 20f;
+        [Tooltip("Longest the first line waits for the NPC to turn, s, on top of the text " +
+                 "start delay.")]
+        [SerializeField, Min(0f)] private float waitForNpcFacingSeconds = 1f;
         [Tooltip("Pause the AudioListener during conversations, so the world goes quiet " +
                  "with time. Dialogue sounds must set AudioSource.ignoreListenerPause.")]
         [SerializeField] private bool pauseAudio = true;
@@ -166,8 +172,9 @@ namespace Pickleball.Sandbox.Dialogue
         [Tooltip("Stick up looks down instead of up.")]
         [SerializeField] private bool lookInvertStickY;
         [Tooltip("Lowest the camera may swing, as its elevation above the NPC's head, ° " +
-                 "(negative: below it, looking up). Lower risks the ground filling the shot.")]
-        [SerializeField, Range(-80f, 0f)] private float lookMinPitch = -10f;
+                 "(negative: below it, looking up). 0 stays at head height or above, clear of " +
+                 "low props; lower risks the ground and low clutter filling the shot.")]
+        [SerializeField, Range(-80f, 0f)] private float lookMinPitch = 0f;
         [Tooltip("Highest the camera may swing, as its elevation above the NPC's head, °. " +
                  "Higher looks straight down on the NPC.")]
         [SerializeField, Range(0f, 85f)] private float lookMaxPitch = 60f;
@@ -205,6 +212,11 @@ namespace Pickleball.Sandbox.Dialogue
         [Header("Talk prompt")]
         [Tooltip("Height of the prompt above the NPC's focus point, m.")]
         [SerializeField] private float promptHeightOffset = 0.45f;
+        [Tooltip("For an NPC that lock-on can target (it has a Health), the prompt sits this " +
+                 "far to the side of the spot above its head, in screen heights, so it clears " +
+                 "the lock-on hint ring there (its spinning quad reaches about 0.085 screen " +
+                 "heights either side of its centre). 0 keeps it centred.")]
+        [SerializeField, Range(0f, 0.3f)] private float promptHintClearance = 0.1f;
         [Tooltip("Seconds for the prompt to fade in or out.")]
         [SerializeField, Min(0.01f)] private float promptFadeSeconds = 0.12f;
         [Tooltip("The verb on the prompt.")]
@@ -220,8 +232,6 @@ namespace Pickleball.Sandbox.Dialogue
         public float TalkRange => talkRange;
         /// <summary>Half-angle of the facing cone, °.</summary>
         public float FacingConeDegrees => facingConeDegrees;
-        /// <summary>Talk range for the lock-on target, m (flat).</summary>
-        public float LockedTalkRange => lockedTalkRange;
         /// <summary>Largest player-to-NPC focus height difference, m.</summary>
         public float MaxHeightDifference => maxHeightDifference;
         /// <summary>Range hysteresis for the current target, m.</summary>
@@ -256,6 +266,10 @@ namespace Pickleball.Sandbox.Dialogue
         public float AdvanceLockoutSeconds => advanceLockoutSeconds;
         /// <summary>Delay before the first line types, s.</summary>
         public float TextStartDelaySeconds => textStartDelaySeconds;
+        /// <summary>Facing error above which a still-turning NPC holds up the first line, °.</summary>
+        public float WaitForNpcFacingDegrees => waitForNpcFacingDegrees;
+        /// <summary>Longest the first line waits for the NPC to turn, s.</summary>
+        public float WaitForNpcFacingSeconds => waitForNpcFacingSeconds;
         /// <summary>Whether the AudioListener pauses with time.</summary>
         public bool PauseAudio => pauseAudio;
 
@@ -299,6 +313,8 @@ namespace Pickleball.Sandbox.Dialogue
 
         /// <summary>Prompt height above the focus point, m.</summary>
         public float PromptHeightOffset => promptHeightOffset;
+        /// <summary>Sideways offset of the prompt over a lock-on targetable NPC, screen heights.</summary>
+        public float PromptHintClearance => promptHintClearance;
         /// <summary>Prompt fade time, s.</summary>
         public float PromptFadeSeconds => promptFadeSeconds;
         /// <summary>Prompt verb.</summary>
@@ -313,7 +329,9 @@ namespace Pickleball.Sandbox.Dialogue
         {
             TalkRange = talkRange,
             FacingConeDegrees = facingConeDegrees,
-            LockedTalkRange = lockedTalkRange,
+            // As in BotW, locking on doesn't let you talk from further away: it only
+            // lifts the facing cone. The talk shot is built for walk-up distances.
+            LockedTalkRange = talkRange,
             MaxHeightDifference = maxHeightDifference,
             StickyMargin = stickyMargin,
             StickyConeDegrees = stickyConeDegrees,

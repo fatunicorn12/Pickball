@@ -1,4 +1,5 @@
 using System;
+using Pickleball.Sandbox;
 using Pickleball.Sandbox.Dialogue;
 using TMPro;
 using UnityEngine;
@@ -19,6 +20,12 @@ namespace Pickleball.UI
     /// The key cap shows E or RB depending on which device last pressed a
     /// button (mouse clicks count as keyboard), so a pad player is not told to
     /// press a key they cannot see.
+    ///
+    /// One marker at a time, as in BotW: an NPC that lock-on can target (it has
+    /// a <see cref="Health"/>) gets the lock-on hint ring above its head, so
+    /// over such an NPC the pill steps aside by
+    /// <see cref="DialogueConfig.PromptHintClearance"/> instead of sitting on the
+    /// ring (to the right, or the left near the right edge of the screen).
     ///
     /// Runs late (<c>DefaultExecutionOrder(1000)</c>, like the lock-on reticle)
     /// so it projects through the camera after the orbit camera has moved this
@@ -49,6 +56,7 @@ namespace Pickleball.UI
         const float PopFrom = 0.8f;
 
         Talkable _target;
+        bool _targetHasHint;
         float _visibility;
         float _wanted;
         bool _gamepadLast;
@@ -61,6 +69,7 @@ namespace Pickleball.UI
             _anyButton = InputSystem.onAnyButtonPress.Call(OnAnyButton);
             RefreshLabels();
             _target = interactor != null ? interactor.CurrentTarget : null;
+            _targetHasHint = _target != null && _target.TryGetComponent(out Health _);
             _wanted = _target != null ? 1f : 0f;
             _visibility = 0f;
             Apply();
@@ -79,6 +88,7 @@ namespace Pickleball.UI
             if (target != null)
             {
                 _target = target;
+                _targetHasHint = target.TryGetComponent(out Health _);
                 RefreshLabels();
             }
             _wanted = target != null ? 1f : 0f;
@@ -129,11 +139,32 @@ namespace Pickleball.UI
             if (parent == null) return false;
             if (_canvas == null) _canvas = pill.GetComponentInParent<Canvas>();
             Canvas root = _canvas != null ? _canvas.rootCanvas : null;
+            if (_targetHasHint)
+            {
+                float halfWidth = pill.rect.width * 0.5f * (root != null ? root.scaleFactor : 1f);
+                screen.x += HintClearanceShift(screen.x, worldCamera.pixelWidth, worldCamera.pixelHeight,
+                                               config.PromptHintClearance, halfWidth);
+            }
             Camera uiCamera = root != null && root.renderMode != RenderMode.ScreenSpaceOverlay ? root.worldCamera : null;
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, uiCamera, out Vector2 local))
                 return false;
             pill.localPosition = new Vector3(local.x, local.y, 0f);
             return true;
+        }
+
+        /// <summary>
+        /// Sideways shift, in pixels, that puts a pill <paramref name="pillHalfWidth"/>
+        /// pixels wide either side of its centre clear of a marker centred on
+        /// <paramref name="anchorX"/>: <paramref name="clearance"/> screen heights
+        /// plus half the pill, to the right, or to the left when that would run
+        /// off the right edge. 0 when <paramref name="clearance"/> is 0.
+        /// </summary>
+        public static float HintClearanceShift(float anchorX, float pixelWidth, float pixelHeight,
+                                               float clearance, float pillHalfWidth)
+        {
+            if (clearance <= 0f) return 0f;
+            float shift = clearance * pixelHeight + pillHalfWidth;
+            return anchorX + shift + pillHalfWidth > pixelWidth ? -shift : shift;
         }
 
         void RefreshLabels()

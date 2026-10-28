@@ -266,8 +266,27 @@ namespace Pickleball.Sandbox.Dialogue
         void EnableOrbit()
         {
             _orbitPending = false;
-            if (_disabledOrbit && orbitCamera != null) orbitCamera.enabled = true;
+            if (_disabledOrbit && orbitCamera != null)
+            {
+                orbitCamera.enabled = true;
+                ResyncCursor();
+            }
             _disabledOrbit = false;
+        }
+
+        /// <summary>
+        /// The orbit camera was off for the talk, so it never saw an Escape the
+        /// player pressed meanwhile: it still believes it owns the cursor, while
+        /// the Editor has freed it. Left like that, the mouse would turn the
+        /// camera over the Editor and a click would swing the sword instead of
+        /// re-capturing. The orbit camera has no way to be told it lost the
+        /// cursor, so the cursor is captured again to match what it believes.
+        /// </summary>
+        void ResyncCursor()
+        {
+            if (!orbitCamera.CursorCaptured || Cursor.lockState == CursorLockMode.Locked) return;
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
 
         /// <summary>The framing pivot: the player's Head bone where there is one
@@ -430,6 +449,15 @@ namespace Pickleball.Sandbox.Dialogue
             return clear;
         }
 
+        /// <summary>Closest the looking-around camera may come to the NPC's head, m:
+        /// the configured minimum, and never so close that the camera's sphere
+        /// reaches into the NPC's body.</summary>
+        float LookMinDistance => Mathf.Max(config.MinCameraDistance, _npcHalfWidth + config.CameraCollisionRadius);
+
+        /// <summary>Clear distance along the orbit's current direction, up to its radius.</summary>
+        float RoomAt(Transform partner, Transform npc)
+            => ClearDistance(_look.Pivot, _look.Direction, _look.Radius, partner, npc);
+
         /// <summary>Mouse look only while the cursor is captured, as the orbit
         /// camera does: never while it is free over the Editor or a menu.</summary>
         bool MouseCaptured()
@@ -459,13 +487,35 @@ namespace Pickleball.Sandbox.Dialogue
             _look.AddLook(look.x, look.y, settings.MinPitch, settings.MaxPitch);
             if (!_look.Moved || _look.IsSettled) return;
 
-            _look.Step(unscaledDeltaTime, settings.SmoothTime);
-            Vector3 direction = _look.Direction;
             Transform partner = director != null ? director.Partner : null;
             Transform npc = _talkable != null ? _talkable.transform : null;
-            float clear = ClearDistance(_look.Pivot, direction, _look.Radius, partner, npc);
-            float shown = _look.FollowDistance(clear, config.MinCameraDistance, unscaledDeltaTime,
-                                               settings.PullOutSeconds);
+            float yaw0 = _look.Yaw, pitch0 = _look.Pitch;
+            _look.Step(unscaledDeltaTime, settings.SmoothTime);
+            float clear = RoomAt(partner, npc);
+            if (clear < LookMinDistance)
+            {
+                // No room there: keep whichever half of the step still fits (slide
+                // along the wall), else neither, and drop the blocked turn.
+                float yaw1 = _look.Yaw, pitch1 = _look.Pitch;
+                _look.SetShown(yaw1, pitch0);
+                if ((clear = RoomAt(partner, npc)) >= LookMinDistance)
+                    _look.CancelPitch();
+                else
+                {
+                    _look.SetShown(yaw0, pitch1);
+                    if ((clear = RoomAt(partner, npc)) >= LookMinDistance)
+                        _look.CancelYaw();
+                    else
+                    {
+                        _look.SetShown(yaw0, pitch0);
+                        _look.CancelYaw();
+                        _look.CancelPitch();
+                        clear = RoomAt(partner, npc);
+                    }
+                }
+            }
+            Vector3 direction = _look.Direction;
+            float shown = _look.FollowDistance(clear, unscaledDeltaTime, settings.PullOutSeconds);
             Vector3 position = _look.Pivot + direction * shown;
             if (partner != null)
                 position = DialogueOrbit.PushOut(position, partner.position, PlayerHead(),

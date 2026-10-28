@@ -23,11 +23,16 @@ namespace Pickleball.Sandbox.Dialogue
     /// turn unwrapped, so a fast spin never takes the short way back the wrong
     /// direction.
     ///
-    /// <b>Collision</b> is split: the owner sweeps for walls and terrain from
-    /// <see cref="Pivot"/> along <see cref="Direction"/>, and
+    /// <b>Collision</b> is split, and collision always wins. The owner sweeps for
+    /// walls and terrain from <see cref="Pivot"/> along <see cref="Direction"/>;
     /// <see cref="FollowDistance"/> comes in at once to the clear distance (so the
-    /// camera never sits inside a wall) and eases back out when the wall is
-    /// gone. <see cref="PushOut"/> keeps the camera out of the player's own body.
+    /// camera never sits inside a wall), however close that is, and eases back
+    /// out when the wall is gone. Where there is no room at all (the clear
+    /// distance would bring the camera nearer the NPC than the owner allows),
+    /// the owner refuses the step: <see cref="SetShown"/> puts the previous
+    /// angles back and <see cref="CancelYaw"/> / <see cref="CancelPitch"/> drop the
+    /// rest of that turn, the way a wall stops a third-person camera turning.
+    /// <see cref="PushOut"/> keeps the camera out of the player's own body.
     /// Pure math, so EditMode tests drive it without a scene.
     /// </summary>
     public sealed class DialogueOrbit
@@ -145,16 +150,32 @@ namespace Pickleball.Sandbox.Dialogue
         }
 
         /// <summary>
-        /// The distance to show this frame, given the clear space a sweep from the
-        /// pivot along <see cref="Direction"/> found. Comes in at once (the camera
-        /// is never left inside a wall), eases back out with time constant
-        /// <paramref name="pullOutSeconds"/>, never beyond <see cref="Radius"/>
-        /// and never closer than <paramref name="minDistance"/>.
+        /// Sets the shown angles outright, without touching what the input asks
+        /// for: how the owner undoes a step that found no room.
         /// </summary>
-        public float FollowDistance(float clearDistance, float minDistance, float unscaledDeltaTime,
-                                    float pullOutSeconds)
+        public void SetShown(float yaw, float pitch)
         {
-            float wanted = Mathf.Clamp(clearDistance, Mathf.Min(Mathf.Max(minDistance, 0f), Radius), Radius);
+            Yaw = WrapAngle(yaw);
+            Pitch = pitch;
+        }
+
+        /// <summary>Drops the rest of the yaw the input asked for: the turn is
+        /// blocked, and pushing on into the wall must not build up a backlog.</summary>
+        public void CancelYaw() => _yawRemaining = 0f;
+
+        /// <summary>Drops the rest of the pitch the input asked for.</summary>
+        public void CancelPitch() => TargetPitch = Pitch;
+
+        /// <summary>
+        /// The distance to show this frame, given the clear space a sweep from the
+        /// pivot along <see cref="Direction"/> found. Comes in at once and all the
+        /// way (collision wins: the camera is never left inside a wall), eases
+        /// back out with time constant <paramref name="pullOutSeconds"/>, and
+        /// never goes beyond <see cref="Radius"/>.
+        /// </summary>
+        public float FollowDistance(float clearDistance, float unscaledDeltaTime, float pullOutSeconds)
+        {
+            float wanted = Mathf.Clamp(clearDistance, 0f, Radius);
             if (wanted <= Distance)
                 Distance = wanted;
             else if (unscaledDeltaTime > 0f)

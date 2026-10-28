@@ -127,6 +127,34 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
+        public void MashingE_ThroughTheEnd_DoesNotReopenTheTalk()
+        {
+            NpcAt(new Vector3(0f, 0f, 1.5f));
+            _interactor.Tick(Frame, false);
+            _interactor.Tick(Frame, true);                      // talk
+            _director.Tick(_config.TextStartDelaySeconds + 0.01f, false);
+            int reopened = 0;
+            _director.ConversationStarting += _ => reopened++;
+
+            // A press every 4 frames (15 Hz) for 2 s: through both lines, the close,
+            // the release and well past the restart cooldown, the way a player
+            // mashes to skip text. Same frame order as the game: interactor, director.
+            for (int frame = 0; frame < 120; frame++)
+            {
+                bool press = frame % 4 == 0;
+                _interactor.Tick(Frame, press);
+                _director.Tick(Frame, press);
+            }
+
+            Assert.That(reopened, Is.EqualTo(0), "a mashed E must not start the conversation again");
+
+            // Once the player stops pressing, a fresh press after the cooldown talks again.
+            for (int frame = 0; frame < 60; frame++) { _interactor.Tick(Frame, false); _director.Tick(Frame, false); }
+            _interactor.Tick(Frame, true);
+            Assert.That(_director.IsBusy, Is.True);
+        }
+
+        [Test]
         public void NpcWhosePromptIsOffScreen_IsNotATarget_AndEStaysDash()
         {
             // The prompt view only draws a pill that is on screen; E must only talk
@@ -165,7 +193,7 @@ namespace Pickleball.Tests.Dialogue
         public void LockedOnToATalker_ItWins_EvenBehindThePlayer()
         {
             NpcAt(new Vector3(0f, 0f, 1.5f));
-            var behind = NpcAt(new Vector3(0f, 0f, -3f));
+            var behind = NpcAt(new Vector3(0f, 0f, -2f));
             var health = behind.gameObject.AddComponent<Health>();
             health.ResetToFull();
             LockOn(health);
@@ -173,6 +201,25 @@ namespace Pickleball.Tests.Dialogue
             _interactor.Tick(Frame, false);
 
             Assert.That(_interactor.CurrentTarget, Is.SameAs(behind));
+        }
+
+        [Test]
+        public void LockedOnToATalker_FurtherThanWalkingUpReaches_IsNotATarget()
+        {
+            // BotW: locking on lifts the facing cone, not the range. From 3 m the
+            // talk shot would be a distant two-shot, so you walk up first.
+            var far = NpcAt(new Vector3(0f, 0f, 3f));
+            var health = far.gameObject.AddComponent<Health>();
+            health.ResetToFull();
+            LockOn(health);
+
+            _interactor.Tick(Frame, false);
+            Assert.That(_interactor.CurrentTarget, Is.Null, "3 m is past the 2.4 m talk range");
+            Assert.That(_gate.IsBlocked(InputBlock.InteractButton), Is.False);
+
+            far.transform.position = new Vector3(0f, 0f, 2.2f);
+            _interactor.Tick(Frame, false);
+            Assert.That(_interactor.CurrentTarget, Is.SameAs(far), "within walking-up range it talks");
         }
 
         void LockOn(Health target)

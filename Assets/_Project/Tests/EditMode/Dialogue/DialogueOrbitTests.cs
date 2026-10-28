@@ -8,8 +8,9 @@ namespace Pickleball.Tests.Dialogue
     /// Looking around in a talk, as pure math: the orbit starts exactly on the
     /// shot, pitch is clamped (but never snaps the shot), yaw is free and wraps
     /// the way it was turned, damping runs on unscaled time and does nothing on
-    /// a zero step, walls pull the camera in at once and let it out gently, and
-    /// the camera is pushed out of the player's body.
+    /// a zero step, walls pull the camera in at once (all the way: collision
+    /// wins) and let it out gently, a blocked step can be undone without a
+    /// backlog, and the camera is pushed out of the player's body.
     /// </summary>
     public class DialogueOrbitTests
     {
@@ -31,7 +32,7 @@ namespace Pickleball.Tests.Dialogue
             for (int i = 0; i < 400 && !orbit.IsSettled; i++)
             {
                 orbit.Step(0.016f, smoothTime);
-                orbit.FollowDistance(orbit.Radius, 0.4f, 0.016f, 0.2f);
+                orbit.FollowDistance(orbit.Radius, 0.016f, 0.2f);
             }
         }
 
@@ -181,26 +182,67 @@ namespace Pickleball.Tests.Dialogue
             var orbit = Begun();
             float radius = orbit.Radius;
 
-            float pulled = orbit.FollowDistance(radius * 0.5f, 0.4f, 0.016f, 0.2f);
+            float pulled = orbit.FollowDistance(radius * 0.5f, 0.016f, 0.2f);
             Assert.That(pulled, Is.EqualTo(radius * 0.5f), "in at once: never inside the wall");
             Assert.That(orbit.IsSettled, Is.True);
 
-            float easing = orbit.FollowDistance(radius, 0.4f, 0.016f, 0.2f);
+            float easing = orbit.FollowDistance(radius, 0.016f, 0.2f);
             Assert.That(easing, Is.GreaterThan(radius * 0.5f).And.LessThan(radius), "out gently");
             Assert.That(orbit.IsSettled, Is.False);
 
-            for (int i = 0; i < 400; i++) orbit.FollowDistance(radius * 10f, 0.4f, 0.016f, 0.2f);
+            for (int i = 0; i < 400; i++) orbit.FollowDistance(radius * 10f, 0.016f, 0.2f);
             Assert.That(orbit.Distance, Is.EqualTo(radius), "never past the shot's distance");
             Assert.That(orbit.IsSettled, Is.True);
         }
 
         [Test]
-        public void Wall_NeverPullsCloserThanTheMinimum()
+        public void Wall_AlwaysWins_HoweverClose()
         {
             var orbit = Begun();
 
-            Assert.That(orbit.FollowDistance(0.05f, 0.4f, 0.016f, 0.2f), Is.EqualTo(0.4f));
-            Assert.That(orbit.FollowDistance(0f, 0f, 0.016f, 0.2f), Is.EqualTo(0f));
+            Assert.That(orbit.FollowDistance(0.05f, 0.016f, 0.2f), Is.EqualTo(0.05f), "never left inside the wall");
+            Assert.That(orbit.FollowDistance(-1f, 0.016f, 0.2f), Is.EqualTo(0f));
+        }
+
+        [Test]
+        public void ABlockedStep_IsUndone_AndLeavesNoBacklog()
+        {
+            var orbit = Begun();
+            orbit.AddLook(90f, 20f, MinPitch, MaxPitch);
+            float yaw0 = orbit.Yaw, pitch0 = orbit.Pitch;
+            orbit.Step(0.016f, Smooth);
+            Assert.That(orbit.Yaw, Is.Not.EqualTo(yaw0));
+
+            // The owner found no room there: back to where it was, and stop pushing.
+            orbit.SetShown(yaw0, pitch0);
+            orbit.CancelYaw();
+            orbit.CancelPitch();
+
+            Assert.That(orbit.Yaw, Is.EqualTo(yaw0));
+            Assert.That(orbit.Pitch, Is.EqualTo(pitch0));
+            Assert.That(orbit.TargetYaw, Is.EqualTo(yaw0).Within(1e-4f), "no backlog of turn left to unwind");
+            Assert.That(orbit.TargetPitch, Is.EqualTo(pitch0));
+            Assert.That(orbit.IsSettled, Is.True);
+
+            // Turning the other way responds at once.
+            orbit.AddLook(-10f, 0f, MinPitch, MaxPitch);
+            Settle(orbit);
+            Assert.That(orbit.Yaw, Is.EqualTo(-10f).Within(Tolerance));
+        }
+
+        [Test]
+        public void ABlockedPitch_CanStillTurn()
+        {
+            var orbit = Begun();
+            orbit.AddLook(30f, 30f, MinPitch, MaxPitch);
+            float pitch0 = orbit.Pitch;
+            orbit.Step(0.016f, Smooth);
+            orbit.SetShown(orbit.Yaw, pitch0);    // the yaw half fits, the pitch half doesn't
+            orbit.CancelPitch();
+            Settle(orbit);
+
+            Assert.That(orbit.Yaw, Is.EqualTo(30f).Within(Tolerance), "slides along the wall");
+            Assert.That(orbit.Pitch, Is.EqualTo(pitch0));
         }
 
         [Test]

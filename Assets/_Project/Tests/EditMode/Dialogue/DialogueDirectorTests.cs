@@ -67,6 +67,89 @@ namespace Pickleball.Tests.Dialogue
             Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Talking));
         }
 
+        [Test]
+        public void Cooldown_IsADebounce_MashingKeepsItShut_AQuietPressOpens()
+        {
+            StartAndOpen();
+            ReadToTheEnd();
+            _director.Tick(Close + 0.01f, false);        // ended
+            _director.Tick(0.01f, false);                // input released: cooling down
+            Assert.That(_director.IsCoolingDown, Is.True);
+
+            // E mashed every 0.15 s for 3 s, far longer than the 0.35 s cooldown.
+            for (int i = 0; i < 20; i++)
+            {
+                _director.Tick(0.15f, true);
+                Assert.That(_director.CanStartConversation, Is.False, $"press {i}: still shut while mashing");
+            }
+
+            _director.Tick(Cooldown - 0.05f, false);
+            Assert.That(_director.CanStartConversation, Is.False, "not quiet long enough yet");
+            _director.Tick(0.1f, false);
+            Assert.That(_director.CanStartConversation, Is.True, "a quiet spell reopens it");
+        }
+
+        [Test]
+        public void FirstLine_WaitsWhileTheNpcIsStillTurningRound()
+        {
+            // The NPC at z 2 faces +z, away from the player at the origin (bearing 180).
+            Assert.That(_director.TryStart(_npc, _player), Is.True);
+            _director.Tick(Settle + 0.01f, false);
+            Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Opening));
+
+            float yaw = 0f;
+            for (int i = 0; i < 10; i++)              // 0.5 s, turning 12° a tick, as its driver would
+            {
+                yaw += 12f;
+                _npc.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                _director.Tick(0.05f, false);
+            }
+            Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Opening),
+                        "past the text delay, but still 60° off and turning");
+
+            while (yaw < 168f)
+            {
+                yaw += 12f;
+                _npc.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                _director.Tick(0.05f, false);
+            }
+            Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Talking), "12° off: he speaks");
+        }
+
+        [Test]
+        public void FirstLine_AnNpcThatIsNotTurning_NeverHoldsItUp()
+        {
+            Assert.That(_director.TryStart(_npc, _player), Is.True);
+            _director.Tick(Settle + 0.01f, false);
+            _director.Tick(TextDelay + 0.01f, false);       // facing fully away, but still
+
+            Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Talking));
+        }
+
+        [Test]
+        public void FirstLine_WaitForTheNpc_IsCapped()
+        {
+            Assert.That(_director.TryStart(_npc, _player), Is.True);
+            _director.Tick(Settle + 0.01f, false);
+            float yaw = 0f, waited = 0f;
+            while (waited < TextDelay + _config.WaitForNpcFacingSeconds - 0.1f)
+            {
+                yaw -= 0.5f;                                   // creeping the wrong way
+                _npc.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                _director.Tick(0.05f, false);
+                waited += 0.05f;
+            }
+            Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Opening));
+
+            for (int i = 0; i < 4; i++)
+            {
+                yaw -= 0.5f;
+                _npc.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                _director.Tick(0.05f, false);
+            }
+            Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Talking), "never longer than the cap");
+        }
+
         /// <summary>Reveal and dismiss every line.</summary>
         void ReadToTheEnd()
         {
