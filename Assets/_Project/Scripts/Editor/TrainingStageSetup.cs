@@ -62,9 +62,23 @@ public static class TrainingStageSetup
     /// <summary>Tether latch range, matching the sandbox's anchors.</summary>
     const float AnchorRange = 9f;
 
-    static readonly Color Blue = new(0.25f, 0.42f, 0.92f);
-    static readonly Color Red = new(0.92f, 0.2f, 0.22f);
-    static readonly Color Ink = new(0.33f, 0.35f, 0.4f);
+    static readonly Color Blue = new(0.1f, 0.26f, 0.85f);
+    static readonly Color Red = new(0.86f, 0.1f, 0.14f);
+    static readonly Color Ink = new(0.07f, 0.09f, 0.16f);
+
+    /// <summary>Floor labels stand this many degrees off flat toward the spawn
+    /// camera (90 = upright sign, 0 = lying flat), so they are not seen at a graze.</summary>
+    const float FloorLabelTilt = 38f;
+
+    /// <summary>Scales every floor label's font size.</summary>
+    const float FloorLabelScale = 1.3f;
+
+    /// <summary>Opacity of the dark panels behind the HUD text.</summary>
+    const float HudPanelAlpha = 0.62f;
+
+    // Spell lane (east of the dummy wall): stand on the line, cast at the target.
+    const float SpellLaneX = 14f, SpellLaneStartZ = -2f;
+    static readonly float[] SpellRanges = { 5f, 10f, 15f };
 
     static Material _floorMat, _blockMat, _platformMat, _roomMat;
     static TMP_FontAsset _font;
@@ -131,6 +145,8 @@ public static class TrainingStageSetup
         spawn.SetPositionAndRotation(SpawnPosition, Quaternion.identity);
         PlacePlayer(player, spawn);
 
+        BuildStations();
+
         var hud = RebindHud(dummies);
         StripSandbox(player);
 
@@ -138,7 +154,14 @@ public static class TrainingStageSetup
         var so = new SerializedObject(stage);
         so.FindProperty("player").objectReferenceValue = player.GetComponent<CharacterController>();
         so.FindProperty("spawnPoint").objectReferenceValue = spawn;
-        so.FindProperty("readout").objectReferenceValue = BuildReadout(hud);
+        var readouts = BuildReadout(hud);
+        so.FindProperty("readout").objectReferenceValue = readouts.movement;
+        so.FindProperty("comboReadout").objectReferenceValue = readouts.combo;
+        so.FindProperty("melee").objectReferenceValue = Object.FindFirstObjectByType<MeleeCombat>();
+        var dummyProp = so.FindProperty("dummies");
+        dummyProp.arraySize = dummies.Count;
+        for (int i = 0; i < dummies.Count; i++)
+            dummyProp.GetArrayElementAtIndex(i).objectReferenceValue = dummies[i];
         so.ApplyModifiedPropertiesWithoutUndo();
 
         ApplyLighting();
@@ -376,7 +399,34 @@ public static class TrainingStageSetup
             BuildDummy("Dummy_Floor", new Vector3(9.5f, 0f, 10f), group, cloth, dark),
             BuildDummy("Dummy_Platform", new Vector3(-5f, 1.75f, 10f), group, cloth, dark),
             BuildDummy("Dummy_Top", new Vector3(0f, 3.5f, 10f), group, cloth, dark),
+            // Target at the end of the spell lane.
+            BuildDummy("Dummy_SpellTarget", new Vector3(SpellLaneX, 0f, SpellLaneStartZ + SpellRanges[^1]), group, cloth, dark),
         };
+    }
+
+    /// <summary>Lock-on and spell stations: signs and range markers only.
+    /// Billboarded so they read from wherever the camera orbits to.</summary>
+    static void BuildStations()
+    {
+        // Lock-on: each dummy named above its head, and the controls on the floor in front.
+        Sign("DUMMY: FLOOR", new Vector3(9.5f, 2.4f, 10f), 4f);
+        Sign("DUMMY: PLATFORM", new Vector3(-5f, 4.15f, 10f), 4f);
+        Sign("DUMMY: TOP", new Vector3(0f, 5.9f, 10f), 4f);
+        FloorLabel("LOCK-ON\nTAB to lock  -  flick mouse / right stick to switch", new Vector3(0f, 0f, 7.2f), 0f, 4.2f, Ink);
+
+        // Spell lane: a start line and a marker at each range; aim with RMB, cast with LMB.
+        FloorLabel("SPELL LANE\nRMB aim  -  LMB cast", new Vector3(SpellLaneX, 0f, SpellLaneStartZ - 1.2f), 0f, 4.4f, Ink);
+        foreach (float range in SpellRanges)
+            FloorLabel($"- {range:0} m -", new Vector3(SpellLaneX - 2.6f, 0f, SpellLaneStartZ + range), 0f, 5f, Blue);
+        Sign("SPELL TARGET", new Vector3(SpellLaneX, 2.4f, SpellLaneStartZ + SpellRanges[^1]), 4f);
+    }
+
+    /// <summary>A label that always faces the main camera (FaceCamera copies its
+    /// rotation in LateUpdate: no allocation).</summary>
+    static void Sign(string text, Vector3 at, float size)
+    {
+        var tmp = Label(text, at, Quaternion.identity, size, Ink);
+        tmp.gameObject.AddComponent<FaceCamera>();
     }
 
     static Health BuildDummy(string name, Vector3 feet, Transform parent, Material cloth, Material dark)
@@ -429,18 +479,18 @@ public static class TrainingStageSetup
 
         var items = new (string path, string label)[]
         {
-            ($"{PickupDir}/Pickup_DoubleJump.prefab", "DOUBLE JUMP"),
+            ($"{PickupDir}/Pickup_DoubleJump.prefab", "DOUBLE\nJUMP"),
             ($"{PickupDir}/Pickup_Dash.prefab", "DASH"),
             ($"{PickupDir}/Pickup_Tether.prefab", "TETHER"),
             ($"{PickupDir}/Pickup_Skateboard.prefab", "SKATEBOARD"),
-            (GravityAnchorPickupPath, "GRAVITY ANCHOR"),
+            (GravityAnchorPickupPath, "GRAVITY\nANCHOR"),
         };
 
         for (int i = 0; i < items.Length; i++)
         {
             float x = -6f + 3f * i;
-            Box($"Pedestal_{items[i].label}", _geometry, new(x - 0.6f, 0f, 3.4f), new(x + 0.6f, 0.4f, 4.6f), _blockMat);
-            FloorLabel(items[i].label, new Vector3(x, 0f, 2.8f), 0f, 4.2f, Ink);
+            Box($"Pedestal_{items[i].label.Replace('\n', ' ')}", _geometry, new(x - 0.6f, 0f, 3.4f), new(x + 0.6f, 0.4f, 4.6f), _blockMat);
+            FloorLabel(items[i].label, new Vector3(x, 0f, 2.5f), 0f, 3.4f, Ink);
 
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(items[i].path);
             if (prefab == null)
@@ -581,29 +631,67 @@ public static class TrainingStageSetup
 
     /// <summary>Speed / height / jump readout in the top-right corner, where
     /// the reference shows its timer, plus a one-line key hint.</summary>
-    static TMP_Text BuildReadout(Transform hud)
+    static (TMP_Text movement, TMP_Text combo) BuildReadout(Transform hud)
     {
         var font = NewtonFightArt.Font("Oswald Bold SDF");
         var mat = NewtonFightArt.OutlinedFontMaterial(font, "HudLabel", 0.2f);
+        var topRight = new Vector2(1f, 1f);
+        var topLeft = new Vector2(0f, 1f);
 
-        var readout = HudText(hud, "TrainingReadout", font, mat, 30f, TextAlignmentOptions.TopRight,
-                              new Vector2(-44f, -34f), new Vector2(900f, 200f));
-        readout.text = "SPEED  0.0 m/s\nHEIGHT  0.00 m\nJUMP  -\nBEST  -";
+        // Dark backing panels so the white text reads over the pale grid.
+        HudPanel(hud, "TrainingReadoutPanel", topRight, new Vector2(-24f, -20f), new Vector2(640f, 470f));
+        HudPanel(hud, "TrainingControlsPanel", topLeft, new Vector2(24f, -20f), new Vector2(600f, 360f));
 
-        var hint = HudText(hud, "TrainingHint", font, mat, 20f, TextAlignmentOptions.TopRight,
-                           new Vector2(-44f, -246f), new Vector2(900f, 40f));
-        hint.text = "BACKSPACE  respawn     SHIFT + BACKSPACE  reset abilities";
-        hint.color = new Color(1f, 1f, 1f, 0.8f);
-        return readout;
+        var movement = HudText(hud, "TrainingReadout", font, mat, 32f, TextAlignmentOptions.TopRight,
+                               new Vector2(-44f, -30f), new Vector2(600f, 180f), topRight);
+        movement.text = "SPEED  0.0 m/s\nHEIGHT  0.00 m\nJUMP  -\nBEST  -";
+
+        var combo = HudText(hud, "TrainingCombo", font, mat, 32f, TextAlignmentOptions.TopRight,
+                            new Vector2(-44f, -224f), new Vector2(600f, 180f), topRight);
+        combo.color = new Color(1f, 0.92f, 0.5f);
+        combo.text = "HITS  0\nTOTAL  0\nLAST HIT  -\nCHAIN  -";
+
+        var hint = HudText(hud, "TrainingHint", font, mat, 28f, TextAlignmentOptions.TopRight,
+                           new Vector2(-44f, -416f), new Vector2(600f, 40f), topRight);
+        hint.text = "BACKSPACE respawn   SHIFT+BACKSPACE reset";
+        hint.color = Color.white;
+
+        // Persistent controls card; bindings as wired in InputReader/SwordInput/LockOnTargeting/SpellInput.
+        var controls = HudText(hud, "TrainingControls", font, mat, 26f, TextAlignmentOptions.TopLeft,
+                               new Vector2(44f, -30f), new Vector2(560f, 330f), topLeft);
+        controls.lineSpacing = 6f;
+        controls.text =
+            "CONTROLS\n" +
+            "MOVE  WASD / left stick\n" +
+            "JUMP  Space      SPRINT  Shift\n" +
+            "SWORD  Left click\n" +
+            "LOCK-ON  Tab  (flick mouse/stick to switch)\n" +
+            "SPELL  hold Right click aim, Left click cast\n" +
+            "PICKUPS  E dash  Q tether  G anchor  R board\n" +
+            "RESET  Backspace";
+        return (movement, combo);
+    }
+
+    static void HudPanel(Transform hud, string name, Vector2 anchor, Vector2 pos, Vector2 size)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(UnityEngine.UI.Image));
+        go.transform.SetParent(hud, false);
+        var rect = (RectTransform)go.transform;
+        rect.anchorMin = rect.anchorMax = rect.pivot = anchor;
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = size;
+        var image = go.GetComponent<UnityEngine.UI.Image>();
+        image.color = new Color(0.04f, 0.05f, 0.09f, HudPanelAlpha);
+        image.raycastTarget = false;
     }
 
     static TextMeshProUGUI HudText(Transform hud, string name, TMP_FontAsset font, Material mat, float size,
-                                   TextAlignmentOptions align, Vector2 pos, Vector2 box)
+                                   TextAlignmentOptions align, Vector2 pos, Vector2 box, Vector2 anchor)
     {
         var go = new GameObject(name, typeof(RectTransform));
         go.transform.SetParent(hud, false);
         var rect = (RectTransform)go.transform;
-        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 1f);
+        rect.anchorMin = rect.anchorMax = rect.pivot = anchor;
         rect.anchoredPosition = pos;
         rect.sizeDelta = box;
         var text = go.AddComponent<TextMeshProUGUI>();
@@ -757,6 +845,7 @@ public static class TrainingStageSetup
         tmp.text = text;
         tmp.fontSize = size;
         tmp.color = colour;
+        tmp.fontStyle = FontStyles.Bold;   // upright and heavy: never italic
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.textWrappingMode = TextWrappingModes.NoWrap;
         tmp.rectTransform.sizeDelta = new Vector2(12f, 2f);
@@ -765,8 +854,15 @@ public static class TrainingStageSetup
         return tmp;
     }
 
-    /// <summary>A label lying on the floor; <paramref name="yaw"/> 0 reads
-    /// from the spawn looking north, 90 reads looking east.</summary>
-    static void FloorLabel(string text, Vector3 at, float yaw, float size, Color colour) =>
-        Label(text, new Vector3(at.x, at.y + 0.012f, at.z), Quaternion.Euler(90f, yaw, 0f), size, colour);
+    /// <summary>A label on the floor, tipped up toward the viewer by
+    /// <see cref="FloorLabelTilt"/>; <paramref name="yaw"/> 0 reads from the
+    /// spawn looking north, 90 reads looking east.</summary>
+    static void FloorLabel(string text, Vector3 at, float yaw, float size, Color colour)
+    {
+        size *= FloorLabelScale;
+        // Tilting swings the lower edge below the surface; lift by the glyph half-height.
+        int lines = text.Split('\n').Length;
+        float lift = 0.012f + size * 0.05f * lines * Mathf.Sin(FloorLabelTilt * Mathf.Deg2Rad);
+        Label(text, new Vector3(at.x, at.y + lift, at.z), Quaternion.Euler(90f - FloorLabelTilt, yaw, 0f), size, colour);
+    }
 }
