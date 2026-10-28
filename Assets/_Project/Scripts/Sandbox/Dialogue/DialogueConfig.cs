@@ -57,9 +57,9 @@ namespace Pickleball.Sandbox.Dialogue
 
         // ---------------------------------------------------------------- text
         [Header("Text — the typewriter")]
-        [Tooltip("Characters revealed per second. 40–50 reads like BotW; 0 or less shows each " +
-                 "line at once.")]
-        [SerializeField] private float charactersPerSecond = 45f;
+        [Tooltip("Characters revealed per second. 40–50 reads like BotW; 0 shows each line " +
+                 "at once.")]
+        [SerializeField, Min(0f)] private float charactersPerSecond = 45f;
         [Tooltip("Extra pause after a comma, semicolon, colon or dash, s.")]
         [SerializeField, Min(0f)] private float commaPauseSeconds = 0.08f;
         [Tooltip("Extra pause after a full stop, ! or ?, s. Makes sentences breathe.")]
@@ -76,26 +76,42 @@ namespace Pickleball.Sandbox.Dialogue
 
         // -------------------------------------------------------------- camera
         [Header("Camera — the push-in")]
-        [Tooltip("Height above the player's feet of the over-the-shoulder pivot, m. Also " +
-                 "the player end of the talk height check.")]
+        [Tooltip("Height of the player's head above his root, m: the player end of the talk " +
+                 "height check, and the camera pivot when the player has no humanoid Head bone " +
+                 "(with one, the camera frames from the bone itself).")]
         [SerializeField, Min(0f)] private float playerFocusHeight = 1.35f;
         [Tooltip("How far behind the pivot the camera sits, along the line from the player " +
                  "to the NPC, m. Smaller pulls the camera in closer.")]
         [SerializeField, Min(0.2f)] private float pushInDistance = 1.7f;
         [Tooltip("Camera height above the pivot, m. A little up looks down on short NPCs.")]
-        [SerializeField] private float cameraHeight = 0.2f;
-        [Tooltip("Sideways camera offset, m. Positive is over the player's right shoulder; " +
-                 "negative over the left.")]
-        [SerializeField] private float sideOffset = 0.65f;
-        [Tooltip("Aim height relative to the NPC's focus point, m. Slightly negative keeps " +
-                 "the head in the upper third of the frame.")]
-        [SerializeField] private float aimHeightOffset = -0.1f;
-        [Tooltip("Sideways aim shift, m. Positive pushes the NPC away from the shoulder the " +
-                 "camera is over, so the shot is not dead centre.")]
-        [SerializeField] private float aimSideOffset = 0.3f;
-        [Tooltip("Field of view during the conversation, °. Lower than the orbit camera's " +
-                 "reads as a push-in even when the camera barely moves.")]
-        [SerializeField, Range(15f, 90f)] private float fieldOfView = 42f;
+        [SerializeField] private float cameraHeight = 0.3f;
+        [Tooltip("Least sideways camera offset, m; the sign picks the shoulder. Negative is " +
+                 "over the player's left shoulder (the sword is on the right), positive the " +
+                 "right. Widened automatically when the NPC is close (Player Clearance).")]
+        [SerializeField] private float sideOffset = -0.8f;
+        [Tooltip("How far the sightline to the NPC's head must pass from the player's head, m. " +
+                 "The chibi's hair is ~0.32 m round its skull, so below ~0.4 the hair starts " +
+                 "to cover a short NPC. Larger swings the camera wider at close range.")]
+        [SerializeField, Min(0f)] private float playerClearance = 0.45f;
+        [Tooltip("Largest sideways offset, m, however close the NPC stands.")]
+        [SerializeField, Min(0f)] private float maxSideOffset = 1.6f;
+
+        [Header("Camera — composition")]
+        [Tooltip("Screen height of the NPC's head (its focus point), 0 bottom to 1 top. About " +
+                 "0.66 puts it on the upper third.")]
+        [SerializeField, Range(0.3f, 0.95f)] private float npcHeadScreenHeight = 0.66f;
+        [Tooltip("Screen height the NPC's feet should reach down to, 0–1. Keep it above the " +
+                 "dialogue box (which covers the bottom ~0.27) so the whole NPC shows.")]
+        [SerializeField, Range(0f, 0.9f)] private float npcFeetScreenHeight = 0.31f;
+        [Tooltip("How far the NPC sits from the screen centre toward the open side, away from " +
+                 "the player's shoulder, in screen widths. 0 is dead centre.")]
+        [SerializeField, Range(0f, 0.4f)] private float npcScreenSide = 0.1f;
+        [Tooltip("Narrowest field of view, °. The field of view is chosen so the NPC fills the " +
+                 "space above the box; a very short NPC is not zoomed in past this.")]
+        [SerializeField, Range(10f, 90f)] private float minFieldOfView = 30f;
+        [Tooltip("Widest field of view, °. A tall NPC is cut off at the box rather than " +
+                 "shrunk past this.")]
+        [SerializeField, Range(10f, 90f)] private float maxFieldOfView = 50f;
         [Tooltip("Seconds to blend from the orbit camera into the conversation shot.")]
         [SerializeField, Min(0.01f)] private float blendInSeconds = 0.45f;
         [Tooltip("Seconds the close takes, time still paused: the box fades and the camera " +
@@ -182,7 +198,7 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>Whether the AudioListener pauses with time.</summary>
         public bool PauseAudio => pauseAudio;
 
-        /// <summary>Over-the-shoulder pivot height above the player's feet, m.</summary>
+        /// <summary>Player head height above his root, m (talk height check; camera fallback).</summary>
         public float PlayerFocusHeight => playerFocusHeight;
         /// <summary>Blend into the conversation shot, s.</summary>
         public float BlendInSeconds => blendInSeconds;
@@ -241,13 +257,16 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>The camera framing for <see cref="DialogueFraming"/>.</summary>
         public DialogueFramingSettings Framing => new()
         {
-            PivotHeight = playerFocusHeight,
             PushInDistance = pushInDistance,
             CameraHeight = cameraHeight,
             SideOffset = sideOffset,
-            AimHeightOffset = aimHeightOffset,
-            AimSideOffset = aimSideOffset,
-            FieldOfView = fieldOfView,
+            PlayerClearance = playerClearance,
+            MaxSideOffset = maxSideOffset,
+            NpcHeadScreenHeight = npcHeadScreenHeight,
+            NpcFeetScreenHeight = npcFeetScreenHeight,
+            NpcScreenSide = npcScreenSide,
+            MinFieldOfView = minFieldOfView,
+            MaxFieldOfView = Mathf.Max(minFieldOfView, maxFieldOfView),
         };
 
         /// <summary>The typewriter timing for <see cref="DialogueRunner"/>.</summary>

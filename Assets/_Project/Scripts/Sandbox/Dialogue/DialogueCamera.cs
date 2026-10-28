@@ -9,10 +9,11 @@ namespace Pickleball.Sandbox.Dialogue
     /// was.
     ///
     /// <b>Start</b> (<see cref="DialogueDirector.ConversationStarting"/>, the talk
-    /// press): records the camera's pose and field of view and disables
-    /// <see cref="SandboxOrbitCamera"/> in that same Update, before any
-    /// LateUpdate, so the orbit camera never runs during a talk. The shot comes
-    /// from <see cref="DialogueFraming"/>; during the blend-in it is re-solved
+    /// press): disables <see cref="SandboxOrbitCamera"/> in that same Update,
+    /// before any LateUpdate and before anything else can fail, so the orbit
+    /// camera never runs during a talk (it would tick at dt 0). Then it records
+    /// the camera's pose and field of view. The shot comes from
+    /// <see cref="DialogueFraming.Solve"/>; during the blend-in it is re-solved
     /// each frame from the player's position, because the player is still
     /// settling to a stop, and it is frozen once the blend completes. The NPC's
     /// focus point is read once: the NPC keeps animating in unscaled time, and
@@ -20,14 +21,19 @@ namespace Pickleball.Sandbox.Dialogue
     /// player's shoulder pulls the camera in when a wall or prop is in the way
     /// (the player and the NPC are ignored).
     ///
+    /// <b>The blend path</b> swings around the player/NPC midpoint
+    /// (<see cref="DialogueFraming.OrbitBlend"/>) rather than cutting straight
+    /// across, so a camera that starts in front of the player never passes
+    /// through him or the NPC on the way to the shot behind him, or back.
+    ///
     /// <b>End</b> (<see cref="DialogueDirector.ConversationEnding"/>): blends back
     /// to the recorded pose over <see cref="DialogueConfig.CloseSeconds"/>, the
     /// same time the director keeps the world stopped. On
     /// <see cref="DialogueDirector.ConversationEnded"/> it puts the recorded pose
     /// and field of view back exactly, then re-enables the orbit camera on the
-    /// first frame whose <c>Time.deltaTime</c> is above zero. That matters: at
-    /// dt = 0 the orbit camera's <c>SmoothDampAngle</c> divides by zero once it
-    /// has converged, and a NaN yaw never recovers.
+    /// first <see cref="Tick"/> whose scaled delta time is above zero. That
+    /// matters: at dt 0 the orbit camera's <c>SmoothDampAngle</c> divides by zero
+    /// once it has converged, and a NaN yaw never recovers.
     ///
     /// <b>Why disabling the orbit camera is enough.</b> It is off for the whole
     /// time the input gate is blocked, so its mouse and stick look, its Escape
@@ -37,7 +43,8 @@ namespace Pickleball.Sandbox.Dialogue
     ///
     /// Blends run in unscaled time with smoothstep, because time is stopped.
     /// Disabling this component mid-conversation (a script reload included)
-    /// restores the camera and the orbit rig at once.
+    /// restores the camera and the orbit rig at once. <see cref="Tick"/> is public
+    /// so EditMode tests can drive it with explicit time.
     /// </summary>
     [DisallowMultipleComponent]
     public class DialogueCamera : MonoBehaviour
@@ -60,21 +67,16 @@ namespace Pickleball.Sandbox.Dialogue
         const int HitBufferSize = 16;
 
         Mode _mode = Mode.Idle;
-        Vector3 _capturedPosition, _fromPosition, _toPosition;
-        Quaternion _capturedRotation, _fromRotation, _toRotation;
+        Pose _captured, _from, _to;
         float _capturedFov, _fromFov, _toFov;
         float _time, _duration;
         bool _disabledOrbit;
         bool _orbitPending;
         Talkable _talkable;
-        Vector3 _npcFocus;
+        Vector3 _npcFocus, _npcFeet;
+        Transform _playerHead;
+        Vector3 _blendCenter;
         RaycastHit[] _hits;
-
-        /// <summary>True from a conversation's start until the camera is handed back.</summary>
-        public bool IsActive => _mode != Mode.Idle;
-
-        /// <summary>The shot used for the current or last conversation, after clearance.</summary>
-        public DialogueShot LastShot { get; private set; }
 
         Camera Cam
         {
@@ -106,26 +108,27 @@ namespace Pickleball.Sandbox.Dialogue
             EnableOrbit();
         }
 
-        void Update()
-        {
-            // Scaled deltaTime on purpose: this waits for the first frame on
-            // which the orbit camera's LateUpdate will see dt > 0.
-            if (_orbitPending && Time.deltaTime > 0f) EnableOrbit();
-        }
+        void LateUpdate() => Tick(Time.deltaTime, Time.unscaledDeltaTime);
 
-        void LateUpdate()
+        /// <summary>
+        /// One frame: hands the orbit camera back once <paramref name="deltaTime"/>
+        /// (scaled) is above zero, and advances any blend by
+        /// <paramref name="unscaledDeltaTime"/>.
+        /// </summary>
+        public void Tick(float deltaTime, float unscaledDeltaTime)
         {
+            if (_orbitPending && deltaTime > 0f) EnableOrbit();
             if (_mode is Mode.Idle or Mode.Hold) return;
             var cam = Cam;
             if (cam == null) return;
 
             if (_mode == Mode.BlendIn) Solve();
 
-            _time += Mathf.Min(Time.unscaledDeltaTime, MaxStep);
+            _time += Mathf.Min(Mathf.Max(unscaledDeltaTime, 0f), MaxStep);
             float k = _duration > 0f ? _time / _duration : 1f;
             float s = DialogueFraming.SmoothStep01(k);
-            cam.transform.SetPositionAndRotation(Vector3.Lerp(_fromPosition, _toPosition, s),
-                                                 Quaternion.Slerp(_fromRotation, _toRotation, s));
+            var pose = DialogueFraming.OrbitBlend(_blendCenter, _from, _to, s);
+            cam.transform.SetPositionAndRotation(pose.position, pose.rotation);
             cam.fieldOfView = Mathf.Lerp(_fromFov, _toFov, s);
             if (k >= 1f) _mode = Mode.Hold;
         }
@@ -133,43 +136,45 @@ namespace Pickleball.Sandbox.Dialogue
         void OnConversationStarting(Talkable talkable)
         {
             var cam = Cam;
-            if (cam == null || config == null || talkable == null) return;
-
-            // A new talk while the orbit camera is still waiting to come back
-            // keeps the pose already recorded, which is the orbit camera's own.
-            if (_mode == Mode.Idle && !_orbitPending)
-            {
-                _capturedPosition = cam.transform.position;
-                _capturedRotation = cam.transform.rotation;
-                _capturedFov = cam.fieldOfView;
-            }
-            _orbitPending = false;
+            // First, before any early return: the orbit camera must not tick at
+            // dt 0 during the pause, whatever else is missing.
             if (orbitCamera != null && orbitCamera.enabled)
             {
                 orbitCamera.enabled = false;
                 _disabledOrbit = true;
             }
+            if (cam == null) return;
+
+            // A new talk while the orbit camera is still waiting to come back
+            // keeps the pose already recorded, which is the orbit camera's own.
+            if (_mode == Mode.Idle && !_orbitPending)
+            {
+                _captured = new Pose(cam.transform.position, cam.transform.rotation);
+                _capturedFov = cam.fieldOfView;
+            }
+            _orbitPending = false;
+            if (config == null || talkable == null) return;   // stays put; handed back at the end
 
             _talkable = talkable;
             _npcFocus = talkable.FocusPosition;
-            _fromPosition = cam.transform.position;
-            _fromRotation = cam.transform.rotation;
+            _npcFeet = talkable.transform.position;
+            _playerHead = HeadBoneOf(director != null ? director.Partner : null);
+            _from = new Pose(cam.transform.position, cam.transform.rotation);
             _fromFov = cam.fieldOfView;
             _time = 0f;
             _duration = config.BlendInSeconds;
             _mode = Mode.BlendIn;
             Solve();
+            _blendCenter = (PlayerHead() + _npcFocus) * 0.5f;
         }
 
         void OnConversationEnding(Talkable _)
         {
             var cam = Cam;
             if (_mode == Mode.Idle || cam == null || config == null) return;
-            _fromPosition = cam.transform.position;
-            _fromRotation = cam.transform.rotation;
+            _from = new Pose(cam.transform.position, cam.transform.rotation);
             _fromFov = cam.fieldOfView;
-            _toPosition = _capturedPosition;
-            _toRotation = _capturedRotation;
+            _to = _captured;
             _toFov = _capturedFov;
             _time = 0f;
             _duration = config.CloseSeconds;
@@ -180,7 +185,6 @@ namespace Pickleball.Sandbox.Dialogue
         {
             RestorePose();
             if (_disabledOrbit) _orbitPending = true;
-            if (_orbitPending && Time.deltaTime > 0f) EnableOrbit();
         }
 
         /// <summary>Puts the recorded pose and field of view back exactly.</summary>
@@ -189,9 +193,10 @@ namespace Pickleball.Sandbox.Dialogue
             if (_mode == Mode.Idle) return;
             _mode = Mode.Idle;
             _talkable = null;
+            _playerHead = null;
             var cam = Cam;
             if (cam == null) return;
-            cam.transform.SetPositionAndRotation(_capturedPosition, _capturedRotation);
+            cam.transform.SetPositionAndRotation(_captured.position, _captured.rotation);
             cam.fieldOfView = _capturedFov;
         }
 
@@ -202,31 +207,52 @@ namespace Pickleball.Sandbox.Dialogue
             _disabledOrbit = false;
         }
 
-        /// <summary>The target shot from where the player stands now.</summary>
+        /// <summary>The framing pivot: the player's Head bone where there is one
+        /// (the chibi's root sits well below its feet, so a height above the root
+        /// is a guess), else the root raised by <see cref="DialogueConfig.PlayerFocusHeight"/>.</summary>
+        Vector3 PlayerHead()
+        {
+            if (_playerHead != null) return _playerHead.position;
+            Transform partner = director != null ? director.Partner : null;
+            return partner != null
+                ? partner.position + Vector3.up * config.PlayerFocusHeight
+                : _captured.position;
+        }
+
+        /// <summary>The humanoid Head bone under <paramref name="player"/>, or null.
+        /// Looked up once per conversation, not per frame.</summary>
+        static Transform HeadBoneOf(Transform player)
+        {
+            if (player == null) return null;
+            var animator = player.GetComponentInChildren<Animator>();
+            return animator != null && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.Head) : null;
+        }
+
+        /// <summary>The target shot from where the player stands now: framed by
+        /// <see cref="DialogueFraming.Solve"/>, pulled in front of anything in the
+        /// way, and re-composed for wherever it ended up.</summary>
         void Solve()
         {
             Transform partner = director != null ? director.Partner : null;
+            Vector3 forward = partner != null ? partner.forward : _captured.forward;
             var framing = config.Framing;
-            Vector3 feet = partner != null
-                ? partner.position
-                : _capturedPosition - Vector3.up * framing.PivotHeight;
-            Vector3 forward = partner != null ? partner.forward : _capturedRotation * Vector3.forward;
-
-            var shot = DialogueFraming.Solve(feet, forward, _npcFocus, framing);
-            shot = KeepClear(shot, partner, _talkable != null ? _talkable.transform : null);
-            LastShot = shot;
-            _toPosition = shot.Position;
-            _toRotation = shot.Rotation;
+            float aspect = Cam != null ? Cam.aspect : 16f / 9f;
+            var shot = DialogueFraming.Solve(PlayerHead(), forward, _npcFocus, _npcFeet, aspect, framing);
+            Vector3 clear = KeepClear(shot, partner, _talkable != null ? _talkable.transform : null);
+            if (clear != shot.Position)
+                shot = DialogueFraming.Compose(shot.Pivot, clear, _npcFocus, _npcFeet, aspect, framing);
+            _to = new Pose(shot.Position, shot.Rotation);
             _toFov = shot.FieldOfView;
         }
 
-        /// <summary>Sweeps from the shoulder pivot to the camera and stops short
-        /// of the first thing that is neither the player nor the NPC.</summary>
-        DialogueShot KeepClear(DialogueShot shot, Transform player, Transform npc)
+        /// <summary>Sweeps from the shoulder pivot to the camera and returns where
+        /// it must stop: short of the first thing that is neither the player nor
+        /// the NPC.</summary>
+        Vector3 KeepClear(DialogueShot shot, Transform player, Transform npc)
         {
             Vector3 offset = shot.Position - shot.Pivot;
             float distance = offset.magnitude;
-            if (distance < 1e-4f) return shot;
+            if (distance < 1e-4f) return shot.Position;
 
             // autoSyncTransforms is off, and with time stopped no physics step
             // syncs moved transforms for us.
@@ -247,8 +273,7 @@ namespace Pickleball.Sandbox.Dialogue
                 if (npc != null && t.IsChildOf(npc)) continue;
                 if (hit.distance < clear) clear = hit.distance;
             }
-            return shot.WithPosition(DialogueFraming.PullIn(shot.Pivot, shot.Position, clear,
-                                                            config.MinCameraDistance));
+            return DialogueFraming.PullIn(shot.Pivot, shot.Position, clear, config.MinCameraDistance);
         }
     }
 }
