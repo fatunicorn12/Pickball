@@ -28,7 +28,7 @@ MonoBehaviour:
     knockback: 8
     launchSpeed: 12.8
     hitstop: 0.1
-  lungeSpeed: 2.5
+  lungeSpeed: 4
   burst:
     enabled: 1
     triggerAt: 0.62
