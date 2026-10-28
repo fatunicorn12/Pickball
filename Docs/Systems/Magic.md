@@ -47,7 +47,9 @@ The spell aims like Expedition 33's free-aim shot:
 
 - **Hold aim** and the camera eases over the player's right shoulder, a crosshair appears, and
   the body turns to face the point under the crosshair while the stick still steers. The player
-  strafes.
+  strafes. The camera sits 1.2 m right of, 0.55 m above and 3 m behind the chibi's head
+  (`SandboxOrbitCamera.aimShoulderOffset`, `aimDistance`), so the head is in the lower-left
+  third and the crosshair is clear.
 - **Fire** launches a slow (9 m/s), glowing orb from over the right shoulder (`SpellOrigin`)
   towards the point under the crosshair. If a damageable was under the crosshair at launch
   (within a 0.35 m aim assist), the orb homes on it gently, at 25°/s, so it bends after a target
@@ -267,9 +269,16 @@ aiming" component.
 
 ## 5. Known limitations and open questions
 
-- **Not play-tested.** The aim, the shoulder camera, the facing and the orb have only been
-  compiled and EditMode-tested. Expect tuning of `aimMoveScale`, the camera shoulder offset,
-  `orbSpeed` and the aim assist.
+- **Lightly play-tested.** The manager's first Play check (TrainingStage) confirmed aim, the gate
+  claims and a 15-mana cast. Two findings were fixed after it:
+  - M-1: the fire press is latched from its callback, so a press processed outside the frame's
+    own input update is no longer lost.
+  - M-2: the aim camera moved from (0.6, 0.1, 0) at 2.1 m to (1.2, 0.55, 0) at 3 m, because the
+    chibi's head filled the bottom-centre. That framing is worked out geometrically, not yet seen.
+    These are field defaults; a scene that saved the old values keeps them until they are set
+    on its camera.
+
+  Expect tuning of `aimMoveScale`, the camera framing, `orbSpeed` and the aim assist.
 - **Aim restrictions live in `AimInputClaims`.** On `AimStarted` it releases any held lock-on,
   then claims `InputBlock.Sword | InputBlock.LockOn` on the player's `PlayerInputGate`, so left
   mouse / RT only fire. While aiming it sets `PlayerMovementInput.DriveLimit` to
