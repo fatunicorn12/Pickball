@@ -104,7 +104,8 @@ namespace Pickleball.Sandbox.Movement
             intent.CrouchHeld = _crouch.IsPressed();
             intent.TrickPressed = _trick.WasPressedThisFrame();
             intent.MountPressed = _mount.WasPressedThisFrame();
-            intent.DashPressed = _dash.WasPressedThisFrame() && (inputGate == null || !inputGate.IsBlocked(InputBlock.InteractButton));
+            intent.DashPressed = _dash.WasPressedThisFrame()
+                                 && (inputGate == null || !inputGate.IsBlocked(InputBlock.InteractButton));
             intent.TetherPressed = _tether.WasPressedThisFrame();
             intent.AnchorPressed = _anchor.WasPressedThisFrame();
             return intent;
