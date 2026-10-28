@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using Pickleball.Sandbox.Weapon;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 /// <summary>
@@ -56,13 +57,21 @@ public static class WeaponClearanceSetup
             return false;
         }
 
-        var hand = animator.GetBoneTransform(HumanBodyBones.RightHand);
-        var socket = hand != null ? hand.Find("WeaponSocket") : null;
+        // Setup Weapon always uses the right hand, but the handedness is read
+        // off wherever the socket actually is rather than assumed. Writing a
+        // fixed `true` flipped a left-handed rig back to right on every re-run.
+        bool rightHanded = true;
+        var socket = FindSocket(animator, HumanBodyBones.RightHand);
+        if (socket == null)
+        {
+            socket = FindSocket(animator, HumanBodyBones.LeftHand);
+            rightHanded = false;
+        }
         var bladeBase = socket != null ? socket.Find("BladeBase") : null;
         var bladeTip = socket != null ? socket.Find("BladeTip") : null;
         if (bladeBase == null || bladeTip == null)
         {
-            Debug.LogError("No WeaponSocket with BladeBase/BladeTip on the right hand — " +
+            Debug.LogError("No WeaponSocket with BladeBase/BladeTip on either hand — " +
                            "run Tools ▸ Pickleball ▸ Setup Weapon first.");
             return false;
         }
@@ -78,13 +87,23 @@ public static class WeaponClearanceSetup
         so.FindProperty("animator").objectReferenceValue = animator;
         so.FindProperty("bladeBase").objectReferenceValue = bladeBase;
         so.FindProperty("bladeTip").objectReferenceValue = bladeTip;
-        so.FindProperty("rightHanded").boolValue = true;
+        so.FindProperty("rightHanded").boolValue = rightHanded;
         so.FindProperty("profile").objectReferenceValue = profile;
         so.ApplyModifiedPropertiesWithoutUndo();
 
+        // SetDirty alone doesn't mark a scene object's scene as modified, so a
+        // re-run that only rewired an existing component was never saved.
         EditorUtility.SetDirty(clearance);
-        Debug.Log($"Weapon clearance on {socket.name}, profile {ProfilePath}.");
+        if (!EditorApplication.isPlaying)
+            EditorSceneManager.MarkSceneDirty(socket.gameObject.scene);
+        Debug.Log($"Weapon clearance on {socket.parent.name}/{socket.name}, profile {ProfilePath}.");
         return true;
+    }
+
+    static Transform FindSocket(Animator animator, HumanBodyBones hand)
+    {
+        var bone = animator.GetBoneTransform(hand);
+        return bone != null ? bone.Find("WeaponSocket") : null;
     }
 
     static WeaponClearanceProfile LoadOrCreateProfile(Animator animator)

@@ -44,21 +44,29 @@ are those where the hand itself is in the hair (see Known limitations).
 ## 2. Architecture
 
 ```
-Animator (base, Gesture, Attack layers)
+Update
+        MeleeCombat sweep  reads BladeBase / BladeTip as last frame's LateUpdate left them
+Animator (base, Gesture, Attack layers; Normal update mode)
   └─ OnAnimatorIK: ChibiFootIK (feet, head look-at)
 LateUpdate, in execution order:
   -100  SwingTwist         restores the swings' hip turn (moves the arm)
    -50  WeaponClearance    bends shoulder + wrist so the blade clears the head
-     0  BladeTrail, SpringCloth, MeleeCombat sweep (read BladeBase / BladeTip)
+     0  BladeTrail, SpringCloth   draw from the corrected blade
 ```
+
+The hit sweep is not a LateUpdate. `MeleeCombat` sweeps in `Update`, before this frame's
+animation pass, so it reads the corrected blade from the previous frame. That's the same one-frame
+lag the sweep has always had against the Animator. If the Animator is ever switched to Animate
+Physics, it would rewrite the bones in the physics step before `Update`, and on frames with a
+physics step the sweep would test the raw clip instead.
 
 - **`ClearanceSolver`** (pure static maths): the smallest turn about the grip that takes a
   straight blade out of a sphere. A blade long enough to reach the tangent point clears at
   `asin(R / D)`; a shorter one only needs its tip on the surface. See the class summary.
 - **`WeaponClearance`** (component on `WeaponSocket`): each frame, finds the worst volume,
-  splits the turn between the shoulder (`RightUpperArm`) and the wrist (`RightHand`) about one
-  world axis, and repeats for `iterations` passes, because turning the shoulder also moves the
-  grip. It only moves bones. It raises no events and owns no gameplay state, and nothing
+  splits the turn between the weapon arm's shoulder (`RightUpperArm`, or `LeftUpperArm` when
+  `rightHanded` is off) and its wrist about one world axis, and repeats for `iterations`
+  passes, because turning the shoulder also moves the grip. It only moves bones. It raises no events and owns no gameplay state, and nothing
   depends on it. `LastCorrection` reports the turn applied this frame, for debugging.
 - **`WeaponClearanceProfile`** (ScriptableObject,
   `ScriptableObjects/Weapon/ChibiWeaponClearance.asset`): the spheres to avoid, the blade's
@@ -90,9 +98,21 @@ Shipped values: head sphere centre (−0.008, 0.262, 0.028) in head space, radiu
   To fit a radius, select the bone in Play mode and size the sphere gizmo to the silhouette.
 - **New weapon:** nothing to do as long as it has `BladeBase` / `BladeTip` children on the
   socket.
-- **New character on another rig:** delete or duplicate the profile, then run Setup Weapon
-  Clearance. The head sphere is fitted from that character's skinned mesh.
-- **Left-handed wielder:** untick `rightHanded`.
+- **Refit the chibi after a mesh change:** delete
+  `ScriptableObjects/Weapon/ChibiWeaponClearance.asset` and run Setup Weapon Clearance. The
+  setup fits the head sphere only when that asset doesn't exist.
+- **New character on another rig:** the setup won't do this for you. It only looks for the scene
+  object named `Chibi`, and it always uses the one fixed path above, so deleting or duplicating
+  the profile just refits the chibi. Instead:
+  1. Create a profile with **Assets ▸ Create ▸ Pickleball ▸ Weapon Clearance Profile**.
+  2. Add a `Head` volume and size it to the character's silhouette with the Play-mode gizmo.
+  3. Add `WeaponClearance` to that character's weapon socket and assign the profile, the
+     Animator and the blade ends by hand.
+- **Left-handed wielder:** hang the `WeaponSocket` off the left hand. The setup looks for the
+  socket on the right hand first, then the left, and sets `rightHanded` to match. Unticking
+  `rightHanded` by hand on a right-hand socket doesn't stick: the next Setup Weapon or Setup
+  Weapon Clearance run sets it back from where the socket is. Setup Weapon itself always builds
+  the socket on the right hand.
 
 ## 5. Known limitations
 

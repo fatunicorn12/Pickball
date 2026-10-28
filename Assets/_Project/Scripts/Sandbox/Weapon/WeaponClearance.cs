@@ -24,9 +24,17 @@ namespace Pickleball.Sandbox.Weapon
     ///
     /// Order: after <see cref="SwingTwist"/> (-100), which restores the swings'
     /// hip turn and so moves the arm, and before the default-order LateUpdates
-    /// (BladeTrail, SpringCloth), so the trail and the melee sweep (which read
-    /// BladeBase/BladeTip) see the corrected blade. Foot IK and look-at run in
-    /// OnAnimatorIK, which comes before every LateUpdate.
+    /// (BladeTrail, SpringCloth), so the trail draws the corrected blade. Foot
+    /// IK and look-at run in OnAnimatorIK, which comes before every LateUpdate.
+    ///
+    /// MeleeCombat's hit sweep is not one of those LateUpdates: it runs in
+    /// Update, before this frame's animation pass, so it reads the bones as
+    /// this component left them last frame. The sweep therefore hits with the
+    /// corrected blade, one frame late, which is the same lag it has always had
+    /// against the Animator. That holds while the Animator uses the Normal
+    /// update mode. Under Animate Physics the Animator would overwrite the bones
+    /// in the physics step before Update, and the sweep would see the raw clip
+    /// on frames that have one.
     ///
     /// Presentation only: it moves bones, never gameplay state, and nothing
     /// else depends on it. Disable the component to see the raw clips.
