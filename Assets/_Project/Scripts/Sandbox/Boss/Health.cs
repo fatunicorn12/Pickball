@@ -47,6 +47,18 @@ namespace Pickleball.Sandbox
                  "single good combo can cash in a whole bad exchange.")]
         [SerializeField] private float regainPerDamageDealt = 0.9f;
 
+        [Header("Hit grace")]
+        [Tooltip("Seconds of invulnerability after a DISCRETE hit lands (i-frames). " +
+                 "0 = off, which enemies and dummies keep. Continuous damage (per-frame " +
+                 "ticks, see hitGraceMinDamage) is never blocked and never starts a window.")]
+        [Min(0f)]
+        [SerializeField] private float hitGraceSeconds = 0f;
+
+        [Tooltip("Hits smaller than this count as continuous ticks (beam, well core: " +
+                 "dps x dt) and ignore the grace window in both directions.")]
+        [Min(0f)]
+        [SerializeField] private float hitGraceMinDamage = 2f;
+
         /// <summary>Current health, the solid part of the bar.</summary>
         public float Current { get; private set; }
 
@@ -96,6 +108,21 @@ namespace Pickleball.Sandbox
         /// permanent kind — the Fluxion Beam — which UI shows differently.</summary>
         public bool LastHitRecoverable { get; private set; } = true;
 
+        /// <summary>True when the most recent landed hit was a discrete blow rather
+        /// than a continuous tick; feedback (hurt flash) keys off it.</summary>
+        public bool LastHitDiscrete { get; private set; }
+
+        /// <summary>True while post-hit grace is protecting this body.</summary>
+        public bool InGrace => hitGraceSeconds > 0f && _grace.IsOpen(Now);
+
+        public float HitGraceSeconds { get => hitGraceSeconds; set => hitGraceSeconds = Mathf.Max(0f, value); }
+
+        /// <summary>Clock override for tests; null reads <see cref="Time.time"/>.</summary>
+        public Func<float> TimeSource;
+
+        float Now => TimeSource != null ? TimeSource() : Time.time;
+
+        HitGrace _grace;
         float _lastHitTime = -999f;
         bool _deathAnnounced;
 
@@ -117,9 +144,16 @@ namespace Pickleball.Sandbox
         /// <param name="at">World point, for VFX and floating numbers.</param>
         /// <param name="recoverable">False makes the loss immediate and permanent —
         /// nothing enters the grey pool and nothing can win it back.</param>
-        public void Damage(float amount, Vector3 at, bool recoverable = true)
+        /// <param name="continuous">True marks a per-frame tick that must never be
+        /// refused by, or open, hit grace. Tiny hits are treated so automatically.</param>
+        public void Damage(float amount, Vector3 at, bool recoverable = true, bool continuous = false)
         {
             if (amount <= 0f || IsDead) return;
+
+            bool discrete = hitGraceSeconds > 0f
+                            && HitGrace.IsDiscrete(amount, hitGraceMinDamage, continuous);
+            float now = Now;
+            if (_grace.Blocks(now, discrete)) return;
 
             float raw = amount;
             if (IncomingDamageFilter != null) amount = IncomingDamageFilter(amount, at);
@@ -145,6 +179,8 @@ namespace Pickleball.Sandbox
             // safety check and is provably inert is worse than no line at all.
 
             _lastHitTime = Time.time;
+            LastHitDiscrete = HitGrace.IsDiscrete(amount, hitGraceMinDamage, continuous);
+            if (discrete) _grace.Open(now, hitGraceSeconds);
             LastHitScale = amount / raw;
             LastHitRecoverable = recoverable;
             Hurt?.Invoke(applied, at);
@@ -182,6 +218,7 @@ namespace Pickleball.Sandbox
             Current = maxHealth;
             Recoverable = 0f;
             _deathAnnounced = false;
+            _grace.Clear();
             Changed?.Invoke(this);
         }
 

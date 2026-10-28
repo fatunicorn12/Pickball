@@ -316,8 +316,13 @@ public static class NewtonFightSetup
     {
         var health = player.GetComponent<Health>();
         if (health == null) health = player.gameObject.AddComponent<Health>();
+        // Player-only i-frames; enemies and dummies keep 0 (Health default).
+        var so = new SerializedObject(health);
+        so.FindProperty("hitGraceSeconds").floatValue = 0.5f;
+        so.ApplyModifiedPropertiesWithoutUndo();
+        if (player.GetComponent<HurtFlash>() == null) player.gameObject.AddComponent<HurtFlash>();
         EditorUtility.SetDirty(player.gameObject);
-        Debug.Log($"  player health on {player.name}");
+        Debug.Log($"  player health on {player.name} (hit grace 0.5 s, hurt flash)");
     }
 
     static void SetupBoss(GameObject boss, GravityWell wellPrefab,
