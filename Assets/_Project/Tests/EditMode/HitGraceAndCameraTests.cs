@@ -129,5 +129,38 @@ namespace Pickleball.Tests
             Assert.AreEqual(5.5f, CameraOcclusion.ClampLag(5.5f, 5f, 1f));
             Assert.AreEqual(-9f, CameraOcclusion.ClampLag(-9f, 5f, -1f));
         }
-    }
+    
+        [Test]
+        public void SafeBandShift_zero_inside_band_and_moves_camera_toward_band()
+        {
+            float t = Mathf.Tan(30f * Mathf.Deg2Rad);
+            Assert.AreEqual(0f, CameraOcclusion.SafeBandShift(0.5f, 6f, t, 0.15f, 0.75f));
+            float down = CameraOcclusion.SafeBandShift(-0.16f, 6f, t, 0.15f, 0.75f);
+            Assert.Less(down, 0f);
+            float up = CameraOcclusion.SafeBandShift(0.9f, 6f, t, 0.15f, 0.75f);
+            Assert.Greater(up, 0f);
+            // After the shift the point sits exactly on the band edge.
+            float yCam = (2f * -0.16f - 1f) * t * 6f - down;
+            Assert.AreEqual(0.15f, 0.5f + 0.5f * yCam / (t * 6f), 1e-4f);
+        }
+
+        [TestCase(1f / 30f)]
+        [TestCase(1f / 60f)]
+        [TestCase(1f / 144f)]
+        public void SafeBand_keeps_falling_player_in_frame_at_any_dt(float dt)
+        {
+            float t = Mathf.Tan(30f * Mathf.Deg2Rad), depth = 6f;
+            float camY = 5f, vel = 0f, worst = 1f;
+            for (float time = 0f; time < 3f; time += dt)
+            {
+                float playerY = 5f - 12f * time;           // fast fall
+                camY = Mathf.SmoothDamp(camY, playerY + 1f, ref vel, 0.18f, Mathf.Infinity, dt);
+                float vy = 0.5f + 0.5f * (playerY - camY) / (depth * t);
+                camY += CameraOcclusion.SafeBandShift(vy, depth, t, 0.15f, 0.75f);
+                vy = 0.5f + 0.5f * (playerY - camY) / (depth * t);
+                worst = Mathf.Min(worst, vy);
+            }
+            Assert.GreaterOrEqual(worst, 0.15f - 1e-3f);
+        }
+}
 }

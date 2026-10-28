@@ -36,6 +36,13 @@ namespace Pickleball.Sandbox
                  "Follow smoothing lags a fast jump or fall; without a cap the player " +
                  "leaves the frame (on-screen y reached 0.00 at 0.18 s). Negative = no cap.")]
         [SerializeField] private float maxVerticalLag = 1f;
+        [Tooltip("Keep the player's feet above, and his head below, these viewport heights " +
+                 "(0 bottom, 1 top) by moving the camera immediately when smoothing would " +
+                 "let him drift out. Inside the band the smooth follow is untouched. " +
+                 "Fades out while aiming (the shoulder view frames him low on purpose).")]
+        [SerializeField] private bool safeBandEnabled = true;
+        [SerializeField, Range(0f, 0.45f)] private float safeBandMin = 0.15f;
+        [SerializeField, Range(0.55f, 1f)] private float safeBandMax = 0.75f;
 
         [Header("Occlusion")]
         [Tooltip("Pull the camera in when geometry sits between the player and it.")]
@@ -445,6 +452,27 @@ namespace Pickleball.Sandbox
             return focus + dir * Mathf.Max(0f, length - _occlusionClip);
         }
 
+        /// <summary>World-space shift that keeps the feet above safeBandMin and
+        /// the head point below safeBandMax in the viewport, for a camera at
+        /// <paramref name="pos"/> facing <paramref name="rot"/>.</summary>
+        Vector3 SafeBandCorrection(Vector3 pos, Quaternion rot, Vector3 feet, Vector3 head)
+        {
+            if (!safeBandEnabled) return Vector3.zero;
+            if (_cam == null) _cam = GetComponent<Camera>();
+            if (_cam == null) return Vector3.zero;
+            float tanHalf = Mathf.Tan(_cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            Quaternion inv = Quaternion.Inverse(rot);
+            Vector3 f = inv * (feet - pos);
+            Vector3 h = inv * (head - pos);
+            float feetY = f.z > 1e-3f ? 0.5f + 0.5f * f.y / (f.z * tanHalf) : 0.5f;
+            float headY = h.z > 1e-3f ? 0.5f + 0.5f * h.y / (h.z * tanHalf) : 0.5f;
+            float shift = CameraOcclusion.SafeBandShift(feetY, f.z, tanHalf, safeBandMin, 1f);
+            if (shift == 0f) shift = CameraOcclusion.SafeBandShift(headY, h.z, tanHalf, 0f, safeBandMax);
+            if (shift == 0f) return Vector3.zero;
+            _velocity.y = 0f;
+            return rot * Vector3.up * shift;
+        }
+
         bool IsIgnoredBlocker(Collider c)
         {
             if (target != null && c.transform.IsChildOf(target.root)) return true;
@@ -507,6 +535,7 @@ namespace Pickleball.Sandbox
                                                   Mathf.Lerp(followSmoothTime, aimFollowSmoothTime, _aimBlend));
             float lagged = CameraOcclusion.ClampLag(smoothed.y, wanted.y, maxVerticalLag);
             if (!Mathf.Approximately(lagged, smoothed.y)) { smoothed.y = lagged; _velocity.y = 0f; }
+            smoothed += SafeBandCorrection(smoothed, rot, target.position, focus) * (1f - _aimBlend);
             transform.position = smoothed;
             transform.rotation = rot;
 
