@@ -50,6 +50,9 @@ scripts:
 10. **Spacetime ▸ Create Spacetime Lab Scene**
 11. **Build Academy Greybox**. It copies ChibiSandbox too, and keeps Birdy (see
     `Docs/World/TheAcademy.md` §8).
+12. **Setup Hypatia Fight**. Needs nothing else; it generates its own scene,
+    `HypatiaFight.unity`, as a copy of ChibiSandbox, so re-run it after ChibiSandbox changes
+    (it rebuilds only when its inputs changed; see `Docs/Systems/HypatiaBoss.md`).
 
 Setup Chibi Sandbox already runs the player-level setups as part of its build:
 - `MovementSetup.WirePlayer` and `EnsureConfigs`
