@@ -304,9 +304,10 @@ namespace Pickleball.Sandbox.Movement.Presentation
             _rideLift = Mathf.MoveTowards(_rideLift, wanted, c.RideLiftRate * dt);
         }
 
-        /// <summary>Placeholder poses until dedicated clips exist: tilt into the dive
-        /// and onto the belly, corkscrew through the spin jump. Exponentially
-        /// smoothed, so they blend at any frame rate.</summary>
+        /// <summary>Procedural poses: tilt into the dive and onto the belly (0 now
+        /// that both have flat clips), lower the model for the slide, corkscrew
+        /// through the spin jump. Exponentially smoothed, so they blend at any
+        /// frame rate.</summary>
         void UpdatePose(float dt)
         {
             var c = Config;

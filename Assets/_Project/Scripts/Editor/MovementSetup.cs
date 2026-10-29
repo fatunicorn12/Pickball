@@ -256,8 +256,10 @@ public static class MovementSetup
         Leave(spin, fall, MoveKind.SpinJump, 0.12f, grounded: false);
 
         // ---- dive + belly slide ---------------------------------------------------
-        // Placeholders: the airborne stretch of Running Jump for the dive and the
-        // arms-out fall for the slide; the driver tilts the model into each.
+        // Both from Run To Dive, which is already flat with the arms ahead, so the
+        // driver's pitch is 0. Without that file they fall back to the airborne
+        // stretch of Running Jump and the fall loop, which need divePitch ~60 and
+        // bellySlidePitch ~82 to lie down.
         var dive = State("Dive", Clip("dive", "dashPose", "fall"));
         OnMove(sm, dive, MoveKind.Dive, 0.06f);
         Leave(dive, land, MoveKind.Dive, 0.08f, grounded: true);

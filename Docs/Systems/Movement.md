@@ -230,7 +230,7 @@ PlayerMovementInput ──Read()──▶ MovementMotor ──MoveChanged / Tric
 | `MovementMotor` | `MovementMotor.cs` | Owns the CharacterController and the state machine, and integrates the body: speed along a heading, vertical velocity, momentum, force fields. Raises `MoveChanged`. Never touches Animator, VFX or UI. |
 | `MoveState` + 14 states | `States/*.cs` | One class per `MoveKind`. `Next()` decides the next move and `Tick()` integrates. `Next()` is not pure: it may spend presses and update shared bookkeeping (the jump chain's landing, the pending jump kind, the sprint ramp). |
 | `MovementConfig` | `MovementConfig.cs` | Every gameplay tunable, read live every frame. |
-| `MovementAnimatorDriver` | `Presentation/MovementAnimatorDriver.cs` | Listens to `MoveChanged` and sets the Animator: triggers, continuous params, and the int `Move` / `JumpKind`. Owns the model offset, ride lift and placeholder poses. |
+| `MovementAnimatorDriver` | `Presentation/MovementAnimatorDriver.cs` | Listens to `MoveChanged` and sets the Animator: triggers, continuous params, and the int `Move` / `JumpKind`. Owns the model offset, ride lift and procedural poses (slide offset, spin, optional pitch). |
 | `MovementEffects` | `Presentation/MovementEffects.cs` | Listens to `MoveChanged`: the feather puff, `DashEffects.Play`, `TetherSystem.Attach/Detach`, `SkateboardMount.SetRidden`. |
 | `MovementAnimationConfig` | `Presentation/MovementAnimationConfig.cs` | Presentation tunables (strides, clip timing, poses). |
 | `ChibiLocomotion` | `Sandbox/ChibiLocomotion.cs` | Facade with the stable API, plus player glue: lock-on and attack facing, head look-at. |
@@ -331,18 +331,25 @@ hygiene as before. `MovementSetup.AddMovementStates` then adds:
 - Foot IK is off on every new state. The driver also sets `ChibiFootIK.Suppressed` during the
   belly slide.
 
-**Placeholder clips** (until the Mixamo set in `Pickball-mixamo-inbox` is imported):
+**Clips.** Dive and BellySlide have real clips. The rest are placeholders until more of the
+Mixamo set in `Pickball-mixamo-inbox` is imported:
 
-| State | Placeholder |
+| State | Clip |
 |---|---|
-| SkidTurn | Run To Stop's braking plant, played at 2× |
-| JumpDouble | Running Jump |
-| TripleJump | the trimmed front flip |
-| SideFlip | the trimmed front flip played backwards |
-| Rollout | the trimmed front flip |
-| SpinJump | Falling Idle, with the model spun about Y in code |
-| Dive | the airborne stretch of Running Jump, with the model pitched 60° |
-| BellySlide | Falling Idle, pitched 82° and lowered 0.4 m |
+| SkidTurn | placeholder: Run To Stop's braking plant, played at 2× |
+| JumpDouble | placeholder: Running Jump |
+| TripleJump | placeholder: the trimmed front flip |
+| SideFlip | placeholder: the trimmed front flip played backwards |
+| Rollout | placeholder: the trimmed front flip |
+| SpinJump | placeholder: Falling Idle, with the model spun about Y in code |
+| Dive | `Run To Dive.fbx` frames 15–20, holding the last: body flat, both hands straight ahead and together, legs scissored. Past about frame 22 the take pitches into a roll. |
+| BellySlide | `Belly Slide Pose Wide.fbx`, an authored two-frame pose held for the whole slide: arms ahead in a shallow V (17° out, 6° up), torso flat, head up, legs together with the knees bent. The V puts the hands beside the big head rather than under it. An arms-together version was tried first, and its hands sat under the head, mostly hidden from the side. The model is lowered 0.45 m (`bellySlideOffset`), which puts its lowest point about 1 cm above the floor. |
+
+Both are Mixamo X Bot clips. Their `.meta` files carry the canonical X Bot reference skeleton
+from the clip audit: every `mixamorig:*` rotation in `humanDescription.skeleton` is the same as
+in `Run To Dive.fbx.meta`. With each file's own frame-0 reference instead, the knees and feet
+play 30–40° off on the chibi. `SetupClips` rewrites only `clipAnimations`, so a re-run keeps the
+skeleton. A new X Bot clip needs the same rotations copied in before its first Humanoid import.
 
 `Sprint Turn.fbx` was evaluated for the redirect and rejected. It is a 1.0 s curving turn of about
 60°, not a 180° snap-back.
@@ -374,8 +381,10 @@ Presentation lives on `MovementAnimationConfig.asset`:
 - **Model placement:** `modelYOffset`, live in the editor.
 - **Measured values:** the strides and `skateRideHeight` are re-measured by every setup run.
 - **Clip timing:** `flipAirborneSeconds`, `triggerLifetime`, `airborneLatch`.
-- **Placeholder poses:** `divePitch`, `bellySlidePitch`, `bellySlideOffset`, `spinYawSpeed`, and
-  `proceduralPoses` to turn them off once real clips land.
+- **Procedural poses:** `divePitch` and `bellySlidePitch` are 0, because both clips are already
+  flat. They were 60° and 82° on the placeholders; set them back if a clip is missing.
+  `bellySlideOffset` lowers the sliding model onto the floor. `spinYawSpeed` spins the spin jump.
+  Leave `proceduralPoses` on: it drives the slide offset and the spin.
 
 ## 4. How to extend
 
@@ -404,17 +413,25 @@ Hold an `IMovementState` (e.g. `GetComponent<ChibiLocomotion>().Movement`), subs
 
 Add a row to `ChibiSandboxSetup.ClipDefs` with the role name `AddMovementStates` looks up. The
 roles are `skidTurn`, `jumpDouble`, `tripleJump`, `sideFlip`, `rollout`, `spinJump`, `dive` and
-`bellySlide`. Put the FBX in `Animation/Chibi/Movement/` and re-run Setup Movement. If the clip
-carries its own pose, turn off `proceduralPoses`. For a new flip clip, set `flipAirborneSeconds`
-to its airborne length.
+`bellySlide`, and the row also goes in `AssetHomes`. Put the FBX in `Animation/Chibi/`. For a
+Mixamo X Bot file, copy the reference skeleton first (see the clip notes in §2). Then re-run
+Setup Movement. A full re-run rebuilds the controller, so the sword-ability states need **Setup
+Sword Abilities** again afterwards. To swap one state's clip without a rebuild, set that
+`AnimatorState.motion` through the AnimatorController API in your own Editor. If the clip
+carries its own pose, set that move's pitch to 0. For a new flip clip, set
+`flipAirborneSeconds` to its airborne length.
 
 ## 5. Known limitations and open questions
 
-- **Placeholder animation.** Dive, slide and spin are tilted or spun stock clips. The 14 Mixamo
-  clips are downloaded, and per-clip import and motion-matching recipes are in the side-session
-  notes. Importing them is the next step. It needs per-role exceptions in `SetupClips`: Body
-  orientation for the turning roles, a per-role Y bake for prone roles, and the canonical X Bot
-  skeleton. Once they're in, set `divePitch`, `bellySlidePitch` and `bellySlideOffset` to 0.
+- **Placeholder animation.** The spin, skid and jump variants are still stock clips, tilted or
+  spun in code. Of the 14 Mixamo clips downloaded, only Run To Dive is imported, plus the
+  authored Belly Slide Pose. The per-clip import and motion-matching recipes are in the
+  side-session notes. The remaining roles need per-role exceptions in `SetupClips`: Body
+  orientation for the turning roles, and a per-role Y bake for grounded and prone roles.
+- **From the chase camera the dive and slide arms don't show.** The cape covers the shoulders
+  and the big head covers everything ahead of them, so from behind you see head, cape and soles.
+  The arms read from the side and front, and the slide's V spread is what makes them visible
+  there. Changing that would mean a different pose or cape behaviour, not the rig.
 - **The skid swing drags a planted foot** about 0.4 m. The body turns 180° in about 0.06 s over
   planted feet. A dedicated turn clip and foot IK off (already off on SkidTurn) only hide part
   of it.
