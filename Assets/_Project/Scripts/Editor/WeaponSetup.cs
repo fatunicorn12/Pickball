@@ -1,18 +1,27 @@
 using System.Collections.Generic;
 using System.Linq;
 using Pickleball.Sandbox;
+using Pickleball.Sandbox.Hands;
 using UnityEditor;
 using UnityEditor.Animations;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 /// <summary>
 /// Attaches the drafting-compass weapon to the player and wires the combo chain.
 ///
-/// Tools ▸ Pickleball ▸ Setup Weapon
+/// Tools ▸ Pickleball ▸ Setup Weapon (everything), or Tools ▸ Pickleball ▸
+/// Setup Weapon Grip (only re-fits the grip on the existing weapon).
 ///
 /// The weapon hangs off HumanBodyBones.RightHand rather than a bone found by
 /// name: the avatar already knows which transform that is, so this works for any
 /// Tripo rig without hard-coding "R_Hand".
+///
+/// The WeaponSocket is the hand's grab point (a <see cref="HandGrip"/>): it is
+/// placed by measuring the hand (<see cref="HandGripSetup"/>), and the compass
+/// carries a grip anchor at the middle of its handle that the grab point seats
+/// on (<see cref="HeldItem"/>). The socket keeps its old name because Setup
+/// Weapon Clearance and the Tripo contact sheet find it by that name.
 ///
 /// Runs with a primitive stand-in until the real compass is imported, so the
 /// combo timing and hit sweep can be tuned before the model exists — the same
@@ -68,16 +77,44 @@ public static class WeaponSetup
     };
 
     /// <summary>
-    /// Which end of the weapon sits in the fist. The compass model runs 1.0
+    /// Which end of the weapon is the handle. The compass model runs 1.0
     /// units along its own +Y with the origin at the low end, so the old code —
     /// which just parented it at the socket origin — always gripped that low
-    /// end. True flips it, so the far end is held and the model points the other
-    /// way out of the hand.
+    /// end. True flips it, so the far end (the compass's knob and hinge) is
+    /// held and the model points the other way out of the hand.
     /// </summary>
     const bool GripFarEnd = true;
 
     /// <summary>Weapon length after normalising, whatever the authored scale.</summary>
     const float WeaponLength = 0.85f;
+
+    /// <summary>The socket is the hand's grab point; Setup Weapon Clearance and
+    /// the Tripo contact sheet find it, and the visual under it, by these names.</summary>
+    const string SocketName = "WeaponSocket";
+    const string VisualName = "WeaponVisual";
+    const string GripAnchorName = "GripAnchor";
+
+    /// <summary>
+    /// Handle measurement (see <see cref="GripSeat.HandleLength"/>): the weapon
+    /// is cut into slices of this fraction of its length, starting at the held
+    /// end. 2% of 0.85 m is 1.7 cm, finer than any guard or knob.
+    /// </summary>
+    const float HandleSliceFraction = 0.02f;
+
+    /// <summary>How far along the weapon a handle may run, as a fraction of its
+    /// length. Past this a widening is part of the weapon, not the end of its
+    /// handle.</summary>
+    const float HandleSearchFraction = 0.4f;
+
+    /// <summary>How much wider than the handle a slice must be to end it. The
+    /// compass's hinge disc is about 1.9 times its knob; a sword's crossguard is
+    /// several times its grip.</summary>
+    const float HandleWidenRatio = 1.5f;
+
+    /// <summary>The old hand-tuned socket pose, kept only as the fallback for
+    /// a rig whose hand has no skinned mesh to measure.</summary>
+    static readonly Vector3 FallbackSocketPosition = new(0f, 0.02f, 0.04f);
+    static readonly Vector3 FallbackSocketEuler = new(0f, 90f, 100f);
 
     /// <summary>
     /// Name of the masked layer the combo lives on. SwordAnimatorDriver and
@@ -105,6 +142,60 @@ public static class WeaponSetup
 
         AssetDatabase.SaveAssets();
         Debug.Log("Weapon setup complete. Left click to attack; click again mid-swing to chain.");
+    }
+
+    /// <summary>
+    /// Re-fits only the grip on the weapon that is already in the hand:
+    /// re-measures the hand and the compass's handle, moves the grab point,
+    /// re-seats the compass and moves BladeBase / BladeTip to match.
+    ///
+    /// Deliberately much less than Setup Weapon: it doesn't rebuild the socket,
+    /// so the WeaponClearance on it and the MeleeCombat and BladeTrail
+    /// references to the blade markers stay as they are, and it doesn't call
+    /// SwordAbilitySetup, so the tuned combo (states, step assets, effects)
+    /// is left alone. Run it after changing the HandGripProfile's grab point
+    /// fields, or in a scene saved before the grab point existed.
+    /// </summary>
+    [MenuItem("Tools/Pickleball/Setup Weapon Grip")]
+    public static void RunGripOnly()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            Debug.LogError("Setup Weapon Grip: leave Play mode first; changes made in Play mode are lost.");
+            return;
+        }
+        var player = GameObject.Find("Chibi");
+        if (player == null)
+        {
+            Debug.LogError("No 'Chibi' in the scene — run Setup Chibi Sandbox first.");
+            return;
+        }
+        var animator = player.GetComponentInChildren<Animator>();
+        if (animator == null || animator.avatar == null || !animator.avatar.isHuman)
+        {
+            Debug.LogError("Player has no Humanoid avatar; cannot find the hand bone.");
+            return;
+        }
+        var hand = animator.GetBoneTransform(HumanBodyBones.RightHand);
+        var socket = hand != null ? hand.Find(SocketName) : null;
+        var visual = socket != null ? socket.Find(VisualName) : null;
+        if (visual == null)
+        {
+            Debug.LogError($"No {SocketName}/{VisualName} on the right hand — run Tools ▸ Pickleball ▸ " +
+                           "Setup Weapon first.");
+            return;
+        }
+
+        // The compass is a model prefab instance; the stand-in is a bare
+        // primitive, which has no far end to prefer.
+        bool isModel = PrefabUtility.IsPartOfPrefabInstance(visual.gameObject);
+        FitGrip(animator, socket, visual, isModel && GripFarEnd);
+
+        EditorUtility.SetDirty(player);
+        EditorSceneManager.MarkSceneDirty(player.scene);
+        AssetDatabase.SaveAssets();
+        Debug.Log("Weapon grip re-fitted. The combo, weapon clearance and blade trail were not rebuilt; " +
+                  "save the scene to keep it.");
     }
 
     /// <summary>
@@ -150,7 +241,7 @@ public static class WeaponSetup
             return false;
         }
 
-        AttachWeapon(hand, out Transform bladeBase, out Transform bladeTip);
+        AttachWeapon(animator, hand, out Transform bladeBase, out Transform bladeTip);
         WireCombat(player, bladeBase, bladeTip);
         // The Attack layer's mask drops the swings' hip turn; put it back.
         SwingTwistSetup.Bake(player);
@@ -251,52 +342,53 @@ public static class WeaponSetup
 
     // ----------------------------------------------------------------- weapon
 
-    static GameObject AttachWeapon(Transform hand, out Transform bladeBase, out Transform bladeTip)
+    /// <summary>
+    /// Builds the WeaponSocket from scratch: the compass (or a stand-in), the
+    /// blade markers, and then the grip (<see cref="FitGrip"/>).
+    /// </summary>
+    static GameObject AttachWeapon(Animator animator, Transform hand,
+                                   out Transform bladeBase, out Transform bladeTip)
     {
-        // Socket in between, so grip offsets can be tuned without touching the
-        // bone or the model's own transform.
-        var socketGo = hand.Find("WeaponSocket")?.gameObject;
+        // The socket is the hand's grab point. Everything held hangs off it, so
+        // the grip can be re-fitted without touching the bone or the model.
+        var socketGo = hand.Find(SocketName)?.gameObject;
         if (socketGo != null) Object.DestroyImmediate(socketGo);
-        socketGo = new GameObject("WeaponSocket");
+        socketGo = new GameObject(SocketName);
         socketGo.transform.SetParent(hand, false);
 
         string modelPath = FindModel("compass") ?? FindModel("protractor");
         GameObject visual;
-        float length = WeaponLength;
-
         if (modelPath != null)
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
             visual = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             visual.transform.SetParent(socketGo.transform, false);
-            AlignWeaponToSocket(visual, WeaponLength, GripFarEnd);
             Debug.Log($"Weapon model: {modelPath} (scaled to {WeaponLength:0.00}m, " +
-                      $"gripped by its {(GripFarEnd ? "far" : "near")} end)");
+                      $"handle at its {(GripFarEnd ? "far" : "near")} end)");
         }
         else
         {
-            visual = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            // An empty root around a thin cylinder, so the uniform rescale in
+            // PrepareHeldItem keeps it thin (the cylinder mesh is 2 x 1 units).
+            visual = new GameObject(VisualName);
             visual.transform.SetParent(socketGo.transform, false);
-            visual.transform.localScale = new Vector3(0.04f, 0.42f, 0.04f);
+            var standIn = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            standIn.name = "StandIn";
+            standIn.transform.SetParent(visual.transform, false);
+            standIn.transform.localScale = new Vector3(0.04f, 0.5f, 0.04f);
             Debug.Log("No compass model found — using a primitive stand-in. " +
                       $"Drop one under {PropsDir} and re-run.");
         }
-        visual.name = "WeaponVisual";
+        visual.name = VisualName;
         foreach (var c in visual.GetComponentsInChildren<Collider>())
             Object.DestroyImmediate(c);
 
-        // First-guess grip: held forward out of the fist, angled slightly down.
-        // Expect one tuning pass — the model's origin is not its handle.
-        socketGo.transform.localPosition = new Vector3(0f, 0.02f, 0.04f);
-        socketGo.transform.localRotation = Quaternion.Euler(0f, 90f, 100f);
-
         var baseGo = new GameObject("BladeBase");
         baseGo.transform.SetParent(socketGo.transform, false);
-        baseGo.transform.localPosition = Vector3.zero;
-
         var tipGo = new GameObject("BladeTip");
         tipGo.transform.SetParent(socketGo.transform, false);
-        tipGo.transform.localPosition = new Vector3(0f, length, 0f);
+
+        FitGrip(animator, socketGo.transform, visual.transform, modelPath != null && GripFarEnd);
 
         bladeBase = baseGo.transform;
         bladeTip = tipGo.transform;
@@ -304,18 +396,68 @@ public static class WeaponSetup
     }
 
     /// <summary>
-    /// Scale a weapon model to <paramref name="wanted"/> metres, lay its long
-    /// axis along the socket's +Y, and seat the chosen end at the socket origin
-    /// — the point the fist closes on.
+    /// Fits the grip on an existing socket, in place: measures the weapon's
+    /// handle and gives it a grip anchor, places the socket at the hand's grab
+    /// point, seats the weapon on it, and moves BladeBase to the centre of the
+    /// fist and BladeTip to the weapon's far end. Re-running gives the same
+    /// result.
+    ///
+    /// This replaced a hand-typed "first guess" socket offset that sat at the
+    /// wrist (0.02 m along the hand) and held the compass by its very end, so
+    /// the blade came out of the wrist rather than the fist. Now the hand side
+    /// is measured from the rig and the weapon side from the mesh.
+    /// </summary>
+    static void FitGrip(Animator animator, Transform socket, Transform visual, bool gripFarEnd)
+    {
+        var profile = HandGripSetup.LoadOrCreateProfile();
+        var item = PrepareHeldItem(visual.gameObject, WeaponLength, gripFarEnd, out Vector3 tipInModel);
+
+        if (HandGripSetup.TrySolve(animator, rightHand: true, profile, out GripFrame frame, out string how))
+        {
+            socket.SetLocalPositionAndRotation(frame.Position, frame.Rotation);
+            Debug.Log($"Grab point: {how}.");
+        }
+        else
+        {
+            socket.SetLocalPositionAndRotation(FallbackSocketPosition, Quaternion.Euler(FallbackSocketEuler));
+            Debug.LogWarning($"Could not measure the hand ({how}); using the old hand-tuned socket pose.");
+        }
+
+        var grip = HandGripSetup.Attach(animator, rightHand: true, socket, profile);
+        grip.Hold(item);
+        EditorUtility.SetDirty(grip);
+        EditorUtility.SetDirty(item);
+
+        // The blade runs from the centre of the fist to the weapon's far end:
+        // WeaponClearance turns it about that grip point, MeleeCombat sweeps it
+        // and BladeTrail draws it.
+        var bladeBase = socket.Find("BladeBase");
+        var bladeTip = socket.Find("BladeTip");
+        if (bladeBase != null) bladeBase.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+        if (bladeTip != null)
+            bladeTip.SetLocalPositionAndRotation(socket.InverseTransformPoint(visual.TransformPoint(tipInModel)),
+                                                 Quaternion.identity);
+    }
+
+    /// <summary>
+    /// Readies a weapon model to be held: scales it to
+    /// <paramref name="wanted"/> metres, measures where its handle is, and
+    /// gives it a <see cref="HeldItem"/> with a grip anchor at the middle of
+    /// that handle (+Y toward the tip, +Z along the weapon's wider side, so the
+    /// flat faces the palm and the edge leads with the knuckles).
     ///
     /// The old code assumed the model's own origin WAS the handle and just
     /// parented it at zero. That happens to be half-right for the compass
     /// (measured: it runs 0.998 along its +Y with the origin exactly at the low
     /// end), but it gave no way to hold the other end, and it would be wrong for
-    /// any model whose origin sits at its centre. Measuring instead means
-    /// flipping the grip is one bool, and a different weapon just works.
+    /// any model whose origin sits at its centre. Then the grip went to the very
+    /// end of the model, so the compass's 8 cm knob stuck out of the hand
+    /// instead of sitting in it. Measuring the handle puts the fist round the
+    /// knob and neck, up to the hinge disc.
     /// </summary>
-    static void AlignWeaponToSocket(GameObject visual, float wanted, bool gripFarEnd)
+    /// <param name="tipInModel">The far end of the weapon, in the model's own
+    /// (unscaled) space, for the BladeTip marker.</param>
+    static HeldItem PrepareHeldItem(GameObject visual, float wanted, bool gripFarEnd, out Vector3 tipInModel)
     {
         var tr = visual.transform;
         var parent = tr.parent;
@@ -324,8 +466,7 @@ public static class WeaponSetup
         // origin with no rotation it is exactly the model's own local AABB —
         // measuring it parented to the hand would fold the bone's rotation in.
         tr.SetParent(null, false);
-        tr.localPosition = Vector3.zero;
-        tr.localRotation = Quaternion.identity;
+        tr.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
         tr.localScale = Vector3.one;
         var local = MeasureBounds(visual);
 
@@ -334,26 +475,80 @@ public static class WeaponSetup
         if (local.size.y > local.size[axis]) axis = 1;
         if (local.size.z > local.size[axis]) axis = 2;
         float span = local.size[axis];
-
         float scale = span > 0.0001f ? wanted / span : 1f;
 
-        // The end that goes in the hand, and the direction from it to the tip.
-        var gripPoint = local.center;
-        gripPoint[axis] = gripFarEnd ? local.max[axis] : local.min[axis];
-        var alongModel = Vector3.zero;
-        alongModel[axis] = gripFarEnd ? -1f : 1f;
+        // The held end, the far end, and the direction from one to the other.
+        var gripEnd = local.center;
+        gripEnd[axis] = gripFarEnd ? local.max[axis] : local.min[axis];
+        tipInModel = local.center;
+        tipInModel[axis] = gripFarEnd ? local.min[axis] : local.max[axis];
+        var along = Vector3.zero;
+        along[axis] = gripFarEnd ? -1f : 1f;
+
+        // The wider girth axis is the edge: it leads with the knuckles. On the
+        // compass that is the plane its legs splay in, the same roll it was
+        // held at before.
+        int g1 = (axis + 1) % 3, g2 = (axis + 2) % 3;
+        var edge = Vector3.zero;
+        edge[local.size[g1] >= local.size[g2] ? g1 : g2] = 1f;
+
+        float handle = MeasureHandle(visual, local, axis, gripEnd, along, span);
+        Vector3 anchorInModel = gripEnd + along * (handle * 0.5f);
 
         tr.SetParent(parent, false);
         tr.localScale = Vector3.one * scale;
 
-        // Point grip->tip up the socket's +Y, then slide the grip onto the
-        // origin. Flipping the grip makes alongModel exactly antiparallel to up,
-        // where FromToRotation is free to pick any perpendicular spin axis; pin
-        // it to X so the roll is reproducible and stays where it is tuned.
-        tr.localRotation = Vector3.Dot(alongModel, Vector3.up) < -0.999f
-            ? Quaternion.AngleAxis(180f, Vector3.right)
-            : Quaternion.FromToRotation(alongModel, Vector3.up);
-        tr.localPosition = -(tr.localRotation * (gripPoint * scale));
+        var anchor = tr.Find(GripAnchorName);
+        if (anchor == null)
+        {
+            anchor = new GameObject(GripAnchorName).transform;
+            anchor.SetParent(tr, false);
+        }
+        anchor.SetLocalPositionAndRotation(anchorInModel, Quaternion.LookRotation(edge, along));
+        anchor.localScale = Vector3.one;
+
+        if (!visual.TryGetComponent(out HeldItem item))
+            item = visual.AddComponent<HeldItem>();
+        item.SetGripAnchor(anchor);
+
+        Debug.Log(handle > 0f
+            ? $"Weapon handle: {handle * scale:0.000} m from the held end; the fist closes on its middle."
+            : "Weapon has no distinct handle (it never widens near the held end); the fist closes on the end.");
+        return item;
+    }
+
+    /// <summary>
+    /// Length of the weapon's handle from its held end, in model units: slices
+    /// the mesh along its length and finds where it first widens sharply (see
+    /// <see cref="GripSeat.HandleLength"/>). Vertices only, which is enough:
+    /// a knob, guard or disc is where a mesh puts its vertices.
+    /// </summary>
+    static float MeasureHandle(GameObject visual, Bounds local, int axis, Vector3 gripEnd, Vector3 along, float span)
+    {
+        float slice = span * HandleSliceFraction;
+        if (slice <= 0f) return 0f;
+        int count = Mathf.CeilToInt(HandleSearchFraction / HandleSliceFraction);
+        var radii = new float[count];
+        for (int i = 0; i < count; i++) radii[i] = -1f;
+
+        int g1 = (axis + 1) % 3, g2 = (axis + 2) % 3;
+        var toModel = visual.transform.worldToLocalMatrix;
+        foreach (var mf in visual.GetComponentsInChildren<MeshFilter>())
+        {
+            if (mf.sharedMesh == null) continue;
+            var meshToModel = toModel * mf.transform.localToWorldMatrix;
+            foreach (var v in mf.sharedMesh.vertices)
+            {
+                Vector3 p = meshToModel.MultiplyPoint3x4(v);
+                int bin = Mathf.FloorToInt(Vector3.Dot(p - gripEnd, along) / slice);
+                if (bin < 0 || bin >= count) continue;
+                float du = p[g1] - local.center[g1];
+                float dv = p[g2] - local.center[g2];
+                float r = Mathf.Sqrt(du * du + dv * dv);
+                if (r > radii[bin]) radii[bin] = r;
+            }
+        }
+        return GripSeat.HandleLength(radii, slice, HandleWidenRatio);
     }
 
     // ------------------------------------------------------------- controller
