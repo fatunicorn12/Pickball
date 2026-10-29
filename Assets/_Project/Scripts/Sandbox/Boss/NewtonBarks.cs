@@ -12,7 +12,7 @@ namespace Pickleball.Sandbox
     /// text. A <see cref="BarkView"/> on the HUD listens to <see cref="Spoke"/>;
     /// nothing here knows about UI.
     /// </summary>
-    public class NewtonBarks : MonoBehaviour
+    public class NewtonBarks : MonoBehaviour, Pickleball.UI.IBarkSource
     {
         public enum Occasion { Intro, Well, Beam, Volley, PhaseTwo, Barrage, Hurt, Death, Unprompted, BeamWarning }
 

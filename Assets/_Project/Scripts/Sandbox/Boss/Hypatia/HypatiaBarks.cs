@@ -8,17 +8,16 @@ namespace Pickleball.Sandbox.Boss.Hypatia
     /// how the year 415 ends for her and lectures anyway. The lines are
     /// placeholders for the story owner to replace.
     ///
-    /// Same shape as <see cref="NewtonBarks"/>, with the same <see cref="Spoke"/>
-    /// signature, so the HUD's bark view can show either. (Its <c>source</c> field
-    /// is typed <see cref="NewtonBarks"/> today; it needs a Hypatia source field
-    /// or a shared interface before it can be wired to her.) Lines
+    /// Same shape as <see cref="NewtonBarks"/>: both implement
+    /// <see cref="Pickleball.UI.IBarkSource"/>, so the HUD's BarkView shows
+    /// either. Lines
     /// are picked per occasion and rate-limited, so the brain can call
     /// <see cref="Say"/> on every ring and volley without the HUD becoming a wall
     /// of text. Pacing uses real time (<see cref="Time.time"/>), not her slow
     /// clock: barks are presentation, and a frozen boss should still be heard.
     /// Nothing here knows about UI.
     /// </summary>
-    public class HypatiaBarks : MonoBehaviour
+    public class HypatiaBarks : MonoBehaviour, Pickleball.UI.IBarkSource
     {
         /// <summary>What prompted a line. Intro, PhaseTwo and Death always play;
         /// the rest are rate-limited and chance-gated.</summary>
