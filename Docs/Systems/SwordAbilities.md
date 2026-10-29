@@ -336,11 +336,17 @@ A boss drop can grant an ability early; its level is the fallback.
     - the hips or legs moving under the masked layer: 0 cm, 0°;
     - clip import, mirror or state flags: identical across the four.
   - `WeaponClearance` adds up to 57° during Attack3's overhead wind-up. Attack1 gets more.
-  - Swing 3 has been reported as "the whole body contorts". The leading suspect is the waist
-    cost above. Next step: in Play mode, set `SwingTwist.strength` to 0, then 0.5, and repeat
-    1-2-3. If swing 3 then stops wrenching, or starts flailing at the face instead, a cap on the
-    waist turn is the fix to design. Watch `SwingTwist.LastCorrection` and
-    `WeaponClearance.LastCorrection` while you do it.
+  - Swing 3 has been reported as "the whole body contorts". The playtest
+    `SwingTwistScenario.Swing3Contortion` (see `Docs/Testing/PlaytestHarness.md`) confirmed it
+    on 2026-10-28, with a standing 1-2-3 chain:
+    - Swing 3 is the only swing with frames where the twist is over 100° and the sideways bend
+      over 30° at the same time: 6 of its 38 frames, n≈0.45–0.6. Swings 1 and 2 have none.
+    - Strength 0 removes those frames: twist 63°, bend 29°. But the chest then faces 34° off the
+      clip on swing 3 and 81° off on swing 2, the old "swatting flies".
+    - Strength 0.5 still bends swing 3 by 38°.
+    - Step_Slash3's lunge of 0 leaves the pose unchanged (121°, 41°), but removes the 14
+      frames of re-plant steps the 16 cm lunge forces during the strike.
+    - No fix has been chosen yet.
 - **Two sources for the base states:** `WeaponSetup.AttackClips` still builds the `Attack1–4` and
   `AirAttack` states, and the base step assets re-apply their own clip and speed straight after. A
   later cleanup could build the layer from the step assets alone.
