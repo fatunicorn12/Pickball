@@ -65,16 +65,20 @@ namespace Pickleball.Sandbox.Movement.Presentation
         [SerializeField, Min(0.1f)] private float gestureFadeRate = 6f;
 
         [Header("Procedural poses (placeholders until dedicated clips)")]
-        [Tooltip("Tilt the model for the dive and belly slide, and spin it for the spin jump. " +
-                 "Turn off once the Mixamo dive / slide / spin clips carry the pose themselves.")]
+        [Tooltip("Tilt the model for the dive and belly slide, lower it onto the floor for the " +
+                 "slide, and spin it for the spin jump. Leave on: the dive and slide clips set " +
+                 "their pitch to 0 but still need the slide offset.")]
         [SerializeField] private bool proceduralPoses = true;
-        [Tooltip("Forward pitch of the model while diving, °.")]
-        [SerializeField, Range(0f, 90f)] private float divePitch = 60f;
-        [Tooltip("Forward pitch of the model while belly sliding, °.")]
-        [SerializeField, Range(0f, 90f)] private float bellySlidePitch = 82f;
-        [Tooltip("Model offset while belly sliding, m (local), so the body lies on the capsule " +
-                 "instead of pivoting about the feet.")]
-        [SerializeField] private Vector3 bellySlideOffset = new(0f, -0.4f, 0f);
+        [Tooltip("Forward pitch of the model while diving, °. 0 with the Run To Dive clip, " +
+                 "which is already flat; about 60 if the dive falls back to the dash pose.")]
+        [SerializeField, Range(0f, 90f)] private float divePitch = 0f;
+        [Tooltip("Forward pitch of the model while belly sliding, °. 0 with the Run To Dive " +
+                 "clip, which is already flat; about 82 if the slide falls back to the fall loop.")]
+        [SerializeField, Range(0f, 90f)] private float bellySlidePitch = 0f;
+        [Tooltip("Model offset while belly sliding, m (local), so the body lies on the floor " +
+                 "instead of floating at standing hip height. -0.45 puts Belly Slide Pose's " +
+                 "lowest point about 1 cm above the floor.")]
+        [SerializeField] private Vector3 bellySlideOffset = new(0f, -0.45f, 0f);
         [Tooltip("How fast poses blend in and out, 1/s (exponential).")]
         [SerializeField, Min(0.1f)] private float poseBlendRate = 14f;
         [Tooltip("Corkscrew spin speed of the model during the spin jump, °/s.")]

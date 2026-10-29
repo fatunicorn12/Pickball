@@ -165,6 +165,18 @@ public static class ChibiSandboxSetup
         // recovery cut off. Used for the double jump, where the character is
         // already in the air and only the flip itself should play.
         ("flipAir", ClipDir + "/Front Flip.fbx",             false,  5, 41),
+        // Run To Dive (Mixamo X Bot, 37 frames): 15-20 is the Sunshine-style
+        // dive -- body flat, both hands straight ahead and together, legs
+        // scissored -- held on its last frame. Past ~22 it pitches into a roll,
+        // so it is never played further. Its .meta carries the canonical X Bot
+        // reference skeleton from the clip audit; without it the knees and feet
+        // play 30-40 deg off.
+        ("dive",       ClipDir + "/Run To Dive.fbx",         false, 15, 20),
+        // Belly Slide Pose: an authored two-frame pose on the same X Bot
+        // skeleton (arms straight ahead and together, torso flat, head up, legs
+        // together, knees bent), held for the whole slide. Its .meta carries
+        // the same canonical reference skeleton as Run To Dive.
+        ("bellySlide", ClipDir + "/Belly Slide Pose.fbx",    false,  0,  1),
         // Skateboarding loops (0.95 and 0.93 m/s). Imported and ready, but not
         // yet placed in the state machine: without a board mesh he would ride
         // thin air. Wired up once the skateboard prop exists.
@@ -221,7 +233,8 @@ public static class ChibiSandboxSetup
         // Listed explicitly so the loose-model sweep does not mistake this
         // animation for a prop and file it under Art/Props.
         ("Hanging.fbx", ClipDir), ("Throw.fbx", ClipDir),
-        ("Skateboarding (1).fbx", ClipDir),
+        ("Skateboarding (1).fbx", ClipDir), ("Run To Dive.fbx", ClipDir),
+        ("Belly Slide Pose.fbx", ClipDir),
         ("Standing Sprint Forward.fbx", ClipDir), ("Sprint Turn.fbx", ClipDir),
         ("Crouched To Sprinting.fbx", ClipDir),
         (WorldFile, WorldDir), (ColliderFile, WorldDir),

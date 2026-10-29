@@ -28,8 +28,8 @@ MonoBehaviour:
   gestureSeconds: 0.87
   gestureFadeRate: 6
   proceduralPoses: 1
-  divePitch: 60
-  bellySlidePitch: 82
-  bellySlideOffset: {x: 0, y: -0.4, z: 0}
+  divePitch: 0
+  bellySlidePitch: 0
+  bellySlideOffset: {x: 0, y: -0.45, z: 0}
   poseBlendRate: 14
   spinYawSpeed: 1080
