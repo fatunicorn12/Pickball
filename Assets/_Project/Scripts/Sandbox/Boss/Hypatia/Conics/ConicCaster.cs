@@ -420,7 +420,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
             if (cfg.HyperbolaExitAtPlayer && _context.Player != null)
             {
                 Vector3 p = _context.Player.position;
-                angle = HyperbolaFlyby.ExitAngleTowards(conic, new Vector2(p.x - focus.x, p.z - focus.z), sense);
+                angle = HyperbolaFlyby.ExitAngleThrough(conic, new Vector2(p.x - focus.x, p.z - focus.z), sense);
             }
             else
             {

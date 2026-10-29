@@ -33,6 +33,33 @@ namespace Pickleball.Tests.Hypatia.Conics
         }
 
         [Test]
+        public void ExitAngleThrough_PathPassesThroughAStillPlayer()
+        {
+            var players = new[] { new Vector3(8f, 0f, 5f), new Vector3(-6f, 0f, -9f), new Vector3(1f, 0f, 10f) };
+            foreach (float e in new[] { 1.3f, 1.6f, 2f })
+            foreach (int sense in new[] { 1, -1 })
+            foreach (Vector3 player in players)
+            {
+                var conic = new ConicPath(Q, e);
+                float angle = HyperbolaFlyby.ExitAngleThrough(conic, new Vector2(player.x - Focus.x, player.z - Focus.z), sense);
+                var path = new ConicPolyline();
+                HyperbolaFlyby.FillPath(path, conic, new ConicPlane(Focus, angle, sense), Reach);
+
+                // Closest polyline segment to the player, horizontally, on the outgoing half.
+                float best = float.MaxValue;
+                var target = new Vector2(player.x, player.z);
+                for (int i = path.Count / 2; i < path.Count - 1; i++)
+                {
+                    Vector2 a = new(path[i].x, path[i].z), b = new(path[i + 1].x, path[i + 1].z);
+                    Vector2 ab = b - a;
+                    float t = Mathf.Clamp01(Vector2.Dot(target - a, ab) / Mathf.Max(1e-8f, ab.sqrMagnitude));
+                    best = Mathf.Min(best, (a + ab * t - target).magnitude);
+                }
+                Assert.That(best, Is.LessThan(0.15f), $"e={e} sense={sense} p={player}");
+            }
+        }
+
+        [Test]
         public void Path_StaysBetweenTheAsymptotes_FromReachToReach()
         {
             foreach (float e in new[] { 1.1f, 1.5f, 2.5f })

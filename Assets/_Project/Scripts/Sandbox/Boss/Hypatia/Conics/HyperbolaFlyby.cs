@@ -44,6 +44,32 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
         }
 
         /// <summary>
+        /// The plane angle that makes the shot's PATH pass through
+        /// <paramref name="target"/> on its outgoing leg (a horizontal offset from
+        /// the focus, as above). This is what the fight uses: aiming the asymptote
+        /// at the player let the curve bend past a player who stood still, so the
+        /// attack never threatened anyone who read it. The path still stays
+        /// between its asymptotes, so the telegraph remains a true bound.
+        /// </summary>
+        /// <remarks>
+        /// On the outgoing leg r(θ) = p / (1 + e cos θ), so the point at the
+        /// player's distance D has θ = acos((p/D − 1) / e), 0 ≤ θ &lt; θ∞. A player
+        /// inside periapsis cannot be on the path; periapsis is aimed at them.
+        /// </remarks>
+        public static float ExitAngleThrough(ConicPath path, Vector2 target, int sense)
+        {
+            double d = target.magnitude;
+            if (d < 1e-4 || !path.IsHyperbola) return 0f;
+
+            double e = path.Eccentricity, p = path.SemiLatusRectum;
+            double theta = d <= path.Periapsis ? 0.0
+                : System.Math.Acos(System.Math.Max(-1.0, System.Math.Min(1.0, (p / d - 1.0) / e)));
+            double alpha = theta * (sense < 0 ? -1.0 : 1.0);
+            double bearing = System.Math.Atan2(target.y, target.x);
+            return (float)(bearing - alpha);
+        }
+
+        /// <summary>
         /// Fill <paramref name="into"/> with the flyby path: from
         /// <paramref name="reach"/> metres out on the incoming leg, round periapsis,
         /// out to <paramref name="reach"/> on the outgoing leg, sampled evenly in
