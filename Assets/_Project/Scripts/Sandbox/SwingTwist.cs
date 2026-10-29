@@ -39,6 +39,11 @@ namespace Pickleball.Sandbox
     /// idle, depending on the swing. In the clips themselves it peaks at 22-50°,
     /// because the hips turn too. <see cref="LastCorrection"/> reports the turn
     /// applied each frame. See Docs/Systems/SwordAbilities.md §5.
+    ///
+    /// A step flagged Full Body When Standing plays on SwordAnimatorDriver's
+    /// AttackBody layer when he stands still. There the hips come from the clip, so
+    /// this correction falls to zero by itself and nothing is corrected twice.
+    /// Measured: under 0.5° at full layer weight.
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public class SwingTwist : MonoBehaviour

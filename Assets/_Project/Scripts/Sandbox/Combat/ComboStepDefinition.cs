@@ -47,6 +47,16 @@ namespace Pickleball.Sandbox.Combat
                  "between chained hits; longer looks floaty.")]
         [Range(0f, 0.4f)] [SerializeField] private float blendIn = 0.1f;
 
+        [Tooltip("Play this swing on the whole body (legs and hips from the clip too) " +
+                 "when it starts with the player grounded and standing still. For " +
+                 "swings authored as a whole-body move, such as a lunge, whose pose the " +
+                 "upper body alone cannot carry over standing legs: masked, the " +
+                 "downstroke twisted the waist 126° and bent it 41° sideways. Moving, " +
+                 "or once he starts moving mid-swing, it plays masked as usual. Needs " +
+                 "Tools ▸ Pickleball ▸ Setup Full-Body Swings (also run by Setup Sword " +
+                 "Abilities) after changing.")]
+        [SerializeField] private bool fullBodyWhenStanding;
+
         [Header("Timing")]
         [SerializeField] private SwingWindows windows = SwingWindows.Default;
 
@@ -70,6 +80,10 @@ namespace Pickleball.Sandbox.Combat
         public AnimationClip Clip => clip;
         public float PlaybackSpeed => playbackSpeed;
         public float BlendIn => blendIn;
+
+        /// <summary>True if this swing plays full-body when it starts with the player
+        /// standing still; see <see cref="Presentation.FullBodySwing"/>.</summary>
+        public bool FullBodyWhenStanding => fullBodyWhenStanding;
         public SwingWindows Windows => windows;
         public HitSettings Hit => hit;
         public float LungeSpeed => lungeSpeed;

@@ -46,7 +46,7 @@ are those where the hand itself is in the hair (see Known limitations).
 ```
 Update
         MeleeCombat sweep  reads BladeBase / BladeTip as last frame's LateUpdate left them
-Animator (base, Gesture, Attack layers; Normal update mode)
+Animator (base, AttackBody, Gesture, Attack layers; Normal update mode)
   └─ OnAnimatorIK: ChibiFootIK (feet, head look-at)
 LateUpdate, in execution order:
   -100  SwingTwist         restores the swings' hip turn (moves the arm)

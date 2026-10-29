@@ -319,7 +319,11 @@ public static class WeaponSetup
                     // it from the clip, so it has to be in the pose to be seen.
                     d.lockRootRotation = true;
                     d.keepOriginalOrientation = true;
-                    d.lockRootHeightY = false;
+                    // Hip height stays in the pose, as in the locomotion clips. The
+                    // masked layer never reads it, but a swing played full-body
+                    // (FullBodySwingSetup) would otherwise lose its crouch to root
+                    // motion and float its feet.
+                    d.lockRootHeightY = true;
                     d.lockRootPositionXZ = false;       // lunge is scripted
                     d.keepOriginalPositionY = false;
                 }

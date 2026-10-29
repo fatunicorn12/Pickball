@@ -9,6 +9,7 @@ using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using Pickleball.Sandbox;
 using Pickleball.Sandbox.Combat;
+using Pickleball.Sandbox.Combat.Presentation;
 using Pickleball.Sandbox.Weapon;
 using Pickleball.Tests.PlayMode.Harness;
 using UnityEngine;
@@ -19,28 +20,37 @@ using Object = UnityEngine.Object;
 namespace Pickleball.Tests.PlayMode.Scenarios
 {
     /// <summary>
-    /// The swing-3 contortion experiment. Standing still on open floor, it chains ground
-    /// swings 1-2-3 under four conditions:
-    ///  - <c>SwingTwist.strength</c> at 1, then 0, then 0.5;
-    ///  - strength 1 again, with Step_Slash3's lunge set to 0.
+    /// The swing-3 contortion experiment, before and after the full-body fix. On open
+    /// floor it chains ground swings, each run with Step_Slash3's Full Body When Standing
+    /// flag set either way:
+    ///  - <b>masked-standing</b>, flag off: 1-2-3 standing still. The old behaviour.
+    ///  - <b>fullbody-standing</b>, flag on: 1-2-3 standing still. Swing 3 should play
+    ///    full-body.
+    ///  - <b>fullbody-walking</b>, flag on: 1-2-3 while walking. Swing 3 should stay masked.
+    ///  - <b>masked-move-mid3</b> and <b>fullbody-move-mid3</b>: standing, then walking
+    ///    from swing 3 at n ≈ 0.3. With the flag on, the legs should hand back to
+    ///    locomotion. The masked run is the baseline for the feet starting to walk.
+    ///  - <b>masked-chain4</b> and <b>fullbody-chain4</b>: 1-2-3-4 standing, to look for
+    ///    pops in and out of swing 3.
     ///
     /// Every frame, after every LateUpdate, it records:
-    ///  - SwingTwist and WeaponClearance <c>LastCorrection</c>;
-    ///  - the waist: the shoulder line's yaw against the hip line's, and the neck's forward and
-    ///    sideways bend in the pelvis frame;
-    ///  - the right hand's distance to the head ("swatting flies" puts the hand at the face);
-    ///  - planar foot slide while a foot is down, and root travel.
+    ///  - SwingTwist and WeaponClearance <c>LastCorrection</c>, and the full-body layer
+    ///    weight;
+    ///  - the waist: the shoulder line's yaw against the hip line's, and the neck's
+    ///    forward and sideways bend in the pelvis frame;
+    ///  - foot travel while a foot is down, steps, and root travel;
+    ///  - per-frame jumps of the chest, hips and feet. A pop is a jump far above its
+    ///    neighbours.
     ///
-    /// It photographs swing 3 from the gameplay camera at n ≈ 0.5, and from the front-right,
-    /// with the blade trail hidden, at n ≈ 0.35, 0.5 and 0.65. At strength 1 it also
-    /// photographs swings 1 and 2 at n ≈ 0.5.
+    /// It photographs swing 3 from the gameplay camera at n ≈ 0.5, and from the
+    /// front-right, with the blade trail hidden, at n ≈ 0.35, 0.5 and 0.65.
     ///
-    /// Strength and lunge are set through reflection on the live objects and restored in a
-    /// finally block. Nothing is marked dirty or saved.
+    /// The flag is set by reflection on the live asset and restored in a finally block.
+    /// Nothing is marked dirty or saved.
     ///
     /// Outputs, next to the usual telemetry, in the scenario folder:
     ///  - <c>swing3-frames.csv</c>, one row per frame;
-    ///  - <c>swing3-table.md</c>, the per-swing summary.
+    ///  - <c>swing3-table.md</c>, the per-swing summary and the pop check.
     /// </summary>
     [Category("Playtest")]
     [Explicit("Playtest harness: run on purpose, never in the normal suite.")]
@@ -61,16 +71,20 @@ namespace Pickleball.Tests.PlayMode.Scenarios
         /// <summary>Above this, a foot counts as lifted (stepping), not sliding (m).</summary>
         const float LiftThreshold = 0.02f;
 
-        const int Bins = 20;
+        /// <summary>Stick deflection for "walking".</summary>
+        const float WalkStick = 0.5f;
+
+        enum Walk { None, Throughout, FromSwing3 }
 
         readonly struct Condition
         {
             public readonly string Label;
-            public readonly float Strength;
-            public readonly bool NoLunge;
-            public Condition(string label, float strength, bool noLunge)
+            public readonly bool FullBody;
+            public readonly Walk Walk;
+            public readonly int Clicks;
+            public Condition(string label, bool fullBody, Walk walk, int clicks)
             {
-                Label = label; Strength = strength; NoLunge = noLunge;
+                Label = label; FullBody = fullBody; Walk = walk; Clicks = clicks;
             }
         }
 
@@ -78,8 +92,8 @@ namespace Pickleball.Tests.PlayMode.Scenarios
         {
             public string cond;
             public int frame, step;
-            public float n, twistCorr, clearance, torsoYaw, hipYaw, twist, fwdBend, sideBend,
-                         handHead, lSlide, rSlide, lLift, rLift, rootMove;
+            public float n, bodyW, twistCorr, clearance, torsoYaw, hipYaw, twist, fwdBend, sideBend,
+                         lSlide, rSlide, lLift, rLift, rootMove, chestStep, hipStep, footJump, speed;
             public bool attacking;
         }
 
@@ -87,8 +101,7 @@ namespace Pickleball.Tests.PlayMode.Scenarios
         sealed class Rig
         {
             public Animator Anim;
-            public Transform Hips, Spine, Neck, Head, LUpperArm, RUpperArm, LUpperLeg, RUpperLeg,
-                             LFoot, RFoot, RHand;
+            public Transform Hips, Spine, Neck, Chest, LUpperArm, RUpperArm, LUpperLeg, RUpperLeg, LFoot, RFoot;
 
             public static Rig Find(GameObject player)
             {
@@ -99,11 +112,11 @@ namespace Pickleball.Tests.PlayMode.Scenarios
                 {
                     Anim = anim,
                     Hips = B(HumanBodyBones.Hips), Spine = B(HumanBodyBones.Spine),
-                    Neck = B(HumanBodyBones.Neck), Head = B(HumanBodyBones.Head),
+                    Neck = B(HumanBodyBones.Neck),
+                    Chest = B(HumanBodyBones.UpperChest) != null ? B(HumanBodyBones.UpperChest) : B(HumanBodyBones.Chest),
                     LUpperArm = B(HumanBodyBones.LeftUpperArm), RUpperArm = B(HumanBodyBones.RightUpperArm),
                     LUpperLeg = B(HumanBodyBones.LeftUpperLeg), RUpperLeg = B(HumanBodyBones.RightUpperLeg),
                     LFoot = B(HumanBodyBones.LeftFoot), RFoot = B(HumanBodyBones.RightFoot),
-                    RHand = B(HumanBodyBones.RightHand),
                 };
             }
 
@@ -129,7 +142,6 @@ namespace Pickleball.Tests.PlayMode.Scenarios
                 Vector3 t = (Neck.position - Spine.position).normalized;
                 r.fwdBend = Mathf.Asin(Mathf.Clamp(Vector3.Dot(t, fwd), -1f, 1f)) * Mathf.Rad2Deg;
                 r.sideBend = Mathf.Asin(Mathf.Clamp(Vector3.Dot(t, right), -1f, 1f)) * Mathf.Rad2Deg;
-                r.handHead = Vector3.Distance(RHand.position, Head.position);
             }
         }
 
@@ -149,42 +161,44 @@ namespace Pickleball.Tests.PlayMode.Scenarios
 
             var player = s.A.Player.gameObject;
             var twist = player.GetComponent<SwingTwist>();
+            var driver = player.GetComponent<SwordAnimatorDriver>();
             var clearance = player.GetComponentInChildren<WeaponClearance>(true);
             var rig = Rig.Find(player);
             if (twist == null) { s.CannotDrive("no SwingTwist on the player"); s.Complete(); return; }
+            if (driver == null) { s.CannotDrive("no SwordAnimatorDriver on the player"); s.Complete(); return; }
             if (rig == null) { s.CannotDrive("no humanoid Animator on the player"); s.Complete(); return; }
             if (clearance == null) s.CannotDrive("no WeaponClearance on the player: clearance column is 0");
+            if (rig.Anim.GetLayerIndex("AttackBody") < 0)
+                s.CannotDrive("the controller has no AttackBody layer: run Tools ▸ Pickleball ▸ Setup Full-Body Swings");
 
             const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
-            var strengthField = typeof(SwingTwist).GetField("strength", Private);
-            var lungeField = typeof(ComboStepDefinition).GetField("lungeSpeed", Private);
+            var flagField = typeof(ComboStepDefinition).GetField("fullBodyWhenStanding", Private);
             ComboStepDefinition slash3 = null;
 #if UNITY_EDITOR
             slash3 = UnityEditor.AssetDatabase.LoadAssetAtPath<ComboStepDefinition>(Slash3Path);
 #endif
-            if (strengthField == null) { s.CannotDrive("SwingTwist.strength not found"); s.Complete(); return; }
-            if (slash3 == null || lungeField == null) s.CannotDrive("Step_Slash3 lunge cannot be zeroed: lunge-0 condition skipped");
-
-            float strengthWas = (float)strengthField.GetValue(twist);
-            float lungeWas = slash3 != null && lungeField != null ? (float)lungeField.GetValue(slash3) : 0f;
-            s.Note($"SET-UP: SwingTwist.strength was {strengthWas:0.##}; Step_Slash3 lungeSpeed was {lungeWas:0.##} m/s. " +
-                   "Both are changed in memory through reflection for this run and restored at the end.");
+            if (slash3 == null || flagField == null) { s.CannotDrive("Step_Slash3 or its full-body flag not found"); s.Complete(); return; }
+            bool flagWas = (bool)flagField.GetValue(slash3);
+            s.Note($"SET-UP: Step_Slash3.fullBodyWhenStanding was {flagWas}; set per condition in memory and restored at the end.");
 
             var conditions = new List<Condition>
             {
-                new("strength-1", 1f, false),
-                new("strength-0", 0f, false),
-                new("strength-0.5", 0.5f, false),
+                new("masked-standing", false, Walk.None, 3),
+                new("fullbody-standing", true, Walk.None, 3),
+                new("fullbody-walking", true, Walk.Throughout, 3),
+                new("masked-move-mid3", false, Walk.FromSwing3, 3),
+                new("fullbody-move-mid3", true, Walk.FromSwing3, 3),
+                new("masked-chain4", false, Walk.None, 4),
+                new("fullbody-chain4", true, Walk.None, 4),
             };
-            if (slash3 != null && lungeField != null) conditions.Add(new("strength-1-lunge0", 1f, true));
 
-            var rows = new List<Row>(4096);
+            var rows = new List<Row>(8192);
             string dir = PlaytestOutput.ScenarioDir(Scenario);
-            bool alive = true, sampling = false;
+            bool alive = true, sampling = false, primed = false;
             string current = "";
             Vector3 lastL = default, lastR = default, lastRoot = default;
+            Quaternion lastChest = default, lastHips = default;
             float idleLY = 0f, idleRY = 0f;
-            bool primed = false;
 
             // Samples after every LateUpdate (SwingTwist -100, WeaponClearance -50, cloth,
             // trail), so the numbers are the pose that renders.
@@ -195,9 +209,10 @@ namespace Pickleball.Tests.PlayMode.Scenarios
                     await UniTask.Yield(PlayerLoopTiming.PostLateUpdate);
                     if (!alive || !sampling) { primed = false; continue; }
                     Vector3 l = rig.LFoot.position, r = rig.RFoot.position, root = player.transform.position;
+                    Quaternion chest = rig.Chest.rotation, hips = rig.Hips.rotation;
                     if (!primed)
                     {
-                        lastL = l; lastR = r; lastRoot = root;
+                        lastL = l; lastR = r; lastRoot = root; lastChest = chest; lastHips = hips;
                         primed = true;
                     }
                     var cur = s.A.Melee.Current;
@@ -208,20 +223,26 @@ namespace Pickleball.Tests.PlayMode.Scenarios
                         step = cur.IsValid ? cur.Index : -1,
                         n = s.A.Melee.SwingProgress,
                         attacking = s.A.Melee.IsAttacking,
+                        bodyW = driver.FullBodyWeight,
                         twistCorr = twist.LastCorrection,
                         clearance = clearance != null ? clearance.LastCorrection : 0f,
                         lLift = l.y - root.y - idleLY,
                         rLift = r.y - root.y - idleRY,
                         rootMove = Planar(root - lastRoot),
+                        // Body-relative jumps: the root's own travel is not a pop.
+                        chestStep = Quaternion.Angle(lastChest, chest),
+                        hipStep = Quaternion.Angle(lastHips, hips),
+                        footJump = Mathf.Max(((l - root) - (lastL - lastRoot)).magnitude,
+                                             ((r - root) - (lastR - lastRoot)).magnitude),
+                        speed = s.A.Motor != null ? s.A.Motor.PlanarSpeed : 0f,
                     };
-                    // A foot that moves while it is down is sliding; one that is lifted is stepping.
-                    // A planted foot should not move in the world at all, so its world travel is
-                    // the slide (the root's lunge is reported separately).
+                    // A foot that moves while it is down is sliding; one that is lifted is
+                    // stepping. A planted foot should not move in the world at all.
                     row.lSlide = row.lLift < LiftThreshold ? Planar(l - lastL) : 0f;
                     row.rSlide = row.rLift < LiftThreshold ? Planar(r - lastR) : 0f;
                     rig.Measure(row);
                     rows.Add(row);
-                    lastL = l; lastR = r; lastRoot = root;
+                    lastL = l; lastR = r; lastRoot = root; lastChest = chest; lastHips = hips;
                 }
             }
             Sampler().Forget();
@@ -230,8 +251,7 @@ namespace Pickleball.Tests.PlayMode.Scenarios
             {
                 foreach (var c in conditions)
                 {
-                    strengthField.SetValue(twist, c.Strength);
-                    if (slash3 != null && lungeField != null) lungeField.SetValue(slash3, c.NoLunge ? 0f : lungeWas);
+                    flagField.SetValue(slash3, c.FullBody);
 
                     await s.Teleport(Stand, Facing);
                     await s.Seconds(0.5f);
@@ -243,21 +263,37 @@ namespace Pickleball.Tests.PlayMode.Scenarios
 
                     current = c.Label;
                     sampling = true;
-                    s.Log($"{c.Label}: idle 10 frames, then 3 clicks 0.30 s apart");
-                    await s.Frames(10);
-
-                    var clicks = Click(s, 3, 0.30f);
-                    // (swing index, n to wait for, also take the gameplay-camera shot). Swing 3 gets a
-                    // three-frame filmstrip from the side; the gameplay shot is at n ≈ 0.5.
-                    var wanted = new List<(int step, float n, bool main)>
+                    s.Log($"{c.Label}: {c.Clicks} clicks 0.30 s apart, walk {c.Walk}");
+                    Vector2 stick = WalkStick * s.StickToward(Facing - Stand);
+                    if (c.Walk == Walk.Throughout)
                     {
-                        (2, 0.35f, false), (2, 0.5f, true), (2, 0.65f, false),
-                    };
-                    if (c.Label == "strength-1") { wanted.Insert(0, (1, 0.5f, true)); wanted.Insert(0, (0, 0.5f, true)); }
-                    for (int f = 0; f < 240 && wanted.Count > 0; f++)
+                        s.In.SetLeftStick(stick);
+                        await s.Seconds(0.4f);
+                    }
+                    else await s.Frames(10);
+
+                    var clicks = Click(s, c.Clicks, 0.30f);
+                    // (swing index, n to wait for, also take the gameplay-camera shot).
+                    bool shots = c.Clicks == 3;
+                    var wanted = new List<(int step, float n, bool main)>();
+                    if (shots) wanted.AddRange(new[] { (2, 0.35f, false), (2, 0.5f, true), (2, 0.65f, false) });
+                    bool walking = c.Walk == Walk.Throughout;
+                    for (int f = 0; f < 300; f++)
                     {
                         await UniTask.Yield();
                         var cur = s.A.Melee.Current;
+                        if (c.Walk == Walk.FromSwing3 && !walking && cur.IsValid && cur.Index == 2
+                            && s.A.Melee.SwingProgress >= 0.3f)
+                        {
+                            s.In.SetLeftStick(stick);
+                            walking = true;
+                            s.Log($"{c.Label}: started walking at swing 3 n {s.A.Melee.SwingProgress:0.00}");
+                        }
+                        if (wanted.Count == 0)
+                        {
+                            if (!s.A.Melee.IsAttacking && f > 30) break;
+                            continue;
+                        }
                         if (!cur.IsValid) continue;
                         var next = wanted[0];
                         if (cur.Index > next.step)
@@ -277,9 +313,11 @@ namespace Pickleball.Tests.PlayMode.Scenarios
                     foreach (var w in wanted)
                         s.CannotDrive($"{c.Label}: never photographed swing {w.step + 1} at n >= {w.n:0.00}");
 
-                    // Let the chain finish and the Attack layer fade out.
+                    // Let the chain finish and both swing layers fade out.
                     for (int f = 0; f < 240 && s.A.Melee.IsAttacking; f++) await UniTask.Yield();
                     await s.Seconds(0.6f);
+                    s.In.SetLeftStick(Vector2.zero);
+                    await s.Seconds(0.3f);
                     sampling = false;
                     await s.Frames(2);
                 }
@@ -287,9 +325,9 @@ namespace Pickleball.Tests.PlayMode.Scenarios
             finally
             {
                 alive = false;
-                strengthField.SetValue(twist, strengthWas);
-                if (slash3 != null && lungeField != null) lungeField.SetValue(slash3, lungeWas);
-                s.Note($"RESTORED: SwingTwist.strength {strengthWas:0.##}, Step_Slash3 lungeSpeed {lungeWas:0.##}.");
+                s.In.SetLeftStick(Vector2.zero);
+                flagField.SetValue(slash3, flagWas);
+                s.Note($"RESTORED: Step_Slash3.fullBodyWhenStanding {flagWas}.");
             }
 
             WriteFrames(rows, Path.Combine(dir, "swing3-frames.csv"));
@@ -369,38 +407,51 @@ namespace Pickleball.Tests.PlayMode.Scenarios
         {
             var ci = CultureInfo.InvariantCulture;
             var sb = new StringBuilder();
-            sb.AppendLine("cond,frame,step,n,attacking,twistCorr,clearance,torsoYaw,hipYaw,twist,fwdBend,sideBend,handHead,lSlide,rSlide,lLift,rLift,rootMove");
+            sb.AppendLine("cond,frame,step,n,attacking,bodyW,speed,twistCorr,clearance,torsoYaw,hipYaw,twist,fwdBend,sideBend,lSlide,rSlide,lLift,rLift,rootMove,chestStep,hipStep,footJump");
             foreach (var r in rows)
                 sb.AppendLine(string.Join(",", r.cond, r.frame.ToString(ci), r.step.ToString(ci),
-                    r.n.ToString("0.000", ci), r.attacking ? "1" : "0",
+                    r.n.ToString("0.000", ci), r.attacking ? "1" : "0", r.bodyW.ToString("0.000", ci),
+                    r.speed.ToString("0.00", ci),
                     r.twistCorr.ToString("0.0", ci), r.clearance.ToString("0.0", ci),
                     r.torsoYaw.ToString("0.0", ci), r.hipYaw.ToString("0.0", ci), r.twist.ToString("0.0", ci),
-                    r.fwdBend.ToString("0.0", ci), r.sideBend.ToString("0.0", ci), r.handHead.ToString("0.000", ci),
+                    r.fwdBend.ToString("0.0", ci), r.sideBend.ToString("0.0", ci),
                     r.lSlide.ToString("0.0000", ci), r.rSlide.ToString("0.0000", ci),
-                    r.lLift.ToString("0.000", ci), r.rLift.ToString("0.000", ci), r.rootMove.ToString("0.0000", ci)));
+                    r.lLift.ToString("0.000", ci), r.rLift.ToString("0.000", ci), r.rootMove.ToString("0.0000", ci),
+                    r.chestStep.ToString("0.0", ci), r.hipStep.ToString("0.0", ci), r.footJump.ToString("0.0000", ci)));
             File.WriteAllText(path, sb.ToString());
         }
 
         sealed class Stat
         {
             public int frames, stepping, wrenched;
-            public float maxCorr, maxClear, maxTwist, maxTwistFromIdle, maxSide, maxFwd, minHandHead = float.MaxValue,
-                         slide, maxSlideFrame, root;
-            public readonly Vector2[] yawBins = new Vector2[Bins];
+            public float maxCorr, maxTwist, maxTwistFromIdle, maxSide, maxFwd, slide, root, maxBody;
         }
 
-        /// <summary>Per condition, per swing: the peaks and totals, plus how far the chest's facing
-        /// strays from the strength-1 run at the same point of the swing (mean |Δ yaw| over 20 bins of n).</summary>
+        sealed class Pops
+        {
+            public float chest, hips, foot;
+            public string chestAt = "", hipsAt = "", footAt = "";
+        }
+
+        /// <summary>Per condition, per swing: peaks and totals. Then, per condition over the
+        /// whole run (swings and fade-out), the largest per-frame jump of chest, hips and feet.</summary>
         static string Summarise(List<Row> rows, List<Condition> conditions)
         {
             var stats = new Dictionary<(string, int), Stat>();
+            var pops = new Dictionary<string, Pops>();
             var idleTwist = new Dictionary<string, float>();
             foreach (var r in rows)
                 if (!r.attacking && !idleTwist.ContainsKey(r.cond)) idleTwist[r.cond] = r.twist;
 
             foreach (var r in rows)
             {
-                if (!r.attacking || r.step < 0 || r.step > 2) continue;
+                if (!pops.TryGetValue(r.cond, out var p)) pops[r.cond] = p = new Pops();
+                string at = r.attacking ? $"swing {r.step + 1} n {r.n:0.00}" : "between swings";
+                if (r.chestStep > p.chest) { p.chest = r.chestStep; p.chestAt = at; }
+                if (r.hipStep > p.hips) { p.hips = r.hipStep; p.hipsAt = at; }
+                if (r.footJump > p.foot) { p.foot = r.footJump; p.footAt = at; }
+
+                if (!r.attacking || r.step < 0) continue;
                 var key = (r.cond, r.step);
                 if (!stats.TryGetValue(key, out var st)) stats[key] = st = new Stat();
                 st.frames++;
@@ -408,59 +459,49 @@ namespace Pickleball.Tests.PlayMode.Scenarios
                 if (Mathf.Abs(r.twist) > 100f && Mathf.Abs(r.sideBend) > 30f) st.wrenched++;
                 float idle = idleTwist.TryGetValue(r.cond, out var it) ? it : 0f;
                 st.maxCorr = Mathf.Max(st.maxCorr, r.twistCorr);
-                st.maxClear = Mathf.Max(st.maxClear, r.clearance);
                 st.maxTwist = Mathf.Max(st.maxTwist, Mathf.Abs(r.twist));
                 st.maxTwistFromIdle = Mathf.Max(st.maxTwistFromIdle, Mathf.Abs(Mathf.DeltaAngle(idle, r.twist)));
                 st.maxSide = Mathf.Max(st.maxSide, Mathf.Abs(r.sideBend));
                 st.maxFwd = Mathf.Max(st.maxFwd, Mathf.Abs(r.fwdBend));
-                st.minHandHead = Mathf.Min(st.minHandHead, r.handHead);
-                float slide = r.lSlide + r.rSlide;
-                st.slide += slide;
-                st.maxSlideFrame = Mathf.Max(st.maxSlideFrame, Mathf.Max(r.lSlide, r.rSlide));
+                st.slide += r.lSlide + r.rSlide;
                 st.root += r.rootMove;
-                int bin = Mathf.Clamp((int)(r.n * Bins), 0, Bins - 1);
-                float a = r.torsoYaw * Mathf.Deg2Rad;
-                st.yawBins[bin] += new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                st.maxBody = Mathf.Max(st.maxBody, r.bodyW);
             }
 
             var ci = CultureInfo.InvariantCulture;
             var sb = new StringBuilder();
-            sb.AppendLine("# Swing 3 contortion: standing 1-2-3 chain");
+            sb.AppendLine("# Swing 3: masked vs full body when standing");
             sb.AppendLine();
-            sb.AppendLine("Peaks over each swing (attacking frames only; swings 1 and 2 are cut short by the chain). " +
-                          "Twist = shoulder-line yaw minus hip-line yaw; Δidle = largest change from the idle stance's " +
-                          "twist. Bends are the neck-over-spine lean in the pelvis frame. Wrenched = frames with " +
-                          "|twist| > 100° AND |side bend| > 30° at once. Hand-head is the right hand's closest approach " +
-                          "to the head bone. Foot travel = world travel of a foot while it is within 2 cm of its stance " +
-                          "height (both feet, summed): mostly the start and end of re-plant steps. Stepping = frames with " +
-                          "a foot lifted > 1 cm. Chest Δ = mean |chest yaw − strength-1's| at the same n.");
+            sb.AppendLine("Per swing, attacking frames only (swings before the last are cut short by the chain). " +
+                          "Body = peak weight of the full-body AttackBody layer. Twist = shoulder-line yaw minus " +
+                          "hip-line yaw; Δidle = largest change from the idle stance's twist. Bends are the " +
+                          "neck-over-spine lean in the pelvis frame. Wrenched = frames with |twist| > 100° AND " +
+                          "|side bend| > 30°. Foot travel down = world travel of a foot within 2 cm of its stance " +
+                          "height (both feet). Stepping = frames with a foot lifted > 1 cm.");
             sb.AppendLine();
-            sb.AppendLine("| Condition | Swing | SwingTwist max ° | Twist max ° (Δidle) | Side bend ° | Fwd bend ° | Wrenched frames | Hand-head min m | Clearance max ° | Foot travel down cm (max/frame) | Stepping frames | Root travel cm | Chest Δ vs s=1 ° |");
-            sb.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+            sb.AppendLine("| Condition | Swing | Body max | SwingTwist max ° | Twist max ° (Δidle) | Side bend ° | Fwd bend ° | Wrenched frames | Foot travel down cm | Stepping frames | Root travel cm |");
+            sb.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|");
             foreach (var c in conditions)
-                for (int step = 0; step < 3; step++)
+                for (int step = 0; step < c.Clicks; step++)
                 {
-                    if (!stats.TryGetValue((c.Label, step), out var st)) { sb.AppendLine($"| {c.Label} | {step + 1} | (not reached) |||||||||||"); continue; }
-                    string chest = "–";
-                    if (c.Label != "strength-1" && stats.TryGetValue(("strength-1", step), out var baseSt))
-                    {
-                        float sum = 0f; int n = 0;
-                        for (int b = 0; b < Bins; b++)
-                        {
-                            if (st.yawBins[b].sqrMagnitude < 1e-6f || baseSt.yawBins[b].sqrMagnitude < 1e-6f) continue;
-                            float y1 = Mathf.Atan2(st.yawBins[b].y, st.yawBins[b].x) * Mathf.Rad2Deg;
-                            float y0 = Mathf.Atan2(baseSt.yawBins[b].y, baseSt.yawBins[b].x) * Mathf.Rad2Deg;
-                            sum += Mathf.Abs(Mathf.DeltaAngle(y0, y1));
-                            n++;
-                        }
-                        if (n > 0) chest = (sum / n).ToString("0", ci);
-                    }
+                    if (!stats.TryGetValue((c.Label, step), out var st)) { sb.AppendLine($"| {c.Label} | {step + 1} | (not reached) ||||||||"); continue; }
                     sb.AppendLine(string.Format(ci,
-                        "| {0} | {1} | {2:0} | {3:0} ({4:0}) | {5:0} | {6:0} | {7} / {8} | {9:0.00} | {10:0} | {11:0.0} ({12:0.0}) | {13} | {14:0.0} | {15} |",
-                        c.Label, step + 1, st.maxCorr, st.maxTwist, st.maxTwistFromIdle, st.maxSide, st.maxFwd,
-                        st.wrenched, st.frames, st.minHandHead, st.maxClear, st.slide * 100f, st.maxSlideFrame * 100f,
-                        st.stepping, st.root * 100f, chest));
+                        "| {0} | {1} | {2:0.00} | {3:0} | {4:0} ({5:0}) | {6:0} | {7:0} | {8} / {9} | {10:0.0} | {11} | {12:0.0} |",
+                        c.Label, step + 1, st.maxBody, st.maxCorr, st.maxTwist, st.maxTwistFromIdle, st.maxSide,
+                        st.maxFwd, st.wrenched, st.frames, st.slide * 100f, st.stepping, st.root * 100f));
                 }
+
+            sb.AppendLine();
+            sb.AppendLine("Pop check: the largest single-frame jump over the whole run, swings and fade-out " +
+                          "included. Chest and hips are in degrees per frame; feet are relative to the root, in " +
+                          "cm per frame, so the lunge itself is not counted.");
+            sb.AppendLine();
+            sb.AppendLine("| Condition | Chest °/frame (where) | Hips °/frame (where) | Foot cm/frame (where) |");
+            sb.AppendLine("|---|---|---|---|");
+            foreach (var c in conditions)
+                if (pops.TryGetValue(c.Label, out var p))
+                    sb.AppendLine(string.Format(ci, "| {0} | {1:0.0} ({2}) | {3:0.0} ({4}) | {5:0.0} ({6}) |",
+                        c.Label, p.chest, p.chestAt, p.hips, p.hipsAt, p.foot * 100f, p.footAt));
             return sb.ToString();
         }
     }

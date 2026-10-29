@@ -18,6 +18,7 @@ MonoBehaviour:
   playbackSpeed: 2.4
   fallbackDuration: 0.6
   blendIn: 0.1
+  fullBodyWhenStanding: 1
   windows:
     activeStart: 0.34
     activeEnd: 0.62

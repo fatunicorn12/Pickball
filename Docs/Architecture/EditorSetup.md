@@ -23,7 +23,7 @@ All menus are under **Tools ▸ Pickleball**. The verb tells you what a menu tou
 | Verb | Meaning | Examples |
 |---|---|---|
 | **Setup** | Wires components into the **open** scene. Usually marks it dirty and never saves. | Setup Weapon, Setup Sword Abilities, Setup Lock-On, Setup Newton Fight, Spacetime ▸ Add To Sandbox |
-| **Rebuild** | Rewrites an asset in place and keeps its GUID. | Rebuild Chibi Animator, Rebuild Newton Animator |
+| **Rebuild** | Rewrites an asset in place and keeps its GUID. | Rebuild Chibi Animator, Rebuild Newton Animator, Setup Full-Body Swings (it only touches `ChibiLocomotion.controller`'s AttackBody layer and the flagged clips' import, never a scene or prefab) |
 | **Build / Create** | Makes a new scene and **saves** it. | Setup Chibi Sandbox (despite its name), Build Training Stage, Spacetime ▸ Create Spacetime Lab Scene, Create Assets |
 | **Bake / Clean / Organize** | One-off asset processing. | Bake Swing Twist, Clean World, Organize Project (moves and **deletes** assets) |
 
@@ -54,7 +54,9 @@ scripts:
 Setup Chibi Sandbox already runs the player-level setups as part of its build:
 - `MovementSetup.WirePlayer` and `EnsureConfigs`
 - `WeaponSetup.PrepareAssets` and `AttachToPlayer`, which in turn call `SwingTwistSetup.Bake`,
-  `WeaponClearanceSetup.Attach` and `SwordAbilitySetup.AttachToPlayer`
+  `WeaponClearanceSetup.Attach` and `SwordAbilitySetup.AttachToPlayer`. The last one's
+  `WireAttackStatesFromAssets` also runs `FullBodySwingSetup.Wire`, so every Attack-layer rebuild
+  (Setup Weapon, Setup Sword Abilities, Rebuild Chibi Animator) keeps the AttackBody layer.
 - `ClothSetup.Apply`
 
 Each of those menus can also be run on its own against the open scene.
