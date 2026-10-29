@@ -12,23 +12,234 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8a93615f41f44b6aa542a9a0a03fefea, type: 3}
   m_Name: Birdy_Intro
   m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Dialogue.DialogueDefinition
+  id: birdy.intro
   speakerName: Birdy
-  lines:
-  - text: Whirr-whirr! A real Guardian of Mathematics! I saw your compass-blade glinting
+  startNodeId: start
+  nodes:
+  - id: start
+    kind: 2
+    text: 
+    emote: 0
+    next: back.promised
+    options: []
+    conditions:
+    - kind: 0
+      key: birdy.promised_help
+      value:
+        type: 0
+        boolValue: 1
+        intValue: 0
+        stringValue: 
+      dialogueId: 
+      nodeId: 
+      choiceId: 
+    elseNext: start.met
+  - id: start.met
+    kind: 2
+    text: 
+    emote: 0
+    next: back.again
+    options: []
+    conditions:
+    - kind: 6
+      key: 
+      value:
+        type: 0
+        boolValue: 0
+        intValue: 0
+        stringValue: 
+      dialogueId: 
+      nodeId: intro.ask
+      choiceId: 
+    elseNext: intro.1
+  - id: intro.1
+    kind: 0
+    text: Whirr-whirr! A real Guardian of Mathematics! I saw your compass-blade glinting
       from the rooftops!
     emote: 1
-  - text: 'I''m Birdy. My rotor runs on pure geometry: one perfect circle, spinning
+    next: intro.2
+    options: []
+    conditions: []
+    elseNext: 
+  - id: intro.2
+    kind: 0
+    text: 'I''m Birdy. My rotor runs on pure geometry: one perfect circle, spinning
       very, very fast.'
     emote: 0
-  - text: You'll be wanting Sir Isaac. He paces the courtyard all day, muttering
-      about falling bodies...
+    next: intro.3
+    options: []
+    conditions: []
+    elseNext: 
+  - id: intro.3
+    kind: 0
+    text: Say... could a Guardian spare a moment for a small bird with a big problem?
     emote: 2
-  - text: His gravity wells will drag you in. But his weak spot is the inverse square.
+    next: intro.ask
+    options: []
+    conditions: []
+    elseNext: 
+  - id: intro.ask
+    kind: 1
+    text: 
+    emote: 0
+    next: 
+    options:
+    - id: help
+      text: Of course. What's wrong?
+      next: help.1
+      conditions: []
+      whenUnmet: 0
+      effects:
+      - kind: 0
+        key: birdy.promised_help
+        value:
+          type: 0
+          boolValue: 1
+          intValue: 0
+          stringValue: 
+    - id: newton
+      text: Do you know anything about Newton?
+      next: newton.1
+      conditions:
+      - kind: 7
+        key: 
+        value:
+          type: 0
+          boolValue: 0
+          intValue: 0
+          stringValue: 
+        dialogueId: 
+        nodeId: intro.ask
+        choiceId: newton
+      whenUnmet: 0
+      effects: []
+    - id: later
+      text: Sorry, I'm in a hurry.
+      next: later.1
+      conditions: []
+      whenUnmet: 0
+      effects: []
+    conditions: []
+    elseNext: 
+  - id: help.1
+    kind: 0
+    text: Whirr! Thank you! Newton's apples knocked my lucky protractor clean off
+      the roof!
+    emote: 1
+    next: help.2
+    options: []
+    conditions: []
+    elseNext: 
+  - id: help.2
+    kind: 0
+    text: It landed somewhere in the courtyard. Find it, and I'll show you a shortcut
+      up the tower!
+    emote: 2
+    next: 
+    options: []
+    conditions: []
+    elseNext: 
+  - id: newton.1
+    kind: 0
+    text: Sir Isaac? He paces the courtyard all day, muttering about falling bodies...
+    emote: 2
+    next: newton.2
+    options: []
+    conditions: []
+    elseNext: 
+  - id: newton.2
+    kind: 0
+    text: His gravity wells will drag you in. But his weak spot is the inverse square.
       Distance is everything.
     emote: 2
-  - text: Halve the distance and your blows land four times as hard! So get close.
+    next: newton.3
+    options: []
+    conditions: []
+    elseNext: 
+  - id: newton.3
+    kind: 0
+    text: Halve the distance and your blows land four times as hard! So get close.
       Brave-close!
     emote: 1
-  - text: And when the apples start raining, watch the ground for their marks. I'll
-      cheer from a safe altitude!
+    next: newton.4
+    options: []
+    conditions: []
+    elseNext: 
+  - id: newton.4
+    kind: 0
+    text: And when the apples start raining, watch the ground for their marks. Now,
+      about that favour...
     emote: 0
+    next: intro.ask
+    options: []
+    conditions: []
+    elseNext: 
+  - id: later.1
+    kind: 0
+    text: No worries! I'll be right here. Standing, not hovering. Hovering is tiring.
+    emote: 0
+    next: 
+    options: []
+    conditions: []
+    elseNext: 
+  - id: back.promised
+    kind: 0
+    text: You came back! Still up for helping?
+    emote: 1
+    next: back.ask
+    options: []
+    conditions: []
+    elseNext: 
+  - id: back.ask
+    kind: 1
+    text: 
+    emote: 0
+    next: 
+    options:
+    - id: yes
+      text: Still looking! Where did it fall?
+      next: back.where
+      conditions: []
+      whenUnmet: 0
+      effects: []
+    - id: no
+      text: Actually, I can't right now.
+      next: back.no
+      conditions: []
+      whenUnmet: 0
+      effects:
+      - kind: 0
+        key: birdy.promised_help
+        value:
+          type: 0
+          boolValue: 0
+          intValue: 0
+          stringValue: 
+    conditions: []
+    elseNext: 
+  - id: back.where
+    kind: 0
+    text: 'Near the courtyard well, I think. You can''t miss it: it''s a perfect
+      half-circle!'
+    emote: 2
+    next: 
+    options: []
+    conditions: []
+    elseNext: 
+  - id: back.no
+    kind: 0
+    text: Oh. Well... the offer stands. My protractor isn't going anywhere. Probably.
+    emote: 2
+    next: 
+    options: []
+    conditions: []
+    elseNext: 
+  - id: back.again
+    kind: 0
+    text: Oh! The Guardian again! Changed your mind about that favour?
+    emote: 0
+    next: intro.ask
+    options: []
+    conditions: []
+    elseNext: 
+  lines: []

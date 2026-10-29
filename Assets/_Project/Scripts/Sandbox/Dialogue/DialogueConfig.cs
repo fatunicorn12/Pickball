@@ -208,6 +208,57 @@ namespace Pickleball.Sandbox.Dialogue
         [Tooltip("How far the ▼ bobs, in canvas units (1920-wide reference).")]
         [SerializeField, Min(0f)] private float continueBob = 5f;
 
+        // ------------------------------------------------------------- choices
+        [Header("Choices — the option list")]
+        [Tooltip("How long the answers must have been up before E / RB can pick one, s. They " +
+                 "show dimmed until then. Number keys and clicks pick at once.")]
+        [SerializeField, Min(0f)] private float choiceLockoutSeconds = 0.5f;
+        [Tooltip("How long E / RB must have been left alone before a press can pick an answer, " +
+                 "s. Every press in the talk restarts it, skipping text included, so a steady tap " +
+                 "through the text never picks unread: taps closer together than this never pick. " +
+                 "1.1 stops tapping up to about 1 a second; a player who reads the answers before " +
+                 "pressing never waits for it. Lower is snappier, and lets slower tapping through.")]
+        [SerializeField, Min(0f)] private float choiceQuietSeconds = 1.1f;
+        [Tooltip("Left-stick tilt that moves the option cursor, 0–1. Lower reacts to a lighter " +
+                 "push; too low and a resting thumb drifts it.")]
+        [SerializeField, Range(0.2f, 0.95f)] private float choiceStickThreshold = 0.5f;
+        [Tooltip("Holding up or down (stick, d-pad, arrows) repeats after this long, s.")]
+        [SerializeField, Min(0.05f)] private float choiceRepeatDelaySeconds = 0.4f;
+        [Tooltip("Time between repeats while held, s. Smaller scrolls faster; 0 never repeats.")]
+        [SerializeField, Min(0f)] private float choiceRepeatIntervalSeconds = 0.15f;
+        [Tooltip("Seconds for the option list to fade in once the line has typed out, and up " +
+                 "to full once E / RB can pick.")]
+        [SerializeField, Min(0.01f)] private float optionFadeInSeconds = 0.12f;
+        [Tooltip("Opacity of the answers while E / RB can't pick yet (0-1). Dimmed answers say " +
+                 "'not yet'; 1 hides the difference.")]
+        [SerializeField, Range(0.1f, 1f)] private float optionNotReadyAlpha = 0.5f;
+        [Tooltip("Widest the answer column may be, canvas units (1920-wide reference). Longer " +
+                 "answers wrap to a second line. Keeps the column clear of the NPC, who stands at " +
+                 "about a third of the screen width from the column's side.")]
+        [SerializeField, Min(200f)] private float optionMaxWidth = 560f;
+        [Tooltip("How quickly the highlight follows the cursor, s (time constant). Small snaps, " +
+                 "larger glides.")]
+        [SerializeField, Min(0.001f)] private float optionHighlightSeconds = 0.05f;
+        [Tooltip("Scale of the highlighted option, 1 = no change. A little (1.03–1.06) reads as " +
+                 "lifted without crowding its neighbours.")]
+        [SerializeField, Range(1f, 1.2f)] private float optionHighlightScale = 1.03f;
+        [Tooltip("Option plate fill. Dark and translucent, like the box.")]
+        [SerializeField] private Color optionPlateColour = new(0.04f, 0.045f, 0.06f, 0.82f);
+        [Tooltip("Plate fill of the highlighted option: clearly lighter than the others, so " +
+                 "the choice reads at TV distance without the cursor.")]
+        [SerializeField] private Color optionHighlightPlateColour = new(0.27f, 0.28f, 0.33f, 0.95f);
+        [Tooltip("Option text colour.")]
+        [SerializeField] private Color optionTextColour = new(0.86f, 0.86f, 0.84f, 1f);
+        [Tooltip("Text colour of the highlighted option.")]
+        [SerializeField] private Color optionHighlightTextColour = new(1f, 1f, 1f, 1f);
+        [Tooltip("Text colour of a greyed-out option (one whose conditions don't hold).")]
+        [SerializeField] private Color optionDisabledTextColour = new(0.55f, 0.55f, 0.55f, 0.6f);
+        [Tooltip("Colour of the ► cursor beside the highlighted option: the accent colour.")]
+        [SerializeField] private Color optionCursorColour = new(1f, 0.8f, 0.36f, 1f);
+        [Tooltip("How far the ► cursor bobs sideways, in canvas units (1920-wide reference). It " +
+                 "pulses at Continue Pulse Hz.")]
+        [SerializeField, Min(0f)] private float optionCursorBob = 5f;
+
         // -------------------------------------------------------------- prompt
         [Header("Talk prompt")]
         [Tooltip("Height of the prompt above the NPC's focus point, m.")]
@@ -311,6 +362,39 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>Continue arrow bob height, canvas units.</summary>
         public float ContinueBob => continueBob;
 
+        /// <summary>Option list fade-in time, s.</summary>
+        public float OptionFadeInSeconds => optionFadeInSeconds;
+        /// <summary>Answer opacity while E / RB can't pick yet.</summary>
+        public float OptionNotReadyAlpha => optionNotReadyAlpha;
+        /// <summary>Widest the answer column may be, canvas units.</summary>
+        public float OptionMaxWidth => optionMaxWidth;
+        /// <summary>Highlight easing time constant, s.</summary>
+        public float OptionHighlightSeconds => optionHighlightSeconds;
+        /// <summary>Scale of the highlighted option.</summary>
+        public float OptionHighlightScale => optionHighlightScale;
+        /// <summary>Option plate fill.</summary>
+        public Color OptionPlateColour => optionPlateColour;
+        /// <summary>Highlighted option plate fill.</summary>
+        public Color OptionHighlightPlateColour => optionHighlightPlateColour;
+        /// <summary>Option text colour.</summary>
+        public Color OptionTextColour => optionTextColour;
+        /// <summary>Highlighted option text colour.</summary>
+        public Color OptionHighlightTextColour => optionHighlightTextColour;
+        /// <summary>Greyed-out option text colour.</summary>
+        public Color OptionDisabledTextColour => optionDisabledTextColour;
+        /// <summary>Option cursor colour.</summary>
+        public Color OptionCursorColour => optionCursorColour;
+        /// <summary>Option cursor bob, canvas units.</summary>
+        public float OptionCursorBob => optionCursorBob;
+
+        /// <summary>How the stick, d-pad and keys move the option cursor.</summary>
+        public ChoiceNavigationSettings ChoiceNavigation => new()
+        {
+            Threshold = choiceStickThreshold,
+            RepeatDelay = choiceRepeatDelaySeconds,
+            RepeatInterval = choiceRepeatIntervalSeconds,
+        };
+
         /// <summary>Prompt height above the focus point, m.</summary>
         public float PromptHeightOffset => promptHeightOffset;
         /// <summary>Sideways offset of the prompt over a lock-on targetable NPC, screen heights.</summary>
@@ -376,6 +460,8 @@ namespace Pickleball.Sandbox.Dialogue
             CommaPause = commaPauseSeconds,
             SentencePause = sentencePauseSeconds,
             AdvanceLockout = advanceLockoutSeconds,
+            ChoiceLockout = choiceLockoutSeconds,
+            ChoiceQuiet = choiceQuietSeconds,
         };
     }
 }

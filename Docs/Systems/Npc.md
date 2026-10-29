@@ -386,7 +386,9 @@ re-check `ModelYOffset` against the idle's "soles" value and the death lift agai
 "death sink".
 
 Content: edit `ScriptableObjects/Dialogue/Birdy_Intro.asset` directly. It is seeded once and
-never overwritten.
+never overwritten, with one exception: the seeder (Setup Birdy NPC, or **Seed Birdy Dialogue** on
+its own) upgrades it once, in place, to the branching intro if it is still word for word the
+original linear seed (see `Docs/Systems/Dialogue.md`, Branching and choices).
 
 ## 4. How to extend
 

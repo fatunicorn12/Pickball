@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Pickleball.Sandbox.Dialogue
@@ -30,6 +31,18 @@ namespace Pickleball.Sandbox.Dialogue
     /// <b>Talking.</b> A <see cref="DialogueRunner"/> types each line in unscaled
     /// time. Interact (E / RB, from <see cref="InteractInput"/>) shows the whole
     /// line, then moves on.
+    ///
+    /// <b>Choosing.</b> In a branching conversation the runner puts options up
+    /// as soon as the line before them has typed out (<see cref="ChoicesShown"/>).
+    /// While they are up this reads the option input itself
+    /// (<see cref="DialogueChoiceInput"/>: left stick, d-pad, arrows or W/S,
+    /// number keys 1-9), Interact picks the highlighted option, and the
+    /// dialogue view adds mouse hover and click through <see cref="HighlightChoice"/>
+    /// and <see cref="ConfirmChoice"/>. The input gate keeps its single
+    /// <see cref="InputBlock.All"/> claim; nothing else reads those buttons
+    /// during a talk. Conditions read, and picks and effects write, the store
+    /// from the wired <see cref="IChoiceStoreProvider"/>; with none, talks still
+    /// run against an empty store, effects are dropped, and one warning says so.
     ///
     /// <b>End, in this order.</b>
     /// <list type="number">
@@ -101,6 +114,10 @@ namespace Pickleball.Sandbox.Dialogue
         [Tooltip("The player's Interact button (E / RB); a press advances the text. Empty: " +
                  "nothing can advance, so a conversation never ends by itself.")]
         [SerializeField] private InteractInput interactInput;
+        [Tooltip("Where choices are recorded and facts kept: a component implementing " +
+                 "IChoiceStoreProvider (the ChoiceStoreHost Setup Dialogue adds beside this). " +
+                 "Empty: talks still run, conditions see an empty store and effects are dropped.")]
+        [SerializeField] private MonoBehaviour choiceStore;
 
         // Longest unscaled step one frame may take. A hitch (a load, the Editor
         // regaining focus) would otherwise jump a fade or a blend to its end.
@@ -117,6 +134,9 @@ namespace Pickleball.Sandbox.Dialogue
         Health _currentHealth;
         TalkFacing _facing;
         float _npcYawLastTick;
+        ChoiceNavigator _navigator;
+        bool _choiceInputPrimed;    // false until the first input frame of each set of options
+        bool _warnedNoStore;
 
         /// <summary>Current phase.</summary>
         public Phase State { get; private set; } = Phase.Idle;
@@ -149,6 +169,30 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>True while the current line is fully shown and waits for a press.</summary>
         public bool IsLineRevealed => Runner.State == DialogueRunner.Phase.Revealed;
 
+        /// <summary>True while options are up and the player hasn't picked.</summary>
+        public bool IsChoosing => State == Phase.Talking && Runner.State == DialogueRunner.Phase.Choosing;
+
+        /// <summary>The options up, top to bottom; empty unless <see cref="IsChoosing"/>.</summary>
+        public IReadOnlyList<PresentedOption> Choices => Runner.Options;
+
+        /// <summary>Index into <see cref="Choices"/> of the highlighted option, or -1.</summary>
+        public int HighlightedChoice => Runner.HighlightedOption;
+
+        /// <summary>True while options are up and Interact would pick: they have been
+        /// up long enough and Interact has been left alone long enough (see
+        /// <see cref="DialogueRunner.IsChoiceReady"/>). The view dims them until then.</summary>
+        public bool IsChoiceReady => IsChoosing && Runner.IsChoiceReady;
+
+        /// <summary>The conversation's id; empty when idle.</summary>
+        public string DialogueId => Runner.DialogueId;
+
+        /// <summary>The node showing (a line, or the choice whose options are up); empty when idle.</summary>
+        public string CurrentNodeId => Runner.CurrentNodeId;
+
+        /// <summary>The wired store, or null: none wired, or the component isn't a provider.</summary>
+        public IChoiceStore Store
+            => choiceStore != null && choiceStore is IChoiceStoreProvider provider ? provider.Store : null;
+
         /// <summary>The talk press was accepted. Input is blocked; time still runs
         /// (the settle). The camera starts to push in.</summary>
         public event Action<Talkable> ConversationStarting;
@@ -164,6 +208,17 @@ namespace Pickleball.Sandbox.Dialogue
 
         /// <summary>Line <c>index</c> is fully shown (typed out or skipped).</summary>
         public event Action<Talkable, int> LineRevealed;
+
+        /// <summary>Options are up (<see cref="Choices"/>, <see cref="HighlightedChoice"/>).
+        /// Raised right after the line before them is revealed.</summary>
+        public event Action<Talkable> ChoicesShown;
+
+        /// <summary>The option cursor moved to <c>index</c>.</summary>
+        public event Action<int> ChoiceHighlighted;
+
+        /// <summary>The player picked <c>choiceId</c> at choice node <c>nodeId</c>; it is
+        /// recorded and its effects applied. The options are gone.</summary>
+        public event Action<Talkable, string, string> ChoiceMade;
 
         /// <summary>The conversation is closing, normally or by an abort. The box
         /// hides; time is still stopped.</summary>
@@ -183,6 +238,9 @@ namespace Pickleball.Sandbox.Dialogue
                 _runner.LineStarted += OnLineStarted;
                 _runner.CharactersRevealed += OnCharactersRevealed;
                 _runner.LineRevealed += OnLineRevealed;
+                _runner.ChoicesShown += OnChoicesShown;
+                _runner.ChoiceHighlighted += OnChoiceHighlighted;
+                _runner.ChoiceMade += OnChoiceMade;
                 _runner.Finished += BeginClosing;
                 return _runner;
             }
@@ -212,24 +270,101 @@ namespace Pickleball.Sandbox.Dialogue
 
         void OnInteractPressed() => _advancePressed = true;
 
+        void OnValidate()
+        {
+            // A dragged-in GameObject lands on its first MonoBehaviour: take the
+            // provider on it instead, and refuse anything that isn't one.
+            if (choiceStore == null || choiceStore is IChoiceStoreProvider) return;
+            foreach (var candidate in choiceStore.GetComponents<MonoBehaviour>())
+            {
+                if (candidate is not IChoiceStoreProvider) continue;
+                choiceStore = candidate;
+                return;
+            }
+            Debug.LogWarning($"DialogueDirector: {choiceStore.GetType().Name} is not an IChoiceStoreProvider; " +
+                             "the Choice Store field was cleared.", this);
+            choiceStore = null;
+        }
+
         void Update()
         {
             bool pressed = _advancePressed && Time.frameCount != _startFrame;
             _advancePressed = false;
-            Tick(Mathf.Min(Time.unscaledDeltaTime, MaxStep), pressed);
+            float dt = Mathf.Min(Time.unscaledDeltaTime, MaxStep);
+            ReadChoiceInput(dt);
+            Tick(dt, pressed);
         }
+
+        /// <summary>The option list's keys, d-pad and left stick, read only while
+        /// options are up. Otherwise the navigator forgets any held direction, so
+        /// a stick still pushed from walking has to be let go and pushed again
+        /// before it moves the cursor.</summary>
+        void ReadChoiceInput(float dt)
+        {
+            if (!IsChoosing || config == null)
+            {
+                _navigator?.Reset();
+                _choiceInputPrimed = false;
+                return;
+            }
+            float axis = DialogueChoiceInput.Read(out int number);
+            var navigator = _navigator ??= new ChoiceNavigator();
+            var settings = config.ChoiceNavigation;
+            if (_choiceInputPrimed)
+            {
+                int step = navigator.Step(axis, dt, settings);
+                if (step != 0) MoveChoiceHighlight(step);
+            }
+            else
+            {
+                // The first frame of these options: a direction already held
+                // counts as held, not as a push.
+                navigator.Prime(axis, settings);
+                _choiceInputPrimed = true;
+            }
+            if (number >= 0) ConfirmChoice(number);
+        }
+
+        /// <summary>Moves the option cursor <paramref name="step"/> enabled options down
+        /// (negative: up), wrapping. Does nothing unless <see cref="IsChoosing"/>.</summary>
+        public void MoveChoiceHighlight(int step)
+        {
+            if (IsChoosing) Runner.MoveHighlight(step);
+        }
+
+        /// <summary>Puts the cursor on option <paramref name="index"/> (mouse hover).
+        /// False unless options are up and that one is enabled.</summary>
+        public bool HighlightChoice(int index) => IsChoosing && Runner.Highlight(index);
+
+        /// <summary>
+        /// Picks option <paramref name="index"/> at once (a click or a number key,
+        /// which are deliberate; Interact waits for <see cref="IsChoiceReady"/>).
+        /// False unless options are up and that one is enabled.
+        /// </summary>
+        public bool ConfirmChoice(int index) => IsChoosing && Runner.Choose(index);
+
+        /// <summary>
+        /// Whether a talk with <paramref name="talkable"/> would show anything now,
+        /// with this director's store: false when its start resolves straight to
+        /// the end (say, a branch that only talks after some quest). The
+        /// interactor offers no prompt then, and <see cref="TryStart"/> refuses.
+        /// </summary>
+        public bool WouldSaySomething(Talkable talkable)
+            => talkable != null && DialogueRunner.HasSomethingToSay(talkable.Dialogue, Store);
 
         /// <summary>
         /// Starts a conversation between <paramref name="talkable"/> and
         /// <paramref name="partner"/> (the player's root). Returns false, and
         /// changes nothing, when one is already running, the restart cooldown is
         /// active, there is no config, time is already stopped, or the Talkable
-        /// cannot talk.
+        /// cannot talk or would say nothing right now (<see cref="WouldSaySomething"/>).
         /// </summary>
         public bool TryStart(Talkable talkable, Transform partner)
         {
             if (!CanStartConversation || talkable == null || !talkable.CanTalk) return false;
             if (!(Time.timeScale > 0f)) return false;
+            // Nothing to say right now: no talk at all, rather than a frozen, empty one.
+            if (!WouldSaySomething(talkable)) return false;
 
             Current = talkable;
             Partner = partner;
@@ -285,7 +420,7 @@ namespace Pickleball.Sandbox.Dialogue
                         return;
                     State = Phase.Talking;
                     Runner.Timing = config.Typewriter;
-                    if (!Runner.Begin(Current.Dialogue)) BeginClosing();
+                    if (!Runner.Begin(Current.Dialogue, StoreFor(Current.Dialogue))) BeginClosing();
                     return;
 
                 case Phase.Talking:
@@ -433,10 +568,40 @@ namespace Pickleball.Sandbox.Dialogue
             }
         }
 
+        /// <summary>The store for a talk about to start; warns once per director
+        /// when a branching conversation runs without one.</summary>
+        IChoiceStore StoreFor(DialogueDefinition definition)
+        {
+            var store = Store;
+            if (store == null && !_warnedNoStore && definition != null && definition.HasGraph)
+            {
+                _warnedNoStore = true;
+                Debug.LogWarning("DialogueDirector: no choice store is wired, so conditions see an empty " +
+                                 "store and choice effects are dropped. Run Tools > Pickleball > Setup Dialogue " +
+                                 "to add and wire a ChoiceStoreHost.", this);
+            }
+            return store;
+        }
+
         void OnLineStarted(int index)
         {
-            if (Current != null) Current.NotifyLineStarted(index);
+            if (Current != null) Current.NotifyLineStarted(index, Runner.CurrentLine, Runner.CurrentNodeId);
             LineStarted?.Invoke(Current, index);
+        }
+
+        void OnChoicesShown()
+        {
+            _choiceInputPrimed = false;
+            if (Current != null) Current.NotifyChoicesShown(Runner.CurrentNodeId);
+            ChoicesShown?.Invoke(Current);
+        }
+
+        void OnChoiceHighlighted(int index) => ChoiceHighlighted?.Invoke(index);
+
+        void OnChoiceMade(string nodeId, string choiceId)
+        {
+            if (Current != null) Current.NotifyChoiceMade(nodeId, choiceId);
+            ChoiceMade?.Invoke(Current, nodeId, choiceId);
         }
 
         void OnCharactersRevealed(int count) => CharactersRevealed?.Invoke(count);
