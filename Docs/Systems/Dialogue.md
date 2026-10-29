@@ -2,15 +2,20 @@
 
 Breath-of-the-Wild-style NPC talk: walk up to (or lock on to) a character, press E, the world
 stops, the camera pushes in over your shoulder, and text types out in a dark box at the bottom
-of the screen.
+of the screen. Conversations can branch: the player picks an answer from a list of options, the
+pick is remembered, and later talks read it.
 
 Code: `Assets/_Project/Scripts/Sandbox/Dialogue/` (contract: `Talkable`, `DialogueDefinition`,
-`DialogueLine`, `DialogueEmote`, `ConversationEndReason`; runtime: `DialogueDirector`,
-`DialogueRunner`, `PlayerInteractor`, `DialogueCamera`, `TalkTargetSelector`, `TalkEligibility`,
-`DialogueFraming`, `DialogueOrbit`, `DialogueLookInput`, `TalkFacing`, `TimeScalePause`,
-`TalkableSet`, `DialogueConfig` and small value types), the
+`DialogueNode`, `DialogueOption`, `DialogueLine`, `DialogueEmote`, `ConversationEndReason`;
+runtime: `DialogueDirector`, `DialogueRunner`, `DialogueValidator`, `PlayerInteractor`,
+`DialogueCamera`, `TalkTargetSelector`, `TalkEligibility`, `DialogueFraming`, `DialogueOrbit`,
+`DialogueLookInput`, `DialogueChoiceInput`, `ChoiceNavigator`, `ChoiceSelection`, `TalkFacing`,
+`TimeScalePause`, `TalkableSet`, `DialogueConfig` and small value types), the choice store in
+`Dialogue/Choices/` (contract: `IChoiceStore`, `IChoiceStoreProvider`, `FactValue`, `ChoiceRecord`,
+`FactCondition`, `FactEffect`; `ChoiceStore`, `ChoiceStoreHost`, `ChoiceStoreSave`), the
 input seams `Sandbox/InteractInput.cs`, `Sandbox/PlayerInputGate.cs` and `Sandbox/InputBlock.cs`,
-and the views `UI/DialogueView.cs` and `UI/InteractPromptView.cs`. Setup:
+and the views `UI/DialogueView.cs` (with `UI/DialogueViewOptionRow.cs`) and
+`UI/InteractPromptView.cs`. Setup:
 `Editor/DialogueSetup.cs` (**Tools ▸ Pickleball ▸ Setup Dialogue**). Tests:
 `Tests/EditMode/Dialogue/`.
 
@@ -45,6 +50,24 @@ and the views `UI/DialogueView.cs` and `UI/InteractPromptView.cs`. Setup:
   20° of you. Text types at 45 characters a second with short pauses after commas and full stops. The first press shows the whole line,
   the next goes to the next line; a pulsing ▼ marks a finished line. A hurried double-tap can't
   skip a line unread (0.12 s lockout after each change).
+- **Choosing.** In a branching conversation, the moment a line has typed out (or been skipped
+  to its end) the answers appear: no extra press, as in BotW. They stand in a column of dark
+  plates on the box's top edge at its right end, first answer on top, with the line still in the
+  box below them. The highlighted answer has the accent ► beside it, lifts a little (5%) and its
+  plate brightens; an answer you can't give yet is greyed out and the cursor skips it. Move with
+  the **left** stick, the d-pad, the arrow keys or W/S (hold to repeat), or point with the mouse;
+  pick with E / RB, a click, or the number keys 1–9. The right stick still swings the camera; the
+  mouse stops turning it while the answers are up, because the cursor is set free to point with
+  (it is captured again the moment you pick). For 0.3 s after the answers appear nothing picks,
+  and every E inside that time restarts it, so mashing E through the text never picks the first
+  answer unread; a click or number key inside it only moves the cursor. A click only ever picks
+  an answer, never advances a line. In the rare mirrored shot (over the right shoulder, the NPC
+  on the right), the column moves to the box's left end, above the name tab, so it never covers
+  the NPC.
+- **Remembering.** What you picked is recorded and can set facts; a later talk can open
+  differently. Talk to Birdy, promise to help, walk off and talk again: "You came back! Still up
+  for helping?" A talk cut short while the answers are up (the NPC killed, a reload) records
+  nothing.
 - **Looking around.** Once the shot has settled, the mouse (while the cursor is captured) or the
   right stick swings the camera round the NPC, at the same speed and sensitivity as the normal
   camera, while the world stays frozen. The NPC's head stays where the shot put it on screen
@@ -68,12 +91,15 @@ and the views `UI/DialogueView.cs` and `UI/InteractPromptView.cs`. Setup:
 |---|---|---|
 | Talk (with a prompt) | E | RB |
 | Advance / skip text | E | RB |
+| Move between answers | ↑ ↓ or W S, mouse hover | left stick, d-pad ↑ ↓ |
+| Pick an answer | E, click, 1–9 | RB |
 
 E and RB are already Dash. Every pad button is taken (A jump, B crouch, X attack, Y flip, LB
 tether, RB dash, LT sprint, RT lock-on, R3 anchor, d-pad zoom / skateboard / Spacetime), so
 Talk shares the dash button: **only while a prompt is showing, and during a conversation and its
 cooldown, is the dash suppressed.** Jump and everything else are never touched by a prompt.
-Advancing never uses left click (it re-captures the cursor and queues attacks) or Space. The
+Advancing never uses left click (it re-captures the cursor and queues attacks) or Space; while
+answers are up, the cursor is free and a click picks one, nothing else. The
 E / RB Interact binding lives in one place, `InteractInput` on the player; the interactor and
 the director both listen to its `Pressed`. (`PlayerMovementInput` keeps its own Dash binding.)
 
@@ -87,6 +113,8 @@ PlayerInteractor reads TalkableSet, LockOnTargeting, ChibiLocomotion,           
 DialogueDirector claims InputBlock.All ─▶ PlayerInputGate (player) ◀─ read by PlayerMovementInput,
                                                     SwordInput, LockOnTargeting, SpacetimeView
 DialogueDirector events ─▶ DialogueCamera (Main Camera), DialogueView (HUD)
+DialogueDirector ─choiceStore (IChoiceStoreProvider)─▶ ChoiceStoreHost ("Dialogue" object) ─▶ ChoiceStore ◀─ save file
+DialogueDirector reads option keys / d-pad / left stick itself (DialogueChoiceInput); DialogueView adds mouse hover / click
 DialogueDirector ─TalkFacing (settle only)─▶ MovementMotor.FacingSource (player)
 DialogueCamera reads mouse delta + right stick itself (DialogueLookInput) ─▶ DialogueOrbit
 PlayerInteractor.TargetChanged ─▶ InteractPromptView (HUD)
@@ -96,15 +124,16 @@ PlayerInteractor.TargetChanged ─▶ InteractPromptView (HUD)
 
 | Component | Where | Raises | Listens to |
 |---|---|---|---|
-| `Talkable` (contract) | NPC root | `ConversationStarted`, `LineStarted`, `LineRevealed`, `ConversationEnded` | nothing; the director calls `Notify*` |
+| `Talkable` (contract) | NPC root | `ConversationStarted`, `LineStarted`, `LineRevealed`, `ChoicesShown`, `ChoiceMade`, `ConversationEnded` | nothing; the director calls `Notify*` |
 | `InteractInput` | player root | `Pressed` | its own E / RB action |
 | `PlayerInteractor` | player root | `TargetChanged(Talkable)` | `InteractInput.Pressed`; polls the `TalkableSet` and eligibility state each frame (no events exist for those) |
-| `DialogueDirector` | "Dialogue" object | `ConversationStarting`, `ConversationStarted`, `LineStarted`, `CharactersRevealed`, `LineRevealed`, `ConversationEnding`, `ConversationEnded` | `InteractInput.Pressed`; its runner's events |
-| `DialogueRunner` (plain C#) | inside the director | `LineStarted`, `CharactersRevealed`, `LineRevealed`, `Finished` | nothing; `Tick(dt)` and `Advance()` |
+| `DialogueDirector` | "Dialogue" object | `ConversationStarting`, `ConversationStarted`, `LineStarted`, `CharactersRevealed`, `LineRevealed`, `ChoicesShown`, `ChoiceHighlighted`, `ChoiceMade`, `ConversationEnding`, `ConversationEnded` | `InteractInput.Pressed`; its runner's events; the option keys, d-pad and left stick while answers are up (`DialogueChoiceInput`) |
+| `DialogueRunner` (plain C#) | inside the director | `LineStarted`, `CharactersRevealed`, `LineRevealed`, `ChoicesShown`, `ChoiceHighlighted`, `ChoiceMade`, `Finished` | nothing; `Tick(dt)`, `Advance()`, `MoveHighlight`, `Highlight`, `Choose` |
+| `ChoiceStoreHost` | "Dialogue" object | (its store's `ChoiceRecorded`, `FactChanged`, `Reset`) | its store, to save it |
 | `DialogueCamera` | Main Camera | — | director: Starting, Ending, Ended; reads mouse delta and the right stick through `DialogueLookInput` while the shot is held |
 | `DialogueOrbit`, `DialogueLookInput` (plain C#) | inside the camera | — | nothing; look-around math and device read |
 | `TalkFacing` (plain C#) | inside the director | — | installed as `MovementMotor.FacingSource` from the talk press to the pause |
-| `DialogueView` | HUD | — | director: Started, LineStarted, CharactersRevealed, LineRevealed, Ending, Ended |
+| `DialogueView` | HUD | — | director: Started, LineStarted, CharactersRevealed, LineRevealed, ChoicesShown, ChoiceHighlighted, ChoiceMade, Ending, Ended; the mouse while answers are up (calls `HighlightChoice` / `ConfirmChoice`) |
 | `InteractPromptView` | HUD | — | interactor: `TargetChanged` |
 | `PlayerInputGate` | player root | — | nothing; claimants call `Claim` / `Release` |
 
@@ -226,9 +255,172 @@ during the pause. No movement code changed.
 tags are free; `<br>`, `<cr>`, `<nbsp>`, `<zwsp>`, `<zwj>`, `<shy>` and `<sprite…>` count as one
 character (`<br>` pauses like a line break); a surrogate pair (most emoji) is one character.
 
+### Branching and choices
+
+**The data.** A `DialogueDefinition` has a stable conversation `id` (project-unique, e.g.
+`birdy.intro`; the choice log is keyed by it), a `startNodeId`, and a list of `DialogueNode`s
+linked by stable string ids, never list positions. A node is one of three kinds
+(`DialogueNodeKind`), in one flat class so the list reads top to bottom in the Inspector and
+serializes without `[SerializeReference]`; each kind uses only some fields:
+
+| Kind | Fields | What it does |
+|---|---|---|
+| **Line** | `text`, `emote`, `next` | The speaker says it; a press goes to `next`. |
+| **Choice** | `options`; optional prompt in `text` / `emote`; `next` = fallback | The options appear once the line before (or the node's own prompt) has typed out. With no option pickable it goes to the fallback. |
+| **Branch** | `conditions`, `next`, `elseNext` | Shows nothing: `next` if every condition holds, else `elseNext`. How a later talk checks a fact. |
+
+An empty link ends the conversation. A `DialogueOption` has an `id` (unique in its node), `text`,
+`next`, `conditions` (`FactCondition[]`) with `whenUnmet` = **Hide** (left out of the list) or
+**Disable** (greyed, skipped, can't be picked), and `effects` (`FactEffect[]`). Conditions can test
+a fact (`FactEquals`, `AtLeast`, `Exists`, …) or the log (`Chose` / `NotChose` an option at a node;
+an empty conversation id means this one).
+
+**Migration: compatibility, not conversion.** A definition with no nodes plays its old `lines`
+array exactly as before: the runner reads it as an implicit chain of line nodes `line.0 → line.1 →
+… → end`, with the same indices, texts, emotes and events, so nothing had to be migrated for the
+existing content to keep working. An asset changes form only when someone gives it nodes: by
+hand, through the asset's ⋮ ▸ **Convert Lines To Nodes** (the same `line.N` ids, undoable), or
+through its seeding menu. Once it has nodes its lines are ignored (the validator warns). Birdy's
+asset was upgraded by its seeder: Setup Birdy NPC, or **Tools ▸ Pickleball ▸ Seed Birdy Dialogue**
+on its own, rewrites `Birdy_Intro.asset` in place (GUID kept) only while it is still, word for
+word, the original six-line seed; any hand edit and it is left alone.
+
+**The validator** (`DialogueValidator`, plain C#) runs in the definition's `OnValidate` (one
+warning log per change of result, never an error log) and in `DialogueAssetTests`, which
+validates every definition in the project and checks conversation ids are unique. Errors (the
+test fails): no conversation id on a graph; an empty or duplicate node id; an empty or unknown
+start; a `next`, `elseNext`, option or fallback link to a node that doesn't exist; a choice with no
+options or more than 9; an empty or duplicate option id; a choice whose every option has
+conditions and that has no fallback (it could strand the player); branches looping into each
+other with nothing shown. Warnings: unreachable nodes; a loop with no way out (cycles are fine
+if some path out of them ends the talk); a branch with no conditions; empty text; an option over
+48 characters; a condition or effect with no key; a `Chose` condition naming a node or option this
+conversation doesn't have; linear lines left beside nodes. The analysis is static and
+optimistic: an exit behind a condition counts.
+
+**The runner** walks the graph. Branches are resolved the moment they are reached (against the
+store), a choice with nothing pickable is replaced by its fallback, and a broken link or a run of
+64 branches with nothing shown ends the talk with a warning instead of hanging. When a line is
+revealed it already knows what comes next: if that is a choice with no prompt, the options go
+up at once under the line; otherwise the next node waits for a press. A **pick**, in order:
+leaves the choosing state, `IChoiceStore.RecordChoice(conversationId, nodeId, optionId)`, the
+option's effects in order (`FactEffect.ApplyAll`), `ChoiceMade`, then the option's `next`.
+Store exceptions are logged and the talk goes on. Nothing else ever writes to the store, so an
+abort mid-choice (the NPC disabled or killed, the director disabled by a reload) unwinds exactly
+as before and records nothing. `LineIndex` and `LineStarted`'s index are the order lines were
+shown in this talk (for a linear definition, the line's index); `Talkable.CurrentLine` and
+`CurrentNodeId` say which.
+
+**The lockouts.** Lines keep `advanceLockoutSeconds` (0.12 s after a line starts or is revealed).
+Options add `choiceLockoutSeconds` (0.3 s after they appear), a debounce for Interact: a press
+inside it restarts it. A click or number key inside it only moves the cursor there. Everything
+is unscaled time; the world is paused.
+
+**Input.** The input gate keeps its single `InputBlock.All` claim; no new flag. While answers are
+up the director reads the option input itself (as the camera reads look input):
+`DialogueChoiceInput` combines the left stick's y, the d-pad and the arrow / W S keys into one
+axis, and `ChoiceNavigator` turns it into steps (one per push, then after 0.4 s a repeat every
+0.15 s; at most one per frame; a direction already held when the answers appear does nothing
+until let go and pushed again). `ChoiceSelection` keeps the cursor on enabled options and wraps.
+Number keys 1–9 (top row or numpad) pick the Nth answer shown, so a hidden answer shifts the
+numbers. Interact picks the highlighted one. The right stick is untouched and still orbits the
+camera; `DialogueCamera` ignores the mouse while `IsChoosing`.
+
+**The view.** Setup Dialogue builds the column inside the box (`DialogueBox/Choices`, a
+VerticalLayoutGroup and ContentSizeFitter, so every plate is as wide as the longest answer, at
+least 300 units) with nine rows `Option1…9` (plate, `Label` 32 pt, a `Cursor` that is the box's ▼
+sprite turned a quarter). It starts hidden. On `ChoicesShown` the view fills and shows one row
+per answer, lays them out at once (so the mouse can hit them that frame), fades the column in
+over `optionFadeInSeconds`, and eases each row toward plain or highlighted (scale, plate and text
+colour) with a time constant of `optionHighlightSeconds`; the ► bobs with the ▼'s pulse. The
+mouse moves the highlight only when it moves, so a resting pointer never fights the keys. The
+cursor is freed when the answers appear, only if it was captured, and captured again on
+`ChoiceMade`, on the end of the talk and in `OnDisable`, the way the dialogue hands the cursor
+back to the orbit camera. The column is mirrored to the box's left end when the talk camera
+(`worldCamera`) has the NPC's head on the right half of the screen. Re-enabled mid-choice (a
+reload), the view puts the list back.
+
+**Store wiring.** The director has one serialized `MonoBehaviour choiceStore` field, checked for
+`IChoiceStoreProvider` (`OnValidate` takes the provider on a dragged-in object, or clears anything
+else). Setup Dialogue adds a `ChoiceStoreHost` to the "Dialogue" object (only if missing) and wires
+it. The store is fetched when a talk starts. With none wired, talks still run: conditions see an
+empty store, effects are dropped, and the director warns once.
+
+### Choices and facts: the store
+
+Everything the player has chosen, and the facts those choices set: the one place quests,
+reputation or later branches read from, so none of them needs to know about dialogue.
+
+**The API** (`IChoiceStore`, implemented by `ChoiceStore`, plain C#):
+- the log, append-only: `RecordChoice(dialogueId, nodeId, choiceId)`, `Choices` (every
+  `ChoiceRecord`, oldest first, each stamped with cumulative play time), `HasChosen(dialogue, node,
+  choice = null)` (null: anything there), `LastChoice(dialogue, node)`;
+- the facts, a key/value table of `FactValue` (bool, int or string; reads convert, so an int reads
+  as a bool by being non-zero): `TryGetFact`, `SetFact`, `ClearFact`, `Facts`, and the extensions
+  `GetBool` / `GetInt` / `GetString` with a fallback for facts never set;
+- events, raised after the state is final: `ChoiceRecorded(record)`, `FactChanged(FactChange)` (key,
+  previous and current value, whether each existed; only when the value really changes), and
+  `Reset` (after a new game or a load: anything caching store data re-reads it).
+Bad input (an empty key or id) is ignored with a warning, never thrown. A listener that throws is
+logged and the other listeners still run.
+
+**The host** (`ChoiceStoreHost`, on the "Dialogue" object, implements `IChoiceStoreProvider`)
+builds the store on first use (so `Store` is never null), loads the save into it, and writes it
+back: at most once per frame in `LateUpdate` after any change (which still runs while a talk has
+time stopped), and on application pause, quit and disable. Fields: `persist` (off: memory only,
+nothing read or written; for tests and quick runs) and `fileName`.
+
+**The save.** `<persistentDataPath>/Saves/choices.json` (`ChoiceStoreSave`), JSON with a format
+version, the play time, the log and the facts (sorted by key, so it diffs cleanly). Writes are
+atomic: a `.tmp` file, flushed, then swapped in with `File.Replace`, so a crash mid-save leaves
+the previous file whole. A path inside the project's Assets folder, or a file name with folders,
+is refused. Loading always leaves the store consistent and raises `Reset` once (no per-fact
+events):
+- **missing**: an empty store, a new game;
+- **corrupt** (unparsable, or no version): renamed to `choices.corrupt-<timestamp>.json` beside it,
+  empty store;
+- **older version**: migrated in memory, written back at the current version on the next save;
+- **newer version** (or unreadable through an I/O error): refused and left untouched, empty
+  store, and saving is off for the session so the file survives.
+
+**New game.** `ChoiceStoreHost.NewGame()` (also the component's ⋮ ▸ **New Game (clear choices)**)
+empties the store, restarts play time and deletes the save file; it is also the explicit way past
+a refused save.
+
+**Reading it from another system.** Hold a serialized reference to the host (as the director
+does), read facts when you need them, and listen for changes:
+
+```csharp
+[SerializeField] ChoiceStoreHost choices;   // wired by a setup menu
+
+void OnEnable()
+{
+    choices.Store.FactChanged += OnFact;
+    choices.Store.Reset += Refresh;          // after a load or a new game
+    Refresh();
+}
+
+void OnDisable()
+{
+    choices.Store.FactChanged -= OnFact;
+    choices.Store.Reset -= Refresh;
+}
+
+void OnFact(FactChange change)
+{
+    if (change.Key == "birdy.promised_help") Refresh();
+}
+
+void Refresh() => questMarker.SetActive(choices.Store.GetBool("birdy.promised_help"));
+```
+
+Tests never touch the real save: use an in-memory `IChoiceStore` (the dialogue tests'
+`FakeChoiceStore`), a host with `persist` off, or `ChoiceStoreHost.UseSaveDirectory(tempDir)`.
+
 **Data assets.** `ScriptableObjects/Dialogue/DialogueConfig.asset` (every tunable),
 `TalkableSet.asset` (runtime set; Talkables join in `OnEnable`), and one `DialogueDefinition` per
-conversation (speaker name + lines with an emote each), owned by the NPC's content. The folder's
+conversation (speaker name, conversation id, and nodes, or linear lines with an emote each),
+owned by the NPC's content. The save file lives outside the project (above). The folder's
 GUID is fixed (`182ae63664be4615bb6e2329a9d64209`) so the NPC branch and this one agree.
 
 **No per-frame scene searches or allocations.** The interactor scans the `TalkableSet` (a
@@ -255,6 +447,9 @@ reference to it.
 | Text speed and rhythm | `charactersPerSecond` (0 = instant), `commaPauseSeconds`, `sentencePauseSeconds` |
 | NPC starts talking with his back half turned, or the first line waits too long | `waitForNpcFacingDegrees`, `waitForNpcFacingSeconds` |
 | Presses feel ignored, or lines get skipped | `advanceLockoutSeconds`, `textStartDelaySeconds` |
+| Mashing picks an answer, or a careful pick feels slow | `choiceLockoutSeconds` (a debounce for E / RB) |
+| The answer cursor: stick sensitivity, hold-to-repeat | `choiceStickThreshold`, `choiceRepeatDelaySeconds`, `choiceRepeatIntervalSeconds` |
+| The answer column's look | `optionPlateColour`, `optionHighlightPlateColour`, `optionTextColour`, `optionHighlightTextColour`, `optionDisabledTextColour`, `optionCursorColour`, `optionCursorBob`, `optionHighlightScale`, `optionHighlightSeconds`, `optionFadeInSeconds` |
 | E reopens the talk too easily, or too slowly after a deliberate press | `restartCooldownSeconds` (a debounce: presses inside it restart it) |
 | Camera position | `pushInDistance`, `cameraHeight` (above the Head bone; near 0 is level), `sideOffset` (sign = shoulder), `maxSideOffset`, `playerFocusHeight` (pivot only without a Head bone) |
 | Player's body or cloak still covers the NPC, or the camera swings too wide | `playerClearanceMargin` (added to the controller radius), `playerFallbackRadius`, `npcHalfWidth`, `maxSideOffset` |
@@ -268,7 +463,9 @@ reference to it.
 | Silence during talk | `pauseAudio` (dialogue sounds need `AudioSource.ignoreListenerPause`) |
 
 Box geometry (60% of a 1920-wide reference, 232 tall, 52 above the bottom; font sizes) is laid
-out by Setup Dialogue. Change it in `DialogueSetup.BuildBox` and re-run the menu. If the box
+out by Setup Dialogue. Change it in `DialogueSetup.BuildBox` and re-run the menu. The answer
+column's geometry (64-unit rows, 10 apart, at least 300 wide, 32 pt text, 28 in from the box's
+right end and 18 above its top) is in `DialogueSetup.BuildOptionList`. If the box
 height changes, move `npcFeetScreenHeight` with it.
 
 ## 4. How to extend
@@ -293,10 +490,45 @@ the flag to `InputBlock` if none fits, and fill the field from `DialogueSetup.Wi
 **Something else on Interact** (a door, a pickup): listen to `InteractInput.Pressed`, and claim
 `InputBlock.InteractButton` while it is the thing E would act on, as `PlayerInteractor` does.
 
-**Branching or choices** would go in `DialogueRunner` (a choice line type and an `Advance(choice)`
-overload) plus a choice list in `DialogueView`; the director and camera need no change.
+**Write a branching conversation** (no code):
+1. On the `DialogueDefinition` asset set a project-unique **Id** (`npc.topic`) and never change it
+   once shipped; picks are recorded under it.
+2. Add **Nodes** with ids (`intro.1`, `ask`, …) and link them by id. End a path with an empty next.
+   Put the answers on a Choice node right after the line that asks; give it a prompt only if the
+   question isn't the line before.
+3. To open a later talk differently, make the start node a **Branch** that tests a fact the
+   first talk set (an option effect), or `Chose` an option at a node.
+4. Hide an answer until it makes sense (`whenUnmet` Hide), or show it greyed as a hint
+   (Disable). If every answer at a node has conditions, give the node a fallback.
+5. Read the Console: the validator lists any broken link or dead end as you type, and
+   `DialogueAssetTests` fails on errors.
+For an asset seeded by a menu, change the seeder (as `BirdyNpcSetup.BirdyIntro` does), not the
+YAML.
+
+**React to choices from another system** (a quest, a door): read the store through the host, as
+the snippet in "Choices and facts: the store" shows. Don't listen to the dialogue for it.
+
+**NPC presentation during a choice:** `Talkable.ChoicesShown` / `ChoiceMade` and
+`IsAwaitingChoice` (e.g. a thinking idle while the player decides).
 
 ## 5. Known limitations and open questions
+
+- **Choices were play-tested headlessly only.** A PlayMode run in ChibiSandbox with Birdy (real
+  queued keyboard, gamepad and mouse events) rendered the column and drove every input path:
+  arrows, left stick, d-pad, number keys, mouse hover and click, E; the second talk opened with
+  "You came back!"; an abort mid-choice recorded nothing. Nobody has judged it by eye in the
+  Editor, and the cursor release and re-capture can't be seen headless (the cursor never reads
+  Locked in batch mode).
+- **The Inspector shows every node field for every kind.** There is no custom drawer; the
+  tooltips say which fields each kind uses. A drawer (or a graph view) would be an Editor-side
+  addition.
+- **No on-screen number hints.** The number keys work but nothing shows them.
+- **At most 9 answers per choice** (the rows and the number keys); the validator enforces it.
+- **No node-level effects.** Facts change only when an answer is picked. "Has met Birdy" is
+  read from the log instead (`Chose` any option at the first question).
+- **A prompt-less choice at the very start** shows its answers over an empty box.
+- **Npc.md still says Birdy_Intro is seeded once and never overwritten**; it is now also upgraded
+  once from the original linear seed (that doc belongs to the NPC system).
 
 - **Play-tested headlessly only.** QA's PlayMode integration run (real Input System events,
   Birdy merged) passed every functional check. The redesigned shot was then re-run headlessly

@@ -18,6 +18,7 @@ using Object = UnityEngine.Object;
 /// Tools ▸ Pickleball ▸ Setup Birdy NPC       model, material, rig, clips,
 ///                                             animator, dialogue, prefab, placement
 /// Tools ▸ Pickleball ▸ Rebuild Birdy Animator clips and controller only
+/// Tools ▸ Pickleball ▸ Seed Birdy Dialogue     the dialogue asset only
 ///
 /// Follows the Newton path (NewtonBossSetup): a Tripo model imported as
 /// Humanoid with the shared Tripo bone map (ChibiSandboxSetup), Mixamo clips
@@ -28,9 +29,11 @@ using Object = UnityEngine.Object;
 ///
 /// Idempotent. Every import setting is written only when it differs, the
 /// prefab is edited in place (component file IDs survive), the dialogue and
-/// config assets are seeded once and then left alone, and the scene gets one
-/// Birdy: an existing instance is kept where it is. The scene is marked dirty
-/// and never saved.
+/// config assets are seeded once and then left alone (the dialogue is upgraded
+/// once, in place, from the original linear seed to the branching one, and
+/// only while it is still exactly that seed), and the scene gets one Birdy: an
+/// existing instance is kept where it is. The scene is marked dirty and never
+/// saved.
 ///
 /// Clips: drop Mixamo FBX (FBX for Unity, Without Skin, 30 fps), or an .anim
 /// copied out of a clip library, into Animation/Birdy/ named by role prefix
@@ -231,6 +234,23 @@ public static class BirdyNpcSetup
             return;
         }
         SaveIfDirty(BuildAnimator(EnsureConfig(), force: true));
+    }
+
+    /// <summary>
+    /// Seeds (or upgrades the old linear seed of) Birdy's dialogue asset without
+    /// touching the model, the prefab or the scene. Setup Birdy NPC does the
+    /// same as one of its steps; this is the cheap way, and the batch entry
+    /// point (<c>-executeMethod BirdyNpcSetup.SeedDialogue</c>).
+    /// </summary>
+    [MenuItem("Tools/Pickleball/Seed Birdy Dialogue")]
+    public static void SeedDialogue()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            Debug.LogError("Seed Birdy Dialogue: exit Play mode first.");
+            return;
+        }
+        SaveIfDirty(EnsureDialogue());
     }
 
     // ============================================================ the model
@@ -951,29 +971,156 @@ public static class BirdyNpcSetup
         return config;
     }
 
-    /// <summary>Seeded once. After that the asset is the source of truth and
-    /// a re-run leaves hand edits alone.</summary>
+    /// <summary>
+    /// Seeded once; after that the asset is the source of truth and a re-run
+    /// leaves hand edits alone. One exception, the branching upgrade: an asset
+    /// that is still exactly the original linear seed (no nodes, Birdy's name,
+    /// the six seeded lines and emotes, word for word) is rewritten in place,
+    /// GUID kept, to <see cref="BirdyIntro"/>. Any edit to it, even one word,
+    /// and it is left as it is.
+    /// </summary>
     static DialogueDefinition EnsureDialogue()
     {
         var dialogue = AssetDatabase.LoadAssetAtPath<DialogueDefinition>(DialoguePath);
-        if (dialogue != null) return dialogue;
-        ChibiSandboxSetup.EnsureFolderPublic(DialogueDir);
-        dialogue = DialogueDefinition.CreateRuntime(InstanceName,
-            new DialogueLine("Whirr-whirr! A real Guardian of Mathematics! I saw your compass-blade " +
-                             "glinting from the rooftops!", DialogueEmote.Excited),
-            new DialogueLine("I'm Birdy. My rotor runs on pure geometry: one perfect circle, " +
-                             "spinning very, very fast.", DialogueEmote.Talk),
-            new DialogueLine("You'll be wanting Sir Isaac. He paces the courtyard all day, muttering " +
-                             "about falling bodies...", DialogueEmote.Thinking),
-            new DialogueLine("His gravity wells will drag you in. But his weak spot is the inverse " +
-                             "square. Distance is everything.", DialogueEmote.Thinking),
-            new DialogueLine("Halve the distance and your blows land four times as hard! So get " +
-                             "close. Brave-close!", DialogueEmote.Excited),
-            new DialogueLine("And when the apples start raining, watch the ground for their marks. " +
-                             "I'll cheer from a safe altitude!", DialogueEmote.Talk));
-        AssetDatabase.CreateAsset(dialogue, DialoguePath);
-        Debug.Log($"Seeded {DialoguePath} ({dialogue.LineCount} lines).");
+        if (dialogue == null)
+        {
+            ChibiSandboxSetup.EnsureFolderPublic(DialogueDir);
+            dialogue = BirdyIntro();
+            AssetDatabase.CreateAsset(dialogue, DialoguePath);
+            Debug.Log($"Seeded {DialoguePath} ({dialogue.Nodes.Count} nodes).");
+            return dialogue;
+        }
+        if (!IsOriginalLinearSeed(dialogue)) return dialogue;
+
+        var upgraded = BirdyIntro();
+        try
+        {
+            string assetName = dialogue.name;
+            EditorUtility.CopySerialized(upgraded, dialogue);
+            dialogue.name = assetName;
+        }
+        finally
+        {
+            Object.DestroyImmediate(upgraded);
+        }
+        EditorUtility.SetDirty(dialogue);
+        Debug.Log($"Upgraded {DialoguePath} from the original linear seed to the branching intro " +
+                  $"({dialogue.Nodes.Count} nodes, id '{dialogue.Id}').");
         return dialogue;
+    }
+
+    /// <summary>The lines the first seed wrote, to recognise an asset nobody has edited.</summary>
+    static readonly (string text, DialogueEmote emote)[] OriginalSeedLines =
+    {
+        ("Whirr-whirr! A real Guardian of Mathematics! I saw your compass-blade glinting from the rooftops!",
+         DialogueEmote.Excited),
+        ("I'm Birdy. My rotor runs on pure geometry: one perfect circle, spinning very, very fast.",
+         DialogueEmote.Talk),
+        ("You'll be wanting Sir Isaac. He paces the courtyard all day, muttering about falling bodies...",
+         DialogueEmote.Thinking),
+        ("His gravity wells will drag you in. But his weak spot is the inverse square. Distance is everything.",
+         DialogueEmote.Thinking),
+        ("Halve the distance and your blows land four times as hard! So get close. Brave-close!",
+         DialogueEmote.Excited),
+        ("And when the apples start raining, watch the ground for their marks. I'll cheer from a safe altitude!",
+         DialogueEmote.Talk),
+    };
+
+    static bool IsOriginalLinearSeed(DialogueDefinition dialogue)
+    {
+        if (dialogue.HasGraph || !string.IsNullOrEmpty(dialogue.Id) || dialogue.SpeakerName != InstanceName) return false;
+        var lines = dialogue.LinearLines;
+        if (lines.Count != OriginalSeedLines.Length) return false;
+        for (int i = 0; i < lines.Count; i++)
+            if (lines[i].Text != OriginalSeedLines[i].text || lines[i].Emote != OriginalSeedLines[i].emote)
+                return false;
+        return true;
+    }
+
+    /// <summary>Birdy's conversation id; the choice log records his picks under it.</summary>
+    public const string IntroDialogueId = "birdy.intro";
+
+    /// <summary>Set when the player promises to find Birdy's protractor.</summary>
+    public const string PromisedHelpFact = "birdy.promised_help";
+
+    /// <summary>
+    /// Birdy's intro as a branching conversation. The start branch reads what
+    /// happened last time:
+    /// <list type="bullet">
+    /// <item>first talk: a few lines, then a favour (intro.ask): help (sets
+    /// <see cref="PromisedHelpFact"/>), ask about Newton (offered only until
+    /// asked: it loops back to the same question without itself), or not now;</item>
+    /// <item>promised: "You came back! Still up for helping?", where backing out
+    /// clears the promise;</item>
+    /// <item>asked before but never promised: he asks again.</item>
+    /// </list>
+    /// Uses all three emotes.
+    /// </summary>
+    public static DialogueDefinition BirdyIntro()
+    {
+        var promised = FactCondition.Fact(FactConditionKind.FactEquals, PromisedHelpFact, FactValue.Of(true));
+        var askedBefore = FactCondition.Choice(true, "", "intro.ask");
+        var newtonNotAsked = FactCondition.Choice(false, "", "intro.ask", "newton");
+
+        return DialogueDefinition.CreateRuntime(InstanceName, IntroDialogueId, "start",
+            DialogueNode.CreateBranch("start", new[] { promised }, "back.promised", "start.met"),
+            DialogueNode.CreateBranch("start.met", new[] { askedBefore }, "back.again", "intro.1"),
+
+            DialogueNode.CreateLine("intro.1",
+                "Whirr-whirr! A real Guardian of Mathematics! I saw your compass-blade glinting from the rooftops!",
+                DialogueEmote.Excited, "intro.2"),
+            DialogueNode.CreateLine("intro.2",
+                "I'm Birdy. My rotor runs on pure geometry: one perfect circle, spinning very, very fast.",
+                DialogueEmote.Talk, "intro.3"),
+            DialogueNode.CreateLine("intro.3",
+                "Say... could a Guardian spare a moment for a small bird with a big problem?",
+                DialogueEmote.Thinking, "intro.ask"),
+            DialogueNode.CreateChoice("intro.ask", "", DialogueEmote.Talk, "",
+                DialogueOption.Create("help", "Of course. What's wrong?", "help.1",
+                    effects: new[] { FactEffect.Set(PromisedHelpFact, FactValue.Of(true)) }),
+                DialogueOption.Create("newton", "Do you know anything about Newton?", "newton.1",
+                    new[] { newtonNotAsked }, UnmetOptionMode.Hide),
+                DialogueOption.Create("later", "Sorry, I'm in a hurry.", "later.1")),
+
+            DialogueNode.CreateLine("help.1",
+                "Whirr! Thank you! Newton's apples knocked my lucky protractor clean off the roof!",
+                DialogueEmote.Excited, "help.2"),
+            DialogueNode.CreateLine("help.2",
+                "It landed somewhere in the courtyard. Find it, and I'll show you a shortcut up the tower!",
+                DialogueEmote.Thinking),
+
+            DialogueNode.CreateLine("newton.1",
+                "Sir Isaac? He paces the courtyard all day, muttering about falling bodies...",
+                DialogueEmote.Thinking, "newton.2"),
+            DialogueNode.CreateLine("newton.2",
+                "His gravity wells will drag you in. But his weak spot is the inverse square. Distance is everything.",
+                DialogueEmote.Thinking, "newton.3"),
+            DialogueNode.CreateLine("newton.3",
+                "Halve the distance and your blows land four times as hard! So get close. Brave-close!",
+                DialogueEmote.Excited, "newton.4"),
+            DialogueNode.CreateLine("newton.4",
+                "And when the apples start raining, watch the ground for their marks. Now, about that favour...",
+                DialogueEmote.Talk, "intro.ask"),
+
+            DialogueNode.CreateLine("later.1",
+                "No worries! I'll be right here. Standing, not hovering. Hovering is tiring.",
+                DialogueEmote.Talk),
+
+            DialogueNode.CreateLine("back.promised", "You came back! Still up for helping?",
+                DialogueEmote.Excited, "back.ask"),
+            DialogueNode.CreateChoice("back.ask", "", DialogueEmote.Talk, "",
+                DialogueOption.Create("yes", "Still looking! Where did it fall?", "back.where"),
+                DialogueOption.Create("no", "Actually, I can't right now.", "back.no",
+                    effects: new[] { FactEffect.Set(PromisedHelpFact, FactValue.Of(false)) })),
+            DialogueNode.CreateLine("back.where",
+                "Near the courtyard well, I think. You can't miss it: it's a perfect half-circle!",
+                DialogueEmote.Thinking),
+            DialogueNode.CreateLine("back.no",
+                "Oh. Well... the offer stands. My protractor isn't going anywhere. Probably.",
+                DialogueEmote.Thinking),
+
+            DialogueNode.CreateLine("back.again", "Oh! The Guardian again! Changed your mind about that favour?",
+                DialogueEmote.Talk, "intro.ask"));
     }
 
     // ============================================================ the prefab

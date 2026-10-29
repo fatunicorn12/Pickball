@@ -15,5 +15,10 @@ namespace Pickleball.Sandbox.Dialogue
         public float SentencePause;
         /// <summary>A press this soon after a line starts or is revealed is ignored, s.</summary>
         public float AdvanceLockout;
+        /// <summary>Quiet time after options appear before a pick counts, s. An
+        /// Interact press inside it restarts it (a debounce, so mashing through
+        /// text never picks the first option unread); a number key or click inside
+        /// it only moves the cursor.</summary>
+        public float ChoiceLockout;
     }
 }

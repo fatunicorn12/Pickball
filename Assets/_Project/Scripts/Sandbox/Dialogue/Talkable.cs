@@ -19,9 +19,16 @@ namespace Pickleball.Sandbox.Dialogue
     /// normal time, so the player slows to idle rather than freezing mid-stride.
     /// The camera starts to push in.</item>
     /// <item><c>Time.timeScale</c> goes to 0, then <see cref="ConversationStarted"/>.</item>
-    /// <item>Per line: <see cref="CurrentLineIndex"/> and <see cref="CurrentLine"/>
-    /// are set, <see cref="LineStarted"/> fires, the text types out, and
-    /// <see cref="LineRevealed"/> fires when it is fully shown.</item>
+    /// <item>Per line: <see cref="CurrentLineIndex"/>, <see cref="CurrentLine"/>
+    /// and <see cref="CurrentNodeId"/> are set, <see cref="LineStarted"/> fires,
+    /// the text types out, and <see cref="LineRevealed"/> fires when it is fully
+    /// shown.</item>
+    /// <item>Per choice (branching conversations): once the line before has
+    /// typed out, <see cref="IsAwaitingChoice"/> is set and
+    /// <see cref="ChoicesShown"/> fires; when the player picks,
+    /// <see cref="ChoiceMade"/> fires (the pick is already recorded) and the
+    /// talk moves on. A conversation that ends while options are up records
+    /// nothing.</item>
     /// <item>After the last line the box hides and the camera blends back, time
     /// still stopped.</item>
     /// <item><see cref="LastEndReason"/> is set, then <see cref="ConversationEnded"/>
@@ -95,6 +102,14 @@ namespace Pickleball.Sandbox.Dialogue
         /// conversation. Set before <see cref="LineStarted"/> fires.</summary>
         public DialogueLine CurrentLine { get; private set; }
 
+        /// <summary>Id of the node being shown (a line, or the choice whose options
+        /// are up); empty outside a conversation, and for a line notified without
+        /// one. Never null.</summary>
+        public string CurrentNodeId { get; private set; } = string.Empty;
+
+        /// <summary>True while options are up and the player hasn't picked yet.</summary>
+        public bool IsAwaitingChoice { get; private set; }
+
         /// <summary>How the last conversation ended. Set before <see cref="ConversationEnded"/> fires.</summary>
         public ConversationEndReason LastEndReason { get; private set; }
 
@@ -105,7 +120,7 @@ namespace Pickleball.Sandbox.Dialogue
         /// </summary>
         public bool CanTalk
             => isActiveAndEnabled && !IsInConversation
-               && dialogue != null && dialogue.LineCount > 0
+               && dialogue != null && dialogue.IsPlayable
                && (OwnHealth == null || !OwnHealth.IsDead);
 
         /// <summary>A conversation began. <see cref="Partner"/> is set. Time is already paused.</summary>
@@ -122,6 +137,14 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>The conversation finished, normally or not (see <see cref="LastEndReason"/>).
         /// Fires before time resumes.</summary>
         public event Action<Talkable> ConversationEnded;
+
+        /// <summary>Options are up at choice node <c>nodeId</c>, under the line just
+        /// shown, and the player is deciding. <see cref="IsAwaitingChoice"/> is set.</summary>
+        public event Action<Talkable, string> ChoicesShown;
+
+        /// <summary>The player picked option <c>choiceId</c> at choice node
+        /// <c>nodeId</c>. It is already recorded and its effects applied.</summary>
+        public event Action<Talkable, string, string> ChoiceMade;
 
         // Fetched lazily rather than in Awake so it survives a hot reload.
         // TryGetComponent, not GetComponent: in the Editor a missing component
@@ -160,17 +183,49 @@ namespace Pickleball.Sandbox.Dialogue
             Partner = partner;
             CurrentLineIndex = -1;
             CurrentLine = default;
+            CurrentNodeId = string.Empty;
+            IsAwaitingChoice = false;
             ConversationStarted?.Invoke(this);
         }
 
-        /// <summary>Director only: line <paramref name="index"/> started typing.</summary>
+        /// <summary>Line <paramref name="index"/> of a linear conversation started
+        /// typing: the line is looked up in the definition by index. Kept for
+        /// callers that only have the index; the director uses the overload that
+        /// passes the line.</summary>
         public void NotifyLineStarted(int index)
         {
-            CurrentLineIndex = index;
-            CurrentLine = dialogue != null && index >= 0 && index < dialogue.LineCount
+            var line = dialogue != null && index >= 0 && index < dialogue.LineCount
                 ? dialogue.GetLine(index)
                 : default;
+            NotifyLineStarted(index, line, string.Empty);
+        }
+
+        /// <summary>Director only: <paramref name="line"/> started typing, the
+        /// <paramref name="index"/>-th line this conversation has shown, from node
+        /// <paramref name="nodeId"/>.</summary>
+        public void NotifyLineStarted(int index, DialogueLine line, string nodeId)
+        {
+            CurrentLineIndex = index;
+            CurrentLine = line;
+            CurrentNodeId = nodeId ?? string.Empty;
+            IsAwaitingChoice = false;
             LineStarted?.Invoke(this, index);
+        }
+
+        /// <summary>Director only: options are up at choice node <paramref name="nodeId"/>.</summary>
+        public void NotifyChoicesShown(string nodeId)
+        {
+            CurrentNodeId = nodeId ?? string.Empty;
+            IsAwaitingChoice = true;
+            ChoicesShown?.Invoke(this, CurrentNodeId);
+        }
+
+        /// <summary>Director only: the player picked <paramref name="choiceId"/> at
+        /// <paramref name="nodeId"/>.</summary>
+        public void NotifyChoiceMade(string nodeId, string choiceId)
+        {
+            IsAwaitingChoice = false;
+            ChoiceMade?.Invoke(this, nodeId ?? string.Empty, choiceId ?? string.Empty);
         }
 
         /// <summary>Director only: line <paramref name="index"/> is fully shown.</summary>
@@ -186,6 +241,8 @@ namespace Pickleball.Sandbox.Dialogue
             Partner = null;
             CurrentLineIndex = -1;
             CurrentLine = default;
+            CurrentNodeId = string.Empty;
+            IsAwaitingChoice = false;
             LastEndReason = reason;
             ConversationEnded?.Invoke(this);
         }

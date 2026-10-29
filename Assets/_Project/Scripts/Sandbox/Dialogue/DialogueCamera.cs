@@ -459,9 +459,12 @@ namespace Pickleball.Sandbox.Dialogue
             => ClearDistance(_look.Pivot, _look.Direction, _look.Radius, partner, npc);
 
         /// <summary>Mouse look only while the cursor is captured, as the orbit
-        /// camera does: never while it is free over the Editor or a menu.</summary>
+        /// camera does: never while it is free over the Editor or a menu, and
+        /// never while options are up (the mouse is pointing at them then; the
+        /// right stick still looks).</summary>
         bool MouseCaptured()
-            => Cursor.lockState == CursorLockMode.Locked && (orbitCamera == null || orbitCamera.CursorCaptured);
+            => Cursor.lockState == CursorLockMode.Locked && (orbitCamera == null || orbitCamera.CursorCaptured)
+               && (director == null || !director.IsChoosing);
 
         /// <summary>The shot has settled: looking around starts from it.</summary>
         void BeginLook()

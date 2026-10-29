@@ -25,10 +25,12 @@ using UnityEngine.UI;
 /// <see cref="PlayerMovementInput"/>, <see cref="SwordInput"/>,
 /// <see cref="LockOnTargeting"/> and, if it has the field,
 /// <see cref="SpacetimeView"/>;</item>
-/// <item>a "Dialogue" object gets the <see cref="DialogueDirector"/>, and the
-/// main camera a <see cref="DialogueCamera"/> that takes over from the orbit
-/// camera during a talk;</item>
-/// <item>the dialogue box and the talk prompt are built inside the FightHUD
+/// <item>a "Dialogue" object gets the <see cref="DialogueDirector"/> and a
+/// <see cref="ChoiceStoreHost"/> (the choice log and facts, loaded from and
+/// saved to disk) wired into it, and the main camera a
+/// <see cref="DialogueCamera"/> that takes over from the orbit camera during a
+/// talk;</item>
+/// <item>the dialogue box (with its option list) and the talk prompt are built inside the FightHUD
 /// canvas (or a DialogueHUD canvas when the fight has not been set up), on a
 /// nested canvas sorted above the rest of the HUD that ignores parent
 /// CanvasGroups;</item>
@@ -81,6 +83,13 @@ public static class DialogueSetup
     // Sorted above the fight HUD's bars and damage numbers.
     const int UiSortingOrder = 50;
 
+    // The option list: one row per option a choice can offer (number keys 1-9).
+    const int OptionRowCount = DialogueValidator.MaxOptions;
+    const float OptionRowHeight = 64f;
+    const float OptionRowMinWidth = 300f;
+    const float OptionSpacing = 10f;
+    const float OptionFontSize = 32f;
+
     [MenuItem("Tools/Pickleball/Setup Dialogue")]
     public static void Run()
     {
@@ -110,6 +119,7 @@ public static class DialogueSetup
         var gate = GetOrAdd<PlayerInputGate>(player.gameObject);
         var interact = GetOrAdd<InteractInput>(player.gameObject);
         var director = EnsureDirector(config, gate, interact);
+        WireChoiceStore(director);
 
         var lockOn = player.GetComponent<LockOnTargeting>();
         var melee = player.GetComponentInChildren<MeleeCombat>(true);
@@ -226,6 +236,19 @@ public static class DialogueSetup
         return director;
     }
 
+    /// <summary>
+    /// The choice store lives beside the director: one <see cref="ChoiceStoreHost"/>
+    /// on the Dialogue object (added only if missing, so a re-run never doubles
+    /// it and keeps its Inspector settings), wired into the director's
+    /// provider field.
+    /// </summary>
+    static void WireChoiceStore(DialogueDirector director)
+    {
+        var host = GetOrAdd<ChoiceStoreHost>(director.gameObject);
+        SetRefs(director, ("choiceStore", host));
+        EditorUtility.SetDirty(host);
+    }
+
     /// <summary>Fills the optional gate field on the input readers. Each one
     /// keeps today's behaviour when its field is empty.</summary>
     static void WireGate(GameObject player, PlayerInputGate gate, SpacetimeView spacetime)
@@ -268,6 +291,8 @@ public static class DialogueSetup
     ///       TalkPrompt         pill: KeyCap/Key + Label   (InteractPromptView)
     ///       DialogueBox        20–80% width, bottom      (DialogueView)
     ///         Box, NameTab/Name, Body, Continue
+    ///         Choices          above the box's right end
+    ///           Option1…9      plate: Label + Cursor (►)
     /// </summary>
     static GameObject BuildHud(DialogueDirector director, PlayerInteractor interactor,
                                DialogueConfig config, Camera cam)
@@ -292,7 +317,7 @@ public static class DialogueSetup
         root.SetAsLastSibling();
 
         BuildPrompt(root, interactor, config, cam, round, font);
-        var view = BuildBox(root, director, config, round, arrow, font);
+        var view = BuildBox(root, director, config, cam, round, arrow, font);
         SetHudToHide(view, root);
         return canvas.gameObject;
     }
@@ -406,7 +431,7 @@ public static class DialogueSetup
                 ("group", group), ("pill", pill), ("keyText", key), ("labelText", label));
     }
 
-    static DialogueView BuildBox(RectTransform root, DialogueDirector director, DialogueConfig config,
+    static DialogueView BuildBox(RectTransform root, DialogueDirector director, DialogueConfig config, Camera cam,
                                  Sprite round, Sprite arrow, TMP_FontAsset font)
     {
         // 60% of the width, a 1920-wide reference: the same wrap on every aspect.
@@ -479,12 +504,125 @@ public static class DialogueSetup
         mark.raycastTarget = false;
         mark.enabled = false;
 
+        var (list, listGroup, rows) = BuildOptionList(panel, config, round, arrow, font);
+
         var view = GetOrAdd<DialogueView>(panel.gameObject);
         SetRefs(view,
                 ("director", director), ("config", config), ("group", group), ("panel", panel),
                 ("box", box), ("nameTab", tab), ("nameText", nameText), ("bodyText", body),
-                ("continueMark", mark));
+                ("continueMark", mark), ("optionList", list), ("optionGroup", listGroup), ("worldCamera", cam));
+        SetOptionRows(view, rows);
         return view;
+    }
+
+    /// <summary>
+    /// The option list, Breath of the Wild style: a column of dark rounded
+    /// plates standing on the box's top edge at its right end, first option on
+    /// top, all as wide as the longest answer (a VerticalLayoutGroup and a
+    /// ContentSizeFitter size it; each row is sized by its text). The ► cursor
+    /// sits outside each plate's left edge, ignored by the layout; it is the
+    /// box's ▼ sprite turned a quarter. Every row starts hidden; the view shows
+    /// one per option. Found by name and re-configured on a re-run, never
+    /// rebuilt, so nothing is doubled.
+    /// </summary>
+    static (RectTransform list, CanvasGroup group, DialogueViewOptionRow[] rows) BuildOptionList(
+        RectTransform panel, DialogueConfig config, Sprite round, Sprite arrow, TMP_FontAsset font)
+    {
+        var list = Child(panel, "Choices");
+        list.anchorMin = list.anchorMax = new Vector2(1f, 1f);
+        list.pivot = new Vector2(1f, 0f);               // grows up and to the left
+        list.anchoredPosition = new Vector2(-28f, 18f);  // standing on the box's top edge
+        list.localScale = Vector3.one;
+        list.SetSiblingIndex(4);
+        var group = GetOrAdd<CanvasGroup>(list.gameObject);
+        group.alpha = 0f;
+        group.blocksRaycasts = false;
+        group.interactable = false;
+
+        var column = GetOrAdd<VerticalLayoutGroup>(list.gameObject);
+        column.spacing = OptionSpacing;
+        column.padding = new RectOffset(0, 0, 0, 0);
+        column.childAlignment = TextAnchor.LowerRight;
+        column.childControlWidth = true;
+        column.childControlHeight = true;
+        column.childForceExpandWidth = true;
+        column.childForceExpandHeight = false;
+        column.childScaleWidth = false;
+        column.childScaleHeight = false;
+        var fitter = GetOrAdd<ContentSizeFitter>(list.gameObject);
+        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        var rows = new DialogueViewOptionRow[OptionRowCount];
+        for (int i = 0; i < OptionRowCount; i++)
+        {
+            var row = Child(list, $"Option{i + 1}");
+            row.SetSiblingIndex(i);
+            row.pivot = new Vector2(1f, 0.5f);            // the highlight grows leftward, about its middle
+            row.localScale = Vector3.one;
+            var plate = GetOrAdd<Image>(row.gameObject);
+            Rounded(plate, round, config.OptionPlateColour, 2.6f);   // about 18-unit corners
+            var size = GetOrAdd<LayoutElement>(row.gameObject);
+            size.minWidth = OptionRowMinWidth;
+            size.minHeight = OptionRowHeight;
+            size.preferredHeight = OptionRowHeight;
+            var line = GetOrAdd<HorizontalLayoutGroup>(row.gameObject);
+            line.padding = new RectOffset(30, 36, 4, 4);
+            line.childAlignment = TextAnchor.MiddleLeft;
+            line.childControlWidth = true;
+            line.childControlHeight = true;
+            line.childForceExpandWidth = false;
+            line.childForceExpandHeight = true;
+
+            var label = Text(Child(row, "Label"), font, OptionFontSize, TextAlignmentOptions.MidlineLeft,
+                             config.OptionTextColour, "");
+            label.rectTransform.SetSiblingIndex(0);
+
+            var cursorRect = Child(row, "Cursor");
+            cursorRect.SetSiblingIndex(1);
+            cursorRect.anchorMin = cursorRect.anchorMax = new Vector2(0f, 0.5f);
+            cursorRect.pivot = new Vector2(0.5f, 0.5f);
+            cursorRect.anchoredPosition = new Vector2(-22f, 0f);
+            cursorRect.sizeDelta = new Vector2(30f, 19f);
+            // The ▼ turned a quarter anticlockwise points right: ►.
+            cursorRect.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            GetOrAdd<LayoutElement>(cursorRect.gameObject).ignoreLayout = true;
+            var cursor = GetOrAdd<Image>(cursorRect.gameObject);
+            cursor.sprite = arrow;
+            cursor.type = Image.Type.Simple;
+            cursor.preserveAspect = true;
+            cursor.color = config.OptionCursorColour;
+            cursor.raycastTarget = false;
+            cursor.enabled = false;
+
+            row.gameObject.SetActive(false);
+            rows[i] = new DialogueViewOptionRow(row, plate, label, cursor);
+        }
+        return (list, group, rows);
+    }
+
+    /// <summary>Writes the view's row array through SerializedObject, the way
+    /// <see cref="SetRefs"/> writes single references.</summary>
+    static void SetOptionRows(DialogueView view, DialogueViewOptionRow[] rows)
+    {
+        var so = new SerializedObject(view);
+        var array = so.FindProperty("optionRows");
+        if (array == null)
+        {
+            Debug.LogError("Setup Dialogue: DialogueView has no serialized field 'optionRows'. It was " +
+                           "probably renamed; update DialogueSetup.");
+            return;
+        }
+        array.arraySize = rows.Length;
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var element = array.GetArrayElementAtIndex(i);
+            element.FindPropertyRelative("row").objectReferenceValue = rows[i].Row;
+            element.FindPropertyRelative("plate").objectReferenceValue = rows[i].Plate;
+            element.FindPropertyRelative("label").objectReferenceValue = rows[i].Label;
+            element.FindPropertyRelative("cursor").objectReferenceValue = rows[i].Cursor;
+        }
+        so.ApplyModifiedPropertiesWithoutUndo();
     }
 
     // ---------------------------------------------------------------- sprites
