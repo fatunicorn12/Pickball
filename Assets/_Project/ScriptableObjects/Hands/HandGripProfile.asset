@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Hands.HandGripProfile
   handleTilt: 0
   gripRadius: 0.015
-  fingerCurl: {x: 75, y: 95, z: 55}
-  thumbCurl: {x: 25, y: 25, z: 30}
+  fingerCurl: {x: 85, y: 100, z: 60}
+  thumbCurl: {x: 0, y: 15, z: 20}
+  thumbSwing: 80
   curlWeight: 1
   closeRate: 18

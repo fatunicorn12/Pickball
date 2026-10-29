@@ -256,9 +256,8 @@ public static class ClothSetup
         if (cloth != null && smr != null && cloth.SourceMesh != null)
         {
             Undo.RecordObject(smr, "Remove Cloth");
-            int n = cloth.SourceMesh.bindposes.Length;
+            smr.bones = SourceBones(anim.transform, smr, cloth.SourceMesh);
             smr.sharedMesh = cloth.SourceMesh;
-            smr.bones = smr.bones.Take(n).ToArray();
             smr.localBounds = cloth.SourceBounds;
             PrefabUtility.RecordPrefabInstancePropertyModifications(smr);
         }
@@ -274,6 +273,36 @@ public static class ClothSetup
             Undo.DestroyObjectImmediate(t.gameObject);
 
         if (cloth != null) Undo.DestroyObjectImmediate(cloth);
+    }
+
+    /// <summary>
+    /// The renderer's bone list as the model itself has it, mapped by name
+    /// onto this instance.
+    ///
+    /// Cutting the current list back to the source mesh's bone count is only
+    /// right while the model's bones are unchanged. Once the FBX gains bones
+    /// (the chibi's fingers) the bone list Apply recorded still has the old
+    /// count, with cloth joints in the slots the new bones belong in, and the
+    /// regenerated skirt would skin the fingers to cloth joints. Reading the
+    /// list from the model asset works at any prefab nesting depth (the chibi
+    /// FBX sits inside Chibi.prefab, which sits in each scene). Falls back to
+    /// cutting the list if the model can't be read.
+    /// </summary>
+    static Transform[] SourceBones(Transform root, SkinnedMeshRenderer smr, Mesh source)
+    {
+        int n = source.bindposes.Length;
+        var original = PrefabUtility.GetCorrespondingObjectFromOriginalSource(smr);
+        if (original != null && original != smr && original.sharedMesh == source && original.bones.Length == n)
+        {
+            var byName = root.GetComponentsInChildren<Transform>(true)
+                .GroupBy(t => t.name).ToDictionary(g => g.Key, g => g.First());
+            var mapped = original.bones
+                .Select(b => b != null && byName.TryGetValue(b.name, out var t) ? t : null).ToArray();
+            if (mapped.All(t => t != null)) return mapped;
+            Debug.LogWarning($"Setup Cloth: '{root.name}' lacks some of its model's bones; " +
+                             "cutting the bone list back instead.", root);
+        }
+        return smr.bones.Take(n).ToArray();
     }
 
     // =====================================================================================

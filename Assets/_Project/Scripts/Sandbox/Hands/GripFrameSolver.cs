@@ -204,8 +204,10 @@ namespace Pickleball.Sandbox.Hands
         /// width of the hand, which says where the thumb is.</param>
         /// <param name="thumbSide">Used only when one knuckle is given, or the
         /// knuckles can't give a width.</param>
-        /// <param name="palmPoints">Skin on the palm (not the fingers); its
-        /// furthest point toward the palm side is the palm surface. May be empty.</param>
+        /// <param name="palmPoints">Skin on the palm (not the fingers). The
+        /// palm surface is its furthest point toward the palm side within the
+        /// strip the handle lies across (see <see cref="PalmUnderHandle"/>).
+        /// May be empty.</param>
         /// <param name="fingerPoints">Skin on the first finger segments; half its
         /// spread across the palm direction is the finger thickness. May be empty.</param>
         public static bool TrySolveClosedFist(Vector3 wrist, IReadOnlyList<Vector3> knuckles, Vector3 thumbSide,
@@ -222,14 +224,44 @@ namespace Pickleball.Sandbox.Hands
                 && !TryHandAxes(knuckleCentre - wrist, thumbSide, rightHand, out axes))
                 return false;
 
-            Extent(palmPoints, knuckleCentre, axes.Palm, out _, out float palmSide);
+            gripRadius = Mathf.Max(0f, gripRadius);
             Extent(fingerPoints, knuckleCentre, axes.Palm, out float fingerMin, out float fingerMax);
-            float palmHalf = Mathf.Max(0f, palmSide);
             float fingerHalf = Mathf.Max(0f, (fingerMax - fingerMin) * 0.5f);
+            float palmHalf = PalmUnderHandle(palmPoints, knuckleCentre, axes, fingerHalf, gripRadius);
 
-            Vector3 centre = FistCentre(knuckleCentre, axes, palmHalf, fingerHalf, Mathf.Max(0f, gripRadius));
+            Vector3 centre = FistCentre(knuckleCentre, axes, palmHalf, fingerHalf, gripRadius);
             frame = Compose(centre, axes, tiltDegrees);
             return true;
+        }
+
+        /// <summary>
+        /// How far the palm surface lies past the knuckle centre, toward the
+        /// palm side, measured only on the strip of palm the handle rests
+        /// against: from the knuckle line back by one finger half-thickness and
+        /// the handle's width.
+        ///
+        /// The deepest point of the whole palm is usually the heel of the hand
+        /// by the wrist, nowhere near the handle. On the chibi it is 4.2 cm past
+        /// the knuckles where the palm under them is 2.6 cm, and measuring it
+        /// held the handle 1.6 cm too far out, beyond the reach of the curled
+        /// fingers. Falls back to the whole palm if no point lies in the strip.
+        /// </summary>
+        public static float PalmUnderHandle(IReadOnlyList<Vector3> palmPoints, Vector3 knuckleCentre,
+                                            in HandAxes axes, float fingerHalfThickness, float gripRadius)
+        {
+            if (palmPoints == null || palmPoints.Count == 0) return 0f;
+            float back = fingerHalfThickness + 2f * gripRadius;
+            float deepest = float.MinValue;
+            for (int i = 0; i < palmPoints.Count; i++)
+            {
+                Vector3 d = palmPoints[i] - knuckleCentre;
+                float along = Vector3.Dot(d, axes.Knuckle);
+                if (along > 0f || along < -back) continue;
+                deepest = Mathf.Max(deepest, Vector3.Dot(d, axes.Palm));
+            }
+            if (deepest == float.MinValue)
+                Extent(palmPoints, knuckleCentre, axes.Palm, out _, out deepest);
+            return Mathf.Max(0f, deepest);
         }
     }
 }

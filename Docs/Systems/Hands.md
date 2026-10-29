@@ -18,22 +18,28 @@ Euler(0, 90, 100) on `R_Hand`. That put the grip 2 cm from the wrist, and the co
 by its very end, so the blade came out of the wrist and its 8 cm knob stuck out of the hand.
 Now both sides are measured: the hand from the rig and the weapon from its mesh.
 
-**The chibi's hand can't close.** Measured on 2026-10-28 in the open scene:
+**The chibi's fingers.** Tripo's auto-rig gave the chibi 41 bones and none in the fingers, but
+the hands are modelled with separate fingers (a fingerless glove: four fingers apart past the
+knuckles, and a thumb). A Blender pass, `Tools/Blender/chibi_add_fingers.py`, adds three bones
+per digit on both hands (`R_Thumb1..3`, `R_Index1..3`, `R_Middle1..3`, `R_Ring1..3`,
+`R_Pinky1..3`, and the same with `L_`) and skins the fingers to them. `ChibiSandboxSetup` maps
+them on the avatar. Measured on 2026-10-28:
 
-- The Tripo auto-rig has 41 bones and **no finger bones**. `R_Hand` is a leaf bone, and the
-  avatar maps 22 humanoid bones with no finger mappings. Newton uses the same skeleton.
-- The hand is one skinned block on `R_Hand`: 516 vertices weighted to it at ≥ 0.5. In hand
-  space at bind pose it runs 17 cm from the wrist. The palm is about 9 cm thick, the
-  finger part about 4 cm, and the thumb sticks out forward and toward the palm.
-- The clips are not the problem. All 24 clips on the chibi controller (locomotion, gesture and
-  combo) carry 20 right-hand finger muscle curves (`RightHand.Index.1 Stretched` and so on),
-  and the `UpperBody` mask on the Gesture and Attack layers passes `RightFingers` through.
-  Those curves have no bones to drive.
+- Each finger has three edge loops past the glove: where it leaves the glove, mid-finger, and
+  the tip cap. The joints sit between loops (the knuckle at the palm's front edge), so every
+  loop moves rigidly with one bone and only the faces between loops stretch.
+- The palm is thick for the fingers: 2.6 cm from the knuckle line to the palm surface under
+  the knuckles, against fingers about 8 cm long (Unity units). Curled, they wrap the front and
+  the underside of a handle held against the palm.
+- The thumb points mostly along the fingers at rest, about 30° toward the thumb side and 25°
+  toward the palm. That is not the Mixamo T-pose thumb (along the handle), which is why the
+  thumb has its own bend axis and a swing (see "How the fingers close").
+- All 24 clips on the chibi controller (locomotion, gesture and combo) carry 20 finger muscle
+  curves per hand, and the `UpperBody` mask on the Gesture and Attack layers passes
+  `RightFingers` through, so the clips drive the fingers whenever the fist isn't closed.
 
-So on the chibi the grab point goes in the centre of the hand's volume, and the hand mesh
-itself encloses the handle: only the knob end shows on the little-finger side and the blade on
-the thumb side. On a rig with finger bones the same code puts the grab point in front of the
-palm and `FingerCurl` closes the fingers round it.
+Newton's Tripo rig still has no finger bones. There the grab point goes in the centre of the
+hand's volume, and the hand mesh itself encloses the handle.
 
 ## 2. Architecture
 
@@ -93,12 +99,19 @@ head fit).
   from the wrist. The hand is open at the wrist, but with the reference on the wrist the
   missing cap adds nothing. Volume rather than a vertex average, because a low-poly mesh puts
   its vertices at detail (fingertips), not bulk (the palm).
-  - Chibi: (−0.002, 0.059, 0.031) m in `R_Hand` space, the middle of the 9 cm-thick palm, from
-    325 triangles enclosing 471 cm³. Thresholds of 0.3 and 0.7 move it by under 0.7 cm.
+  - Chibi before its fingers: (−0.002, 0.059, 0.031) m in `R_Hand` space, the middle of the
+    9 cm-thick palm, from 325 triangles enclosing 471 cm³. Newton still uses this path.
 - **Position with fingers** (`TrySolveClosedFist` → `FistCentre`): knuckle centre + palm ×
   (palm half-thickness + grip radius) − knuckles × (finger half-thickness + grip radius). The
   handle rests on the palm on one side and on the curled first finger segments on the other.
   Thicknesses come from the palm and proximal-finger skin.
+  - The palm's depth is measured only on the strip the handle lies across, from the knuckle
+    line back by a finger half-thickness and the handle's width (`PalmUnderHandle`). The
+    deepest point of the whole palm is the heel of the hand by the wrist: on the chibi 4.2 cm
+    past the knuckles where the palm under them is 2.6 cm. Measuring it put the handle 1.6 cm
+    too far out, below the reach of the curled fingers.
+  - Chibi: (0.033, 0.049, 0.018) m in `R_Hand` space, from 4 knuckle joints, 161 palm and 91
+    finger vertices.
 - **Tilt** (`Compose`): optional turn of the handle about +X toward the knuckles, from the
   profile.
 
@@ -128,11 +141,21 @@ A post-Animator pass, not a fist pose on a masked layer:
 - it would only work on Humanoid rigs.
 
 Each finger joint is set to its **rest** rotation (from the avatar's skeleton description)
-turned toward the palm about the handle axis (the thumb about the knuckle axis), then blended
-with the animated pose by the profile's weight. Each joint's axis is expressed in its own rest
-frame, so the bends add up along the finger about one axis (`FingerCurlMath`). Building from
-rest rather than adding to the clip means a clip that already curls can't push the fingers
-through the palm.
+turned toward the palm about the handle axis, then blended with the animated pose by the
+profile's weight. Each joint's axis is expressed in its own rest frame, so the bends add up
+along the finger about one axis (`FingerCurlMath`). Building from rest rather than adding to the
+clip means a clip that already curls can't push the fingers through the palm.
+
+The thumb is different, because rigs disagree on where it points at rest:
+
+- **Bend** (`ThumbFlexAxis`): about the axis across the thumb's own rest direction, in the
+  palm's plane. For a Mixamo-style thumb, which points along the handle, that is the knuckle
+  axis. The chibi's points along its fingers, and turned about the knuckle axis it only
+  rolled about its own length.
+- **Swing** (`ThumbSwingAxis`, `Opposed`): the thumb's first joint also turns about the palm's
+  normal, toward the little finger's knuckle, by the profile's `thumbSwing`. That lays it across
+  the curled fingers, under the handle, instead of hanging beside the index finger.
+- The thumb's direction comes from the avatar's rest positions (first joint to second).
 
 It runs at `DefaultExecutionOrder(-75)`, after SwingTwist (-100) and before WeaponClearance (-50).
 It only turns finger bones, which neither reads, and the grab point hangs off the hand bone,
@@ -188,6 +211,15 @@ when it's missing and never overwrites it.
 - **`fingerCurl` / `thumbCurl`** (° per joint): live in Play mode.
   - Too high pushes the fingertips into the palm; too low leaves a claw.
   - Only matters on rigs with finger bones.
+- **`thumbSwing`** (°): how far the thumb swings across the palm before it bends. Live in Play
+  mode. 0 leaves it beside the index finger.
+- **The chibi's values:** `fingerCurl` (85, 100, 60), `thumbCurl` (0, 15, 20), `thumbSwing` 80,
+  with the default `gripRadius` 0.015 (the compass's neck and knob are 1.0-1.85 cm in radius
+  where the fist closes). More thumb bend than that points the thumb straight down out of the
+  fist.
+- **Without Unity:** `chibi_add_fingers.py --preview DIR` renders both hands closed round a
+  handle with the same maths and any `--curl`, `--thumb-curl`, `--thumb-swing`, as a contact
+  sheet per hand. That is how the values above were found.
 - **`curlWeight`** (0-1): how fully the fist replaces the clips' finger poses.
 - **`closeRate`** (1/s): how fast the fist closes on a grab.
 
@@ -213,26 +245,36 @@ sword's, not the hand's: a prop that needs them must bring its own.
   script.
 - Left hands work: pass `rightHand: false`.
 
-**Give the chibi a closing fist:** the rig needs finger bones. Two options:
+**Re-rig the chibi's fingers** (to move a joint or change the skinning):
 
-- **A Blender pass** on the Tripo FBX: add finger chains, weight the hand's finger block to
-  them, and map them in `ChibiSandboxSetup.BoneMap`. The existing Mixamo finger curves would
-  then drive them too.
-- **Generated joints**, the way `ClothSetup` generates skirt chains: proximal and middle joints
-  across the finger block and a thumb joint, the hand vertices re-weighted onto them, and a
-  mesh copy swapped into the renderer.
-  - It would have to run after Setup Cloth, which replaces the renderer's mesh and bone list.
+1. Change the constants at the top of `Tools/Blender/chibi_add_fingers.py`. Check with
+   `--preview` (no `--out`) until the renders look right.
+2. Run it on the finger-less FBX from git, writing `chibi_unity.fbx` (the script's docstring
+   has the command). It refuses an FBX that already has fingers.
+3. In Unity, re-apply the rig: `ChibiSandboxSetup.SetupRigPublic(importer, 1.7)` on the FBX,
+   or Setup Chibi Sandbox (the full chain). It re-captures the avatar's reference skeleton if
+   the model has bones it lacks, and maps the fingers.
+4. Regenerate the cloth inside `Chibi.prefab` (`ClothSetup.Apply` on the prefab contents).
+   `Apply` first rebuilds the renderer's bone list from the model, so the new bones land in
+   the right slots.
+5. Run Tools ▸ Pickleball ▸ Setup Weapon Grip. It puts the grab point in front of the palm and
+   adds `FingerCurl`.
 
-Either way, re-run Setup Weapon Grip. It then puts the grab point in front of the palm and adds
-`FingerCurl`.
+**Fingers for another Tripo character** (Newton): the script's measurements are generic, but
+its constants were checked on the chibi only. Point it at the other FBX and read the printed
+joints and the preview before trusting it. The bone names are the ones `FingerBoneMap` expects.
 
 ## 5. Known limitations
 
-- **The chibi's hand stays open.** No finger bones (see §1). The grab point compensates by
-  sitting inside the hand, but the fingers don't visibly wrap.
-- **`FingerCurl` is untested on a real finger rig.** Its maths has EditMode tests, but no rig
-  in the project has finger bones. Expect a tuning pass on the curl angles, especially the
-  thumb, the first time one does.
+- **Short fingers, thick palm.** The chibi's curled fingers wrap the front and underside of
+  the handle but can't reach all the way round to the palm, and the thumb's tip hangs a little
+  below the fist. Fine at game-camera distance; a close-up would want longer fingers in the
+  mesh.
+- **Low-poly fingers.** Three edge loops per finger, so a bend is a crease between two rigid
+  segments, not a rounded knuckle.
+- **The left hand has fingers too**, but nothing is held in it, so it has no `FingerCurl` and
+  its fingers only follow the clips. Its knuckle line slopes more than the right's, so an item
+  held in it would sit tilted about 15°.
 - **The thumb side on finger-less rigs comes from the T-pose convention** (thumbs forward at
   bind). A rig bound in another pose would hold the blade sideways; a rig with fingers gets it
   from the knuckles.
@@ -244,9 +286,11 @@ Either way, re-run Setup Weapon Grip. It then puts the grab point in front of th
 - **The grab point is named `WeaponSocket`** for the two name lookups above. A neutral name
   (`GrabPoint`) would need `WeaponClearanceSetup` and `TripoContactSheet` to look it up by
   component instead.
-- **The grip change moved the blade:**
-  - BladeBase moved 3.9 cm toward the knuckles and 1 cm toward the little finger.
-  - The blade now runs 0.78 m from the fist, not 0.85 m from the knob end.
-  - Its direction turned 5° and its roll is unchanged.
+- **The grip changes moved the blade:**
+  - The first grab point moved BladeBase 3.9 cm toward the knuckles and 1 cm toward the little
+    finger. The blade then ran 0.78 m from the fist, not 0.85 m from the knob end, and its
+    direction turned 5° with the roll unchanged.
+  - The closed fist moved the grab point again, 3.9 cm from the centre of the hand to in front
+    of the palm, and BladeBase with it.
   - WeaponClearance corrects every frame, so it still works, but its measured table in
-    `WeaponClearance.md` predates this.
+    `WeaponClearance.md` predates both moves.

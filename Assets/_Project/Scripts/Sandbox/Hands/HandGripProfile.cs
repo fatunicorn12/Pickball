@@ -39,10 +39,19 @@ namespace Pickleball.Sandbox.Hands
                  "pushes fingertips into the palm; too low leaves a claw.")]
         [SerializeField] private Vector3 fingerCurl = new(75f, 95f, 55f);
 
-        [Tooltip("How far each thumb joint bends over the fingers, °: proximal, " +
-                 "intermediate, distal. Smaller than the fingers': a thumb wraps " +
-                 "only part-way round a handle.")]
+        [Tooltip("How far each thumb joint bends toward the palm, °: proximal, " +
+                 "intermediate, distal, about the thumb's own bend axis. Smaller " +
+                 "than the fingers': a thumb wraps only part-way round a handle. " +
+                 "Too high points the thumb straight down out of the fist.")]
         [SerializeField] private Vector3 thumbCurl = new(25f, 25f, 30f);
+
+        [Tooltip("How far the thumb swings across the palm toward the little " +
+                 "finger at its first joint, °, before it bends. More lays the " +
+                 "thumb over the curled fingers; 0 leaves it beside the index " +
+                 "finger. A thumb that points along the handle at rest (Mixamo " +
+                 "T-pose) wants little; the chibi's points along its fingers and " +
+                 "wants about 80.")]
+        [Range(0f, 120f)] [SerializeField] private float thumbSwing = 0f;
 
         [Tooltip("How fully the fist replaces the clips' finger poses while the " +
                  "hand holds something (0-1). 1 is a locked fist in every clip; " +
@@ -62,6 +71,8 @@ namespace Pickleball.Sandbox.Hands
         public Vector3 FingerCurl => fingerCurl;
         /// <summary>Thumb bend per joint (proximal, intermediate, distal), °.</summary>
         public Vector3 ThumbCurl => thumbCurl;
+        /// <summary>Thumb swing across the palm at its first joint, °.</summary>
+        public float ThumbSwing => thumbSwing;
         /// <summary>How fully the fist replaces the clips' fingers, 0-1.</summary>
         public float CurlWeight => curlWeight;
         /// <summary>Close/open rate, 1/s.</summary>

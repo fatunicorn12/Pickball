@@ -256,6 +256,31 @@ public static class ChibiSandboxSetup
         { "RightFoot", "R_Foot" }, { "RightToes", "R_ToeBase" },
     };
 
+    /// <summary>
+    /// Finger chains, mapped only on a rig that has them. Tripo's auto-rig
+    /// gives none; the chibi got them from Tools/Blender/chibi_add_fingers.py
+    /// ("R_Index1".."R_Index3", thumb to "Pinky", per side). Newton and Birdy
+    /// share <see cref="SetupRig"/> and have none, so a missing finger is
+    /// skipped quietly instead of warned about bone by bone.
+    ///
+    /// Keyed by Unity's own human bone names, which for fingers contain
+    /// spaces ("Right Index Proximal"), so they come from HumanTrait rather
+    /// than being typed.
+    /// </summary>
+    static readonly Dictionary<string, string> FingerBoneMap = BuildFingerBoneMap();
+
+    static Dictionary<string, string> BuildFingerBoneMap()
+    {
+        string[] digits = { "Thumb", "Index", "Middle", "Ring", "Pinky" };
+        var map = new Dictionary<string, string>();
+        foreach (var (thumb, prefix) in new[] { (HumanBodyBones.LeftThumbProximal, "L"),
+                                                (HumanBodyBones.RightThumbProximal, "R") })
+            for (int d = 0; d < digits.Length; d++)          // thumb, index, middle, ring, little
+                for (int k = 0; k < 3; k++)                   // proximal, intermediate, distal
+                    map[HumanTrait.BoneName[(int)thumb + d * 3 + k]] = $"{prefix}_{digits[d]}{k + 1}";
+        return map;
+    }
+
     // Leftovers from the earlier "Animation Preview" version of this script.
     const string OldControllerPath = AnimDir + "/ChibiPreview.controller";
     /// <summary>An older 6-state copy of the locomotion controller from before
@@ -596,6 +621,7 @@ public static class ChibiSandboxSetup
         importer.animationType = ModelImporterAnimationType.Human;
         importer.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
         importer.SaveAndReimport();
+        RecaptureStaleSkeleton(importer);
 
         var desc = importer.humanDescription;
         var present = new HashSet<string>(desc.skeleton?.Select(s => s.name)
@@ -624,11 +650,77 @@ public static class ChibiSandboxSetup
             return false;
         }
 
+        // Fingers only where the rig has them (see FingerBoneMap).
+        int fingers = 0;
+        foreach (var kv in FingerBoneMap)
+        {
+            if (!present.Contains(kv.Value)) continue;
+            bones.Add(new HumanBone
+            {
+                humanName = kv.Key,
+                boneName = kv.Value,
+                limit = new HumanLimit { useDefaultValues = true }
+            });
+            fingers++;
+        }
+
         desc.human = bones.ToArray();
         importer.humanDescription = desc;
         importer.SaveAndReimport();
-        Debug.Log($"Rig: Humanoid, {bones.Count} bones mapped, scale {targetHeight}.");
+        Debug.Log($"Rig: Humanoid, {bones.Count} bones mapped ({fingers} of them finger bones), " +
+                  $"scale {targetHeight}.");
         return true;
+    }
+
+    /// <summary>
+    /// Adds the model's new bones to the stored reference skeleton, keeping
+    /// every entry it already had exactly as stored.
+    ///
+    /// The importer captures that skeleton once, when the avatar is first set
+    /// up, and keeps it; bones added to the FBX afterwards (the chibi's
+    /// fingers) are missing from it, so they can be neither found nor mapped.
+    /// The stored entries are not a plain capture either: the chibi's carry a
+    /// T-pose correction (feet turned about 20°, arms 1-7°) that a fresh
+    /// capture would lose, moving the feet and arms in every clip. So the
+    /// skeleton is dropped and re-captured (as BirdyNpcSetup does after a
+    /// rescale), which gives the new bones their bind pose and every entry its
+    /// parent, and then each entry that was there before gets its stored pose
+    /// back. Does nothing when the skeleton is complete, so other rigs'
+    /// re-runs are untouched.
+    /// </summary>
+    static void RecaptureStaleSkeleton(ModelImporter importer)
+    {
+        var stored = importer.humanDescription.skeleton;
+        var model = AssetDatabase.LoadAssetAtPath<GameObject>(importer.assetPath);
+        if (stored == null || stored.Length == 0 || model == null) return;
+
+        var kept = new Dictionary<string, SkeletonBone>();
+        foreach (var s in stored) kept.TryAdd(s.name, s);
+        var missing = model.GetComponentsInChildren<Transform>(true)
+            .Where(t => t != model.transform && !kept.ContainsKey(t.name))
+            .Select(t => t.name).ToList();
+        if (missing.Count == 0) return;
+
+        var desc = importer.humanDescription;
+        desc.skeleton = System.Array.Empty<SkeletonBone>();
+        desc.human = System.Array.Empty<HumanBone>();
+        importer.humanDescription = desc;
+        importer.SaveAndReimport();
+
+        desc = importer.humanDescription;
+        var skeleton = desc.skeleton;
+        for (int i = 0; i < skeleton.Length; i++)
+        {
+            if (!kept.TryGetValue(skeleton[i].name, out var old)) continue;
+            skeleton[i].position = old.position;
+            skeleton[i].rotation = old.rotation;
+            skeleton[i].scale = old.scale;
+        }
+        desc.skeleton = skeleton;
+        importer.humanDescription = desc;
+        Debug.Log($"{Path.GetFileName(importer.assetPath)}: reference skeleton extended with " +
+                  $"{missing.Count} bone(s) the model has ({string.Join(", ", missing.Take(4))}" +
+                  $"{(missing.Count > 4 ? ", ..." : "")}); the {kept.Count} stored entries are unchanged.");
     }
 
     static Dictionary<string, AnimationClip> SetupClips(
