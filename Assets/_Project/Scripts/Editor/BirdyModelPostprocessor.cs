@@ -50,6 +50,35 @@ using UnityEngine;
 ///    head's up, so the axis is measured, not assumed. Resting at its origin
 ///    with up pointing up, no part of the rotor is below the ground.
 ///
+/// <b>No see-through gaps (v4).</b> Rendered with backfaces in flat colours,
+/// these are what let you see through him:
+/// 6. <i>Inside-out parts.</i> The right chest-side patch (tripo_part_15) and
+///    the left leg (tripo_part_11) were exported with their winding and
+///    normals both pointing inward, the mirror of their left/right twins.
+///    With backface culling the patch vanished, leaving a hole through his
+///    right side in every pose. Each part in <see cref="FacingTwins"/> is
+///    compared face by face with its twin mirrored across X ("use his other
+///    side"), and if they face opposite ways its triangles and normals are
+///    reversed and its tangents recomputed.
+/// 7. <i>The chest followed the thighs.</i> Tripo weighted the chest (41%),
+///    the chest-side patches and the compass to the thigh-twist bones, so
+///    any leg motion pulled their seams apart. Every part outside
+///    <see cref="LegParts"/> has its leg-chain weight moved to the nearest
+///    spine bone, as rule 2 does for the arms.
+/// 8. <i>Seams tore when the wings or the head moved.</i> The wing roots
+///    (100% arm) sat on the spine-weighted patches only in the T-pose, and
+///    the helmet's rims carried a different head/spine mix from the chest and
+///    head under them. Each follower in <see cref="Seams"/> takes, on the
+///    rims where it touches a leader at bind, the weights of the leader
+///    surface it touches, blending back to its own over a band. So a wing
+///    root stretches like a shoulder instead of lifting off the body.
+/// 9. <i>Holes nothing covers.</i> The radio box's open side (and six small
+///    holes on it), three centimetre holes in the head and one in each boot
+///    are capped with a fan of triangles. Each triangle takes the texture
+///    colour of the surface at its rim, and the fan is skinned like the rim.
+///    A rim of fewer than three open edges is a crack, not a hole, and is
+///    left alone (the rotor hub has one, 9 mm long).
+///
 /// Deterministic: it rewrites weights computed fresh from the FBX on every
 /// import, so reimporting gives the same mesh and the same rotor bone. Bump
 /// <see cref="GetVersion"/> when the rules change so Unity reimports the model.
@@ -88,7 +117,63 @@ public class BirdyModelPostprocessor : AssetPostprocessor
     /// Forearm, Hand, or one of their twist bones.</summary>
     public static bool IsArmChain(string boneName) => boneName != null && ArmChain.IsMatch(boneName);
 
-    public override uint GetVersion() => 3;
+    /// <summary>Parts that are a mirror image of a twin on the other side and
+    /// must face the same way: part ← its twin, which is the reference.</summary>
+    static readonly (string part, string twin)[] FacingTwins =
+    {
+        ("tripo_part_15", "tripo_part_14"),     // right chest-side patch ← left
+        ("tripo_part_11", "tripo_part_10"),     // left leg ← right
+    };
+
+    /// <summary>The parts that should follow the legs: the legs, the boots,
+    /// the lower body (hips and belly), the tail, and the radio that rides on
+    /// the belly. Every other part sheds its leg-chain weight to the spine.</summary>
+    static readonly string[] LegParts =
+    {
+        "tripo_part_0", "tripo_part_3", "tripo_part_7", "tripo_part_8", "tripo_part_9", "tripo_part_10",
+        "tripo_part_11",
+    };
+
+    static readonly Regex LegChain = new(@"^[LR]_(Thigh|Calf|Foot|ToeBase)(Twist\d+)?$");
+
+    /// <summary>Whether a bone is on a leg chain: Thigh, Calf, Foot, ToeBase,
+    /// or one of their twist bones.</summary>
+    public static bool IsLegChain(string boneName) => boneName != null && LegChain.IsMatch(boneName);
+
+    /// <summary>
+    /// Seams where parts meet edge to edge and must move together: a
+    /// follower's open rims that lie on any of its leaders take, vertex by
+    /// vertex, the weights of the leader surface they touch, blending back to
+    /// the follower's own over the band, m. Leaders never follow their
+    /// followers, and the list runs so each leader is final before anything
+    /// follows it.
+    /// </summary>
+    static readonly (string follower, string[] leaders, float band)[] Seams =
+    {
+        ("tripo_part_0", new[] { "tripo_part_6" }, 0.04f),                                   // belly's top rim ← chest
+        ("tripo_part_14", new[] { "tripo_part_6", "tripo_part_0" }, 0.03f),                  // left chest-side patch ← chest, back
+        ("tripo_part_15", new[] { "tripo_part_6", "tripo_part_0" }, 0.03f),                  // right chest-side patch ← chest, back
+        ("tripo_part_13", new[] { "tripo_part_6", "tripo_part_14", "tripo_part_15" }, 0.04f), // helmet's lower rim ← chest, patches
+        ("tripo_part_13", new[] { "tripo_part_2" }, 0.03f),                                  // helmet's edge ← head
+        ("tripo_part_3", new[] { "tripo_part_0" }, 0.03f),                                   // tail root ← belly
+        ("tripo_part_4", new[] { "tripo_part_14", "tripo_part_0", "tripo_part_6" }, 0.07f),  // left wing root ← patch, back, chest
+        ("tripo_part_5", new[] { "tripo_part_15", "tripo_part_0", "tripo_part_6" }, 0.07f),  // right wing root ← patch, back, chest
+    };
+
+    /// <summary>A rim is a seam with the leader when its vertices are this
+    /// close to the leader at bind (median), m.</summary>
+    const float SeamTouch = 0.01f;
+
+    /// <summary>An open hole is capped when nothing covers it at bind: the
+    /// median distance from its rim to every other part, m.</summary>
+    const float UncoveredGap = 0.02f;
+
+    /// <summary>Rims spanning more than this, m (bounding-box diagonal), are
+    /// openings another part is meant to fill, not holes. (Every such opening
+    /// on Birdy is also covered at bind, so this is a second guard.)</summary>
+    const float MaxCapSize = 0.25f;
+
+    public override uint GetVersion() => 4;
 
     void OnPostprocessModel(GameObject root)
     {
@@ -135,9 +220,43 @@ public class BirdyModelPostprocessor : AssetPostprocessor
             ? AddRotorBone(rotorSmr, head)
             : $"no {RotorPart} or {HeadBone}; no rotor bone";
 
+        var holes = new List<string>();
+        foreach (var (part, twin) in FacingTwins)
+        {
+            var a = smrs.FirstOrDefault(s => s.name == part);
+            var b = smrs.FirstOrDefault(s => s.name == twin);
+            if (a != null && b != null && TurnRightWayOut(root, a, b, out float facing))
+                holes.Add($"{part} turned right way out (faced {facing:+0.00;-0.00} against mirrored {twin})");
+        }
+        foreach (var smr in smrs)
+        {
+            if (Array.IndexOf(LegParts, smr.name) >= 0 || smr.name == RotorPart) continue;
+            var influences = Read(smr);
+            float leg = Share(influences, IsLegChain);
+            if (leg <= 0f) continue;
+            MoveChainToSpine(influences, RootSpace(root, smr), spine, root, IsLegChain);
+            Write(smr, influences);
+            holes.Add($"{smr.name} leg-chain {leg * 100f:0}% -> spine");
+        }
+        foreach (var (follower, leaders, band) in Seams)
+        {
+            var f = smrs.FirstOrDefault(s => s.name == follower);
+            var l = smrs.Where(s => leaders.Contains(s.name)).ToArray();
+            if (f == null || l.Length == 0) continue;
+            int sealed_ = SealSeam(root, f, l, band, out int rims);
+            if (sealed_ > 0)
+                holes.Add($"{follower} sealed to {string.Join("/", leaders)} ({rims} rim(s), {sealed_} vertices within {band * 100f:0} cm)");
+        }
+        foreach (var smr in smrs)
+        {
+            int caps = CapUncoveredHoles(root, smr, smrs);
+            if (caps > 0) holes.Add($"{smr.name} {caps} open hole(s) capped");
+        }
+
         Debug.Log($"BirdyModelPostprocessor: {rigidParts} part(s) made rigid to {HeadBone}, " +
                   $"{rigidVerts} vertex weight(s) set to 100% {HeadBone}; accessories rebound off the " +
-                  $"wings: {(report.Count > 0 ? string.Join("; ", report) : "none")}; {rotor}.");
+                  $"wings: {(report.Count > 0 ? string.Join("; ", report) : "none")}; {rotor}; " +
+                  $"holes: {(holes.Count > 0 ? string.Join("; ", holes) : "none")}.");
     }
 
     // ------------------------------------------------------------- weights
@@ -220,16 +339,19 @@ public class BirdyModelPostprocessor : AssetPostprocessor
         return verts;
     }
 
-    static float ArmShare(List<(Transform bone, float w)>[] influences)
+    static float ArmShare(List<(Transform bone, float w)>[] influences) => Share(influences, IsArmChain);
+
+    /// <summary>Share of all the weight that is on bones matching <paramref name="chain"/>.</summary>
+    static float Share(List<(Transform bone, float w)>[] influences, Func<string, bool> chain)
     {
-        float arm = 0f, total = 0f;
+        float on = 0f, total = 0f;
         foreach (var list in influences)
             foreach (var (bone, w) in list)
             {
                 total += w;
-                if (IsArmChain(bone.name)) arm += w;
+                if (chain(bone.name)) on += w;
             }
-        return total > 0f ? arm / total : 0f;
+        return total > 0f ? on / total : 0f;
     }
 
     /// <summary>Each vertex takes the influences of the nearest vertex of the
@@ -270,6 +392,12 @@ public class BirdyModelPostprocessor : AssetPostprocessor
     /// <summary>Moves each vertex's arm-chain weight to the spine bone nearest it.</summary>
     static void MoveArmToSpine(List<(Transform bone, float w)>[] influences, Vector3[] positions,
                                Transform[] spine, GameObject root)
+        => MoveChainToSpine(influences, positions, spine, root, IsArmChain);
+
+    /// <summary>Moves each vertex's weight on bones matching <paramref name="chain"/>
+    /// to the spine bone nearest it.</summary>
+    static void MoveChainToSpine(List<(Transform bone, float w)>[] influences, Vector3[] positions,
+                                 Transform[] spine, GameObject root, Func<string, bool> chain)
     {
         if (spine.Length == 0) return;
         var spineAt = spine.Select(b => root.transform.InverseTransformPoint(b.position)).ToArray();
@@ -279,7 +407,7 @@ public class BirdyModelPostprocessor : AssetPostprocessor
             var kept = new List<(Transform, float)>(4);
             foreach (var (bone, w) in influences[v])
             {
-                if (IsArmChain(bone.name)) moved += w;
+                if (chain(bone.name)) moved += w;
                 else kept.Add((bone, w));
             }
             if (moved <= 0f) continue;
@@ -414,6 +542,332 @@ public class BirdyModelPostprocessor : AssetPostprocessor
         {
             second = Times(second);
             second = (second - Vector3.Dot(second, first) * first).normalized;
+        }
+    }
+
+    // --------------------------------------------------------------- holes
+
+    /// <summary>
+    /// Rule 6. Compares each face of <paramref name="part"/> with the nearest
+    /// face of its <paramref name="twin"/> mirrored across X. If they face
+    /// opposite ways on average (the part was exported inside out), reverses
+    /// every triangle and normal and recomputes the tangents. Returns whether
+    /// it turned the part; <paramref name="facing"/> is the mean dot, +1 when
+    /// they agree.
+    /// </summary>
+    static bool TurnRightWayOut(GameObject root, SkinnedMeshRenderer part, SkinnedMeshRenderer twin, out float facing)
+    {
+        var (pc, pn) = Faces(root, part);
+        var (tc, tn) = Faces(root, twin);
+        float dot = 0f;
+        int n = 0;
+        for (int i = 0; i < pc.Count; i += 2)
+        {
+            var m = pc[i];
+            m.x = -m.x;
+            int best = 0;
+            float bd = float.PositiveInfinity;
+            for (int j = 0; j < tc.Count; j++)
+            {
+                float d = (tc[j] - m).sqrMagnitude;
+                if (d < bd) { bd = d; best = j; }
+            }
+            var mirrored = tn[best];
+            mirrored.x = -mirrored.x;
+            dot += Vector3.Dot(mirrored, pn[i]);
+            n++;
+        }
+        facing = n > 0 ? dot / n : 1f;
+        if (facing >= 0f) return false;
+
+        var mesh = part.sharedMesh;
+        for (int s = 0; s < mesh.subMeshCount; s++)
+        {
+            var tris = mesh.GetTriangles(s);
+            for (int t = 0; t < tris.Length; t += 3) (tris[t + 1], tris[t + 2]) = (tris[t + 2], tris[t + 1]);
+            mesh.SetTriangles(tris, s, false);
+        }
+        var normals = mesh.normals;
+        for (int v = 0; v < normals.Length; v++) normals[v] = -normals[v];
+        mesh.normals = normals;
+        if (mesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.Tangent)) mesh.RecalculateTangents();
+        return true;
+    }
+
+    /// <summary>Face centres and geometric normals (Unity's winding) of a part, in root space.</summary>
+    static (List<Vector3> centres, List<Vector3> normals) Faces(GameObject root, SkinnedMeshRenderer smr)
+    {
+        var p = RootSpace(root, smr);
+        var tris = smr.sharedMesh.triangles;
+        var centres = new List<Vector3>(tris.Length / 3);
+        var normals = new List<Vector3>(tris.Length / 3);
+        for (int t = 0; t < tris.Length; t += 3)
+        {
+            Vector3 a = p[tris[t]], b = p[tris[t + 1]], c = p[tris[t + 2]];
+            var cross = Vector3.Cross(b - a, c - a);
+            if (cross.sqrMagnitude < 1e-16f) continue;
+            centres.Add((a + b + c) / 3f);
+            normals.Add(cross.normalized);
+        }
+        return (centres, normals);
+    }
+
+    /// <summary>
+    /// Rule 8. The rims of <paramref name="follower"/> that lie on its
+    /// <paramref name="leaders"/> at bind (open edges whose median distance to
+    /// them is within <see cref="SeamTouch"/>) take, vertex by vertex, the
+    /// weights of the nearest leader vertex, blending back to the follower's
+    /// own over <paramref name="band"/>. The two then move as one at the seam,
+    /// and the follower stretches instead of tearing away. Returns how many
+    /// vertices changed.
+    /// </summary>
+    static int SealSeam(GameObject root, SkinnedMeshRenderer follower, SkinnedMeshRenderer[] leaders, float band,
+                        out int rims)
+    {
+        rims = 0;
+        var fp = RootSpace(root, follower);
+        var lp = leaders.Select(l => RootSpace(root, l)).ToArray();
+        var lw = leaders.Select(Read).ToArray();
+        (float d, int leader, int i) Touch(Vector3 q)
+        {
+            (float d, int leader, int i) best = (float.PositiveInfinity, -1, -1);
+            for (int l = 0; l < lp.Length; l++)
+            {
+                var (d, i) = Nearest(lp[l], q);
+                if (d < best.d) best = (d, l, i);
+            }
+            return best;
+        }
+
+        var rim = new List<int>();
+        foreach (var loop in new Rims(follower.sharedMesh).Loops)
+        {
+            var d = loop.Select(v => Touch(fp[v]).d).OrderBy(x => x).ToList();
+            if (d[d.Count / 2] > SeamTouch) continue;
+            rims++;
+            rim.AddRange(loop);
+        }
+        if (rim.Count == 0) return 0;
+
+        // The weights of the leader surface each rim vertex sits on.
+        var rimWeights = rim.Select(v => { var t = Touch(fp[v]); return lw[t.leader][t.i]; }).ToArray();
+        var fw = Read(follower);
+        int changed = 0;
+        for (int v = 0; v < fp.Length; v++)
+        {
+            int nearest = -1;
+            float best = band;
+            for (int r = 0; r < rim.Count; r++)
+            {
+                float d = Vector3.Distance(fp[v], fp[rim[r]]);
+                if (d < best) { best = d; nearest = r; }
+            }
+            if (nearest < 0) continue;
+            float u = 1f - best / band;
+            float s = u * u * (3f - 2f * u);
+            var blended = new List<(Transform, float)>(8);
+            foreach (var (bone, w) in rimWeights[nearest]) blended.Add((bone, w * s));
+            foreach (var (bone, w) in fw[v]) blended.Add((bone, w * (1f - s)));
+            fw[v] = blended;
+            changed++;
+        }
+        Write(follower, fw);
+        return changed;
+    }
+
+    static (float d, int i) Nearest(Vector3[] points, Vector3 q)
+    {
+        int best = 0;
+        float bd = float.PositiveInfinity;
+        for (int i = 0; i < points.Length; i++)
+        {
+            float d = (points[i] - q).sqrMagnitude;
+            if (d < bd) { bd = d; best = i; }
+        }
+        return (Mathf.Sqrt(bd), best);
+    }
+
+    /// <summary>
+    /// Rule 9. Fills each open hole in <paramref name="smr"/> that nothing
+    /// covers at bind (its rim at least <see cref="UncoveredGap"/> from every
+    /// other part, its rim spanning under <see cref="MaxCapSize"/>) with a
+    /// fan of triangles from the rim's centre to each of its open edges (so
+    /// any rim shape works, not only a simple ring). The cap faces away from the
+    /// part's centre, each triangle takes the texture colour of its rim vertex
+    /// (so it matches the surface around it, whatever the UV layout), and its
+    /// vertices are skinned like the rim (the centre like the rim's average).
+    /// Returns how many holes it capped.
+    /// </summary>
+    static int CapUncoveredHoles(GameObject root, SkinnedMeshRenderer smr, SkinnedMeshRenderer[] all)
+    {
+        var mesh = smr.sharedMesh;
+        if (mesh.blendShapeCount > 0) return 0;
+        var rims = new Rims(mesh);
+        var mine = RootSpace(root, smr);
+        var others = all.Where(s => s != smr).Select(s => RootSpace(root, s)).ToArray();
+        var verts = mesh.vertices;
+        var holes = new List<(int a, int b)[]>();
+        foreach (var edges in rims.Edges)
+        {
+            if (edges.Length < 3) continue;
+            var span = new Bounds(mine[edges[0].a], Vector3.zero);
+            foreach (var (ea, eb) in edges) { span.Encapsulate(mine[ea]); span.Encapsulate(mine[eb]); }
+            if (span.size.magnitude > MaxCapSize) continue;
+            var gaps = edges.Select(e => others.Min(o => Nearest(o, mine[e.a]).d)).OrderBy(x => x).ToList();
+            if (gaps[gaps.Count / 2] < UncoveredGap) continue;
+            holes.Add(edges);
+        }
+        if (holes.Count == 0) return 0;
+
+        var centre = verts.Aggregate(Vector3.zero, (a, b) => a + b) / verts.Length;
+        var normals = new List<Vector3>(); mesh.GetNormals(normals);
+        if (normals.Count != verts.Length) return 0;
+        var uvs = new List<Vector2>(); mesh.GetUVs(0, uvs);
+        var extraUvs = new List<(int channel, List<Vector4> values)>();
+        for (int ch = 1; ch < 8; ch++)
+        {
+            var l = new List<Vector4>();
+            mesh.GetUVs(ch, l);
+            if (l.Count == verts.Length) extraUvs.Add((ch, l));
+        }
+        var weights = new List<BoneWeight>(mesh.boneWeights);
+        var positions = new List<Vector3>(verts);
+        var colors = new List<Color>(); mesh.GetColors(colors);
+        var tris = new List<int>(mesh.GetTriangles(0));
+        foreach (var edges in holes)
+        {
+            var rimVerts = edges.SelectMany(e => new[] { e.a, e.b }).Distinct().ToArray();
+            var c = rimVerts.Aggregate(Vector3.zero, (acc, v) => acc + verts[v]) / rimVerts.Length;
+            var outward = (c - centre).normalized;
+            var cw = Average(rimVerts.Select(v => weights[v]));
+            foreach (var (ea, eb) in edges)
+            {
+                int a = ea, b = eb;
+                Vector3 pa = verts[a], pb = verts[b];
+                var n = Vector3.Cross(pa - c, pb - c);
+                if (n.sqrMagnitude < 1e-16f) continue;
+                if (Vector3.Dot(n, outward) < 0f) { (a, b) = (b, a); (pa, pb) = (pb, pa); n = -n; }
+                n.Normalize();
+                int start = positions.Count;
+                positions.Add(c); positions.Add(pa); positions.Add(pb);
+                for (int k = 0; k < 3; k++) normals.Add(n);
+                var uv = uvs.Count > 0 ? uvs[ea] : Vector2.zero;
+                if (uvs.Count > 0) { uvs.Add(uv); uvs.Add(uv); uvs.Add(uv); }
+                if (colors.Count > 0) { colors.Add(colors[a]); colors.Add(colors[a]); colors.Add(colors[b]); }
+                foreach (var (_, values) in extraUvs) { values.Add(values[a]); values.Add(values[a]); values.Add(values[b]); }
+                weights.Add(cw); weights.Add(weights[a]); weights.Add(weights[b]);
+                tris.Add(start); tris.Add(start + 1); tris.Add(start + 2);
+            }
+        }
+        if (positions.Count > 65535) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh.SetVertices(positions);
+        mesh.SetNormals(normals);
+        if (uvs.Count > 0) mesh.SetUVs(0, uvs);
+        foreach (var (channel, values) in extraUvs) mesh.SetUVs(channel, values);
+        if (colors.Count > 0) mesh.SetColors(colors);
+        mesh.boneWeights = weights.ToArray();
+        mesh.SetTriangles(tris, 0, true);
+        if (mesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.Tangent)) mesh.RecalculateTangents();
+        return holes.Count;
+    }
+
+    /// <summary>The weighted average of several vertices' bone weights, top four kept.</summary>
+    static BoneWeight Average(IEnumerable<BoneWeight> ws)
+    {
+        var sum = new Dictionary<int, float>();
+        void Add(int i, float w) { if (w > 0f) sum[i] = (sum.TryGetValue(i, out var s) ? s : 0f) + w; }
+        foreach (var w in ws)
+        {
+            Add(w.boneIndex0, w.weight0); Add(w.boneIndex1, w.weight1);
+            Add(w.boneIndex2, w.weight2); Add(w.boneIndex3, w.weight3);
+        }
+        var top = sum.OrderByDescending(k => k.Value).ThenBy(k => k.Key).Take(4).ToList();
+        float total = top.Sum(k => k.Value);
+        var bw = new BoneWeight();
+        for (int k = 0; k < top.Count; k++)
+        {
+            float w = total > 0f ? top[k].Value / total : 0f;
+            switch (k)
+            {
+                case 0: bw.boneIndex0 = top[k].Key; bw.weight0 = w; break;
+                case 1: bw.boneIndex1 = top[k].Key; bw.weight1 = w; break;
+                case 2: bw.boneIndex2 = top[k].Key; bw.weight2 = w; break;
+                default: bw.boneIndex3 = top[k].Key; bw.weight3 = w; break;
+            }
+        }
+        return bw;
+    }
+
+    /// <summary>
+    /// A mesh's open edges (used by one triangle), with vertices welded by
+    /// position so UV seams don't count as edges, grouped into connected rims.
+    /// <see cref="Loops"/> lists every vertex index (split copies included)
+    /// on each rim; <see cref="Edges"/> gives each rim's open edges as pairs of
+    /// representative vertices.
+    /// </summary>
+    sealed class Rims
+    {
+        public readonly List<int[]> Loops = new();
+        public readonly List<(int a, int b)[]> Edges = new();
+
+        public Rims(Mesh mesh)
+        {
+            var verts = mesh.vertices;
+            var key = new Dictionary<Vector3Int, int>();
+            var weld = new int[verts.Length];
+            var rep = new List<int>();
+            for (int v = 0; v < verts.Length; v++)
+            {
+                var k = new Vector3Int(Mathf.RoundToInt(verts[v].x * 1e4f), Mathf.RoundToInt(verts[v].y * 1e4f),
+                                       Mathf.RoundToInt(verts[v].z * 1e4f));
+                if (!key.TryGetValue(k, out int id)) { id = rep.Count; key[k] = id; rep.Add(v); }
+                weld[v] = id;
+            }
+            var count = new Dictionary<(int, int), int>();
+            var tris = mesh.triangles;
+            for (int t = 0; t < tris.Length; t += 3)
+                for (int e = 0; e < 3; e++)
+                {
+                    int a = weld[tris[t + e]], b = weld[tris[t + (e + 1) % 3]];
+                    if (a == b) continue;
+                    var k = a < b ? (a, b) : (b, a);
+                    count[k] = count.TryGetValue(k, out int n) ? n + 1 : 1;
+                }
+            var open = count.Where(kv => kv.Value == 1).Select(kv => kv.Key).OrderBy(k => k).ToList();
+            var adj = new SortedDictionary<int, List<int>>();
+            foreach (var (a, b) in open)
+            {
+                if (!adj.TryGetValue(a, out var la)) adj[a] = la = new List<int>();
+                if (!adj.TryGetValue(b, out var lb)) adj[b] = lb = new List<int>();
+                la.Add(b); lb.Add(a);
+            }
+            var members = new Dictionary<int, List<int>>();
+            for (int v = 0; v < weld.Length; v++)
+            {
+                if (!adj.ContainsKey(weld[v])) continue;
+                if (!members.TryGetValue(weld[v], out var l)) members[weld[v]] = l = new List<int>();
+                l.Add(v);
+            }
+            var component = new Dictionary<int, int>();
+            foreach (int start in adj.Keys)
+            {
+                if (component.ContainsKey(start)) continue;
+                int id = Loops.Count;
+                var comp = new List<int>();
+                var stack = new Stack<int>();
+                stack.Push(start);
+                component[start] = id;
+                while (stack.Count > 0)
+                {
+                    int x = stack.Pop();
+                    comp.Add(x);
+                    foreach (int y in adj[x])
+                        if (!component.ContainsKey(y)) { component[y] = id; stack.Push(y); }
+                }
+                Loops.Add(comp.SelectMany(w => members[w]).OrderBy(v => v).ToArray());
+                Edges.Add(open.Where(e => component.TryGetValue(e.Item1, out int c) && c == id)
+                              .Select(e => (rep[e.Item1], rep[e.Item2])).ToArray());
+            }
         }
     }
 }

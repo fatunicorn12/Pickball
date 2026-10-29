@@ -19,13 +19,19 @@ off about Newton.
   `Prefabs/Npc/Birdy.prefab`.
 - **Setup:** `Scripts/Editor/BirdyNpcSetup.cs`: **Tools ▸ Pickleball ▸ Setup Birdy NPC**,
   **Rebuild Birdy Animator**, **Diagnostics ▸ Report Birdy Poses**; and
-  `Scripts/Editor/BirdyModelPostprocessor.cs` (import-time skin fix and the rotor's bone,
-  Birdy.fbx only); `Scripts/Editor/BirdyUalTrialSetup.cs`: **Setup Birdy UAL Trial** (makes
+  `Scripts/Editor/BirdyModelPostprocessor.cs` (import-time skin fix, the rotor's bone, and the
+  see-through fixes, Birdy.fbx only); `Scripts/Editor/BirdyUalTrialSetup.cs`: **Setup Birdy UAL Trial** (makes
   the death clip, and an all-UAL trial controller).
 - **Tests:** `Tests/EditMode/Npc/`, plus `Tests/EditMode/Combat/XpExemptionTests.cs`. Three
   suites drive shipped assets (category `Assets`):
   - `BirdyControllerTests`: the shipped controller and prefab.
   - `BirdyRotorTests`: the rotor's spin and fall through the runtime components.
+  - `BirdyModelTests`: the imported mesh as `BirdyModelPostprocessor` v4 leaves it. It checks
+    four things:
+    - no part is inside out against its mirror twin;
+    - only the lower body follows the legs;
+    - every small hole is covered at bind;
+    - the seams stay closed (p90 under 1.2 cm) in idle, talk, excited and thinking.
   - `BirdyUalControllerTests`: the trial controller.
 
 ## 1. Purpose and player-facing feel
@@ -152,6 +158,23 @@ time and would freeze while the conversation pauses the game.
      - Resting at its origin with up pointing up, no part of the rotor is below the ground.
      - Nothing in the clips drives the bone; `NpcRotor` does. Rotor drift relative to the head is
        0.0 cm in every state, because in the Editor the bone stays at its rest pose on the head.
+   - *You could see through him (v4).* The user saw a missing piece of his body. Rendered
+     against flat magenta with backfaces in a flat colour per part, from front, back, both sides
+     and both three-quarter views, in bind, idle, talk, excited and thinking, these were the
+     gaps. Each has its own fix:
+
+     | Gap | Cause | Fix |
+     |---|---|---|
+     | **A hole right through his right chest**, every pose, the bind pose included: the missing piece | The right chest-side patch (`tripo_part_15`) was exported inside out, with winding and normals both pointing inward (its faces met its mirrored twin `tripo_part_14` at a mean dot of −0.86). Backface culling dropped it, exposing the chest's side opening it covers. | The user's idea, "use his other side": each part is compared face by face with its twin mirrored across X, and if they face opposite ways its triangles and normals are reversed and its tangents recomputed. The left leg (`tripo_part_11`, −0.70 against `tripo_part_10`) was inside out too, and is fixed the same way. |
+     | Cracks around the chest seams in talk, excited and thinking | Tripo weighted the chest (41%), both chest-side patches (8–9%) and the compass (7%) to the thigh-twist bones, so leg motion pulled the chest away from the patches and the belly | Every part except the legs, boots, belly, tail and the radio that rides on the belly moves its leg-chain weight to the nearest spine bone, like the arm rule above |
+     | Gaps at both wing roots (up to 4–5.6 cm), seeing into the hollow wing | The wing roots are 100% arm. They met the spine-weighted chest-side patches only in the T-pose. | Seam sealing: a follower's open rims that touch its leaders at bind take, vertex by vertex, the weights of the leader surface they touch, blending back to the follower's own over a band. The wing root follows the patch, back and chest over 7 cm, so it stretches like a shoulder. |
+     | Slivers under the helmet when the head turns (up to 3.2 cm) | The helmet's lower rim and its edge over the head carried a different head/spine mix from the chest and head under them | Seam sealing: helmet ← chest and patches at its lower rim (4 cm band), and helmet ← head at its edge (3 cm) |
+     | Small cracks at the belly–chest seam and the tail root | The same weight mismatch | Seam sealing: belly ← chest (4 cm), tail ← belly (3 cm), patches ← chest and back (3 cm) |
+     | Holes nothing covers, even at bind: the radio box's open side (and six small holes on it), three 1 cm holes in the head, one in each boot | Missing faces in the Tripo mesh | Each is capped with a fan of triangles from its centre to every open edge. A triangle takes the texture colour at its rim vertex, and the fan is skinned like the rim. A hole qualifies if its rim is at least 2 cm from every other part and spans under 25 cm. A 9 mm crack in the rotor hub (two open edges, nothing to fill) is left alone. |
+
+     - The chest's own side openings (about 13 cm across) are not capped. The chest-side patches
+       fill them, and now stay on them.
+     - The import log line lists what each rule changed.
 5. **Rig.** `globalScale` is solved so the model is `TargetHeight` (1.15 m) tall: the renderer
    bounds measure 0.986 m at scale 1, so the scale is **1.166**. Humanoid, *Create From This
    Model*, with the shared Tripo bone map (`ChibiSandboxSetup.SetupRigPublic`, the same map as
@@ -415,12 +438,17 @@ until then it falls back to Talk.
   first static collider within half a metre of his feet's height), even if that spot is inside a
   wall or on a table edge. The spot is about 1.3 m behind where Birdy stood, and his talk ring
   keeps the ground around him level, so it hasn't shown.
-- **White slivers at the wing roots** when the wings fold. The harness tears are gone: the
-  accessories no longer follow the arms (import step 4). What remains is the seam where each
-  wing plank meets the body, at the front and back of the shoulder. The wings are flat planks
-  hinged at the shoulder, so folding them opens that joint. Narrowing the fold (40°, tried at 25°)
-  doesn't close it. It needs modelled geometry or blended weights across the seam (in Blender).
-- **The tail follows the left leg.** `tripo_part_3` (the tail) is weighted 61% to `L_CalfTwist01`.
+- **Hairline slivers at silhouette edges.** After the v4 fixes no gap opens wider than about
+  1 cm in any of the five poses checked. Separate overlapping parts (straps over the chest,
+  helmet flaps over the neck) still show the odd pixel of a part's inside edge-on. The wing
+  roots now stretch over 7 cm instead of tearing, which pinches the shoulder a little when the
+  wings fold fully.
+- **Gaps are checked in five poses only:** bind, Idle at 0.5, Talk_Talk at 0.3, Talk_Excited at
+  0.4 and Talk_Thinking at 0.5. `BirdyModelTests` covers four of them. A new clip with bigger
+  shoulder or neck motion could open a seam the bands don't reach. Re-render with backfaces
+  coloured (as above) after adding clips.
+- **The tail follows the left leg.** `tripo_part_3` (the tail) is weighted 61% to
+  `L_CalfTwist01`. Its root is sealed to the belly (v4), so it no longer tears away there.
   It barely shows in the idles and talks. In the death it goes into the floor from the start of
   the fall (t ≈ 0.35) and stays there.
 - **The death is only approximately grounded.** One lift for the whole model can't ground a body
@@ -473,8 +501,12 @@ until then it falls back to Talk.
   but the same states, parameters and transitions. Nothing references the states by file ID.
 - **Adding or bumping `BirdyModelPostprocessor` reimports models once.** Unity treats a model
   postprocessor and its version as a dependency of every model import. So the first Editor to
-  load a new one, or a new `GetVersion` (v3 here, for the rotor bone), reimports the project's FBX
-  files once. It only changes Birdy.fbx.
+  load a new one, or a new `GetVersion`, reimports the project's FBX files once: v3 for the
+  rotor bone, v4 for the see-through fixes. It only changes Birdy.fbx.
+  - The reverse holds too: a code change without a version bump does nothing. Unity reuses the
+    artifact it cached for that version.
+  - While iterating on the rules, force-reimport Birdy.fbx (right-click ▸ Reimport, or
+    `ImportAssetOptions.ForceUpdate`).
 - **Rest facing is captured in `OnEnable`.** A script reload mid-conversation makes the facing at
   that moment the new rest facing.
 - **Single-NPC setup script.** The import, rig, clip and prefab steps are generic but live in
