@@ -30,8 +30,6 @@ namespace Pickleball.Tests.Boss
 
         // ------------------------------------------------------------------ NaN
 
-        [Ignore("Known bug NB3: the <= 0 guard lets NaN through and Mathf.Min(NaN, Current) " +
-                "returns Current, so the hit is lethal. See Docs/Testing/QA-Assessment.md.")]
         [Test]
         public void Damage_NaN_IsIgnored()
         {
@@ -43,7 +41,6 @@ namespace Pickleball.Tests.Boss
             Assert.That(health.IsDead, Is.False);
         }
 
-        [Ignore("Known bug NB3: Heal(NaN) fills the bar. See Docs/Testing/QA-Assessment.md.")]
         [Test]
         public void Heal_NaN_IsIgnored()
         {
@@ -55,8 +52,6 @@ namespace Pickleball.Tests.Boss
             Assert.That(health.Current, Is.EqualTo(60f).Within(Tolerance));
         }
 
-        [Ignore("Known bug NB3: CreditDamageDealt(NaN) cashes in the whole grey pool. " +
-                "See Docs/Testing/QA-Assessment.md.")]
         [Test]
         public void CreditDamageDealt_NaN_IsIgnored()
         {

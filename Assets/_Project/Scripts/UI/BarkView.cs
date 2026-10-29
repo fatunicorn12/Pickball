@@ -5,28 +5,35 @@ using UnityEngine;
 namespace Pickleball.UI
 {
     /// <summary>
-    /// Subtitle line for a boss's barks: shows what <see cref="NewtonBarks"/> says,
-    /// then fades it out. Sits under the boss health bar so the voice reads as
-    /// coming from the name above it.
+    /// Subtitle line for a boss's barks: shows what an <see cref="IBarkSource"/>
+    /// (<see cref="NewtonBarks"/>, Hypatia's barks) says, then fades it out. Sits
+    /// under the boss health bar so the voice reads as coming from the name above it.
     /// </summary>
     public class BarkView : MonoBehaviour
     {
-        [SerializeField] private NewtonBarks source;
+        [Tooltip("A component implementing IBarkSource (NewtonBarks, HypatiaBarks).")]
+        [SerializeField] private MonoBehaviour source;
         [SerializeField] private TMP_Text text;
         [SerializeField] private float fadeSeconds = 0.5f;
 
         float _hideAt;
         float _duration;
+        IBarkSource _subscribed;
 
         void OnEnable()
         {
             if (text != null) text.alpha = 0f;
-            if (source != null) source.Spoke += Show;
+            if (source == null) return;
+            _subscribed = source as IBarkSource;
+            if (_subscribed != null) _subscribed.Spoke += Show;
+            else Debug.LogWarning($"[BarkView] {name}: source {source.GetType().Name} is not an IBarkSource; " +
+                                  "no lines will show.", this);
         }
 
         void OnDisable()
         {
-            if (source != null) source.Spoke -= Show;
+            if (_subscribed != null) _subscribed.Spoke -= Show;
+            _subscribed = null;
         }
 
         void Show(string line, float duration)
