@@ -155,7 +155,7 @@ namespace Pickleball.Sandbox
         public void Damage(float amount, Vector3 at, bool recoverable = true, bool continuous = false,
                            DamageKind kind = DamageKind.Physical)
         {
-            if (amount <= 0f || IsDead) return;
+            if (!IsFinite(amount) || amount <= 0f || IsDead) return;
 
             bool discrete = hitGraceSeconds > 0f
                             && HitGrace.IsDiscrete(amount, hitGraceMinDamage, continuous);
@@ -165,7 +165,7 @@ namespace Pickleball.Sandbox
             float raw = amount;
             if (IncomingDamageFilter != null) amount = IncomingDamageFilter(amount, at);
             if (IncomingDamageFilterByKind != null) amount = IncomingDamageFilterByKind(amount, at, kind);
-            if (amount <= 0f) return;
+            if (!IsFinite(amount) || amount <= 0f) return;
 
             float applied = Mathf.Min(amount, Current);
             Current -= applied;
@@ -205,7 +205,7 @@ namespace Pickleball.Sandbox
         /// owner just dealt — landing hits is how the pool is cashed in.</summary>
         public void CreditDamageDealt(float damageDealt)
         {
-            if (damageDealt <= 0f || Recoverable <= 0f || IsDead) return;
+            if (!IsFinite(damageDealt) || damageDealt <= 0f || Recoverable <= 0f || IsDead) return;
 
             float gained = Mathf.Min(damageDealt * regainPerDamageDealt, Recoverable);
             Current += gained;
@@ -215,11 +215,18 @@ namespace Pickleball.Sandbox
 
         public void Heal(float amount)
         {
-            if (amount <= 0f || IsDead) return;
+            if (!IsFinite(amount) || amount <= 0f || IsDead) return;
             Current = Mathf.Min(Current + amount, maxHealth);
             Recoverable = Mathf.Min(Recoverable, maxHealth - Current);
             Changed?.Invoke(this);
         }
+
+        /// <summary>NaN and infinity come from maths upstream (a falloff divided by
+        /// a zero distance, a filter multiplied by a NaN scale). Neither passes a
+        /// <c>&lt;= 0</c> test the way you would hope: NaN slips through it and
+        /// <c>Mathf.Min(NaN, Current)</c> returns Current, a kill. So every entry
+        /// point refuses them outright, before any state changes (QA NB3).</summary>
+        static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         public void ResetToFull()
         {
