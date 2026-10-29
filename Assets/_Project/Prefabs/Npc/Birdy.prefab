@@ -79,6 +79,8 @@ MonoBehaviour:
   regainGrace: 2.5
   regainDecay: 14
   regainPerDamageDealt: 0.9
+  hitGraceSeconds: 0
+  hitGraceMinDamage: 2
 --- !u!114 &595919318577739616
 MonoBehaviour:
   m_ObjectHideFlags: 0
