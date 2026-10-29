@@ -22,6 +22,16 @@ namespace Pickleball.Sandbox.Magic
     /// included until his owner opts in, is simply not slowed. The zone deals
     /// no damage. It never slows its owner.
     ///
+    /// The overlap query includes trigger colliders. Hypatia's projectiles have
+    /// no solid collider at all, only a small trigger sphere beside their
+    /// <see cref="ISlowable"/>, and an Ignore query never saw them. Including
+    /// triggers is safe because the only thing the zone ever does to a
+    /// candidate is <see cref="ISlowable.ApplySlow"/>: a trigger with no
+    /// ISlowable in its parents (talk rings, hit zones, training-station
+    /// volumes) is skipped before anything is read from it, and a target with
+    /// both a solid collider and a trigger is slowed once per tick (the
+    /// AlreadyApplied check).
+    ///
     /// The radius, height, multiplier and duration are read from the spell
     /// every frame, so live tuning reaches a zone already on the ground.
     /// </summary>
@@ -152,7 +162,7 @@ namespace Pickleball.Sandbox.Magic
             Vector3 middle = _centre + Vector3.up * half;
             float reach = Mathf.Sqrt(radius * radius + half * half);
             int count = Physics.OverlapSphereNonAlloc(middle, reach, _overlap, _spell.HitMask,
-                                                      QueryTriggerInteraction.Ignore);
+                                                      QueryTriggerInteraction.Collide);
             for (int i = 0; i < count; i++)
             {
                 var col = _overlap[i];

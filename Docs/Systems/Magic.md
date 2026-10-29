@@ -19,7 +19,7 @@ by a person yet. The spells were checked by a headless Play-mode harness on Trai
   calls `MagicSpellArtBuilder.AttachStatusReceiver` on each dummy it builds.
 - **Tests:** `Assets/_Project/Tests/EditMode/Magic/` (`ManaPoolTests`, `ManaTests`, `OrbMathTests`,
   `AimInputClaimsTests`, `SpellChannelTests`, `ChannelSignalsTests`, `SpellCooldownsTests`,
-  `SpellSelectionTests`, `SpellSelectInputTests`, `SlowLedgerTests`, `FreezeZoneTests`, `BurnTests`,
+  `SpellSelectionTests`, `SpellSelectInputTests`, `SlowLedgerTests`, `FreezeZoneTests`, `FreezeZoneTriggerTests`, `BurnTests`,
   `StrikeMathTests`, `GroundTargetTests`, `ChannelStandStillTests`, `LightningStrikeTests`; shared
   `MagicTestFixture`; and M-1's `SpellInputTests`).
 
@@ -121,6 +121,13 @@ the ground below, up to 12 m; no floor refuses the cast, see above). Its rim dra
 new opt-in interface, `ISlowable`: the strongest slow wins, nothing multiplies, so two zones are not
 a freeze. The training dummies opt in through `StatusReceiver`; they never move, so for them the slow
 is a visible status (a frost shell and ice crust). **Newton does not opt in yet** (see §4).
+Each frame the zone overlap-queries a sphere round its cylinder on `hitMask`, **triggers
+included**, takes the `ISlowable` in each collider's parents, and keeps those whose nearest point
+lies in the cylinder (`ZoneMath`). Triggers count so that a target with only a trigger collider
+(Hypatia's projectiles) can be slowed. A collider with no `ISlowable` above it is skipped, and
+`ApplySlow` is the only call the zone makes on a target, so other triggers (talk rings, hit
+zones, station volumes) are untouched. A target found through several colliders is slowed once
+per frame (`FreezeZoneTriggerTests`).
 
 **Heal.** Hold aim (the casting stance; no crosshair is shown), then hold fire for 2 s:
 - **Any movement input cancels it**: the stick past 0.2, crouch, flip, mount or anchor. So do
