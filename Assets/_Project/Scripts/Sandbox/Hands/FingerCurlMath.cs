@@ -12,31 +12,77 @@ namespace Pickleball.Sandbox.Hands
     /// to the handle. Expressing that axis in each joint's own rest frame and
     /// turning each joint by its own angle makes the angles add up along the
     /// chain: the fingertip ends up turned by the sum, about the handle, with
-    /// the finger's rest shape (lengths, splay) intact. The thumb wraps over
-    /// the fingers instead, about the grab point's knuckle axis.
+    /// the finger's rest shape (lengths, splay) intact.
+    ///
+    /// The thumb bends about an axis taken from its own rest direction
+    /// (<see cref="ThumbFlexAxis"/>), and its first joint can also swing
+    /// across the palm (<see cref="ThumbSwingAxis"/>) so it closes over the
+    /// fingers rather than beside them.
     ///
     /// Pure maths, so EditMode tests pin it down with plain transforms.
     /// </summary>
     public static class FingerCurlMath
     {
         /// <summary>
-        /// The curl axis in the grab point's frame (<see cref="GripFrame"/>):
-        /// fingers curl about the handle (+Y); the thumb, which points along the
-        /// handle at rest, curls about the knuckle axis (+Z).
+        /// The fingers' curl axis in the grab point's frame
+        /// (<see cref="GripFrame"/>): the handle, +Y.
         /// </summary>
-        public static Vector3 AxisInGrip(bool thumb) => thumb ? Vector3.forward : Vector3.up;
+        public static Vector3 FingerAxisInGrip => Vector3.up;
 
         /// <summary>
         /// The sign that turns a finger toward the palm about
-        /// <see cref="AxisInGrip"/>.
+        /// <see cref="FingerAxisInGrip"/>.
         ///
-        /// A positive turn about +Y takes the knuckle direction (+Z) toward +X,
-        /// and a positive turn about +Z takes the thumb direction (+Y) toward −X.
+        /// A positive turn about +Y takes the knuckle direction (+Z) toward +X.
         /// The palm is −X on a right hand and +X on a left one (see
         /// <see cref="GripFrame"/>), so fingers need −1 on the right and +1 on
-        /// the left, and the thumb the opposite.
+        /// the left.
         /// </summary>
-        public static float Sign(bool rightHand, bool thumb) => rightHand == thumb ? 1f : -1f;
+        public static float FingerSign(bool rightHand) => rightHand ? -1f : 1f;
+
+        /// <summary>
+        /// The axis a thumb bends about, in whatever space the arguments are
+        /// in: perpendicular to the thumb's rest direction, in the plane of the
+        /// palm, turned so a positive angle bends the thumb toward the palm.
+        ///
+        /// Built from the thumb rather than fixed, because rigs disagree on
+        /// where the thumb points at rest. A Mixamo-style thumb points along the
+        /// handle, and this is the knuckle axis. The Tripo chibi's points mostly
+        /// along the fingers, and turning it about the knuckle axis only rolled
+        /// it about its own length.
+        /// </summary>
+        /// <param name="thumbDirection">From the thumb's first joint toward its
+        /// second, at rest.</param>
+        /// <param name="palm">Out of the palm.</param>
+        /// <returns>Zero if the thumb points straight out of the palm.</returns>
+        public static Vector3 ThumbFlexAxis(Vector3 thumbDirection, Vector3 palm)
+        {
+            Vector3 flat = thumbDirection - Vector3.Dot(thumbDirection, palm) * palm;
+            Vector3 axis = Vector3.Cross(flat, palm);
+            if (axis.sqrMagnitude < 1e-10f) return Vector3.zero;
+            axis.Normalize();
+            // A positive turn about the axis carries a vector toward Cross(axis, vector).
+            return Vector3.Dot(Vector3.Cross(axis, thumbDirection), palm) >= 0f ? axis : -axis;
+        }
+
+        /// <summary>
+        /// The axis a thumb's first joint swings about to oppose the fingers:
+        /// the palm's normal, turned so a positive angle carries the thumb
+        /// across the palm toward the little finger's knuckle (along
+        /// knuckle − thumb side), which is where a closed thumb ends up: over
+        /// the curled fingers.
+        /// </summary>
+        /// <param name="thumbDirection">From the thumb's first joint toward its
+        /// second, at rest.</param>
+        /// <param name="palm">Out of the palm.</param>
+        /// <param name="knuckle">The way the knuckles point.</param>
+        /// <param name="thumbSide">Toward the thumb, across the hand.</param>
+        public static Vector3 ThumbSwingAxis(Vector3 thumbDirection, Vector3 palm, Vector3 knuckle, Vector3 thumbSide)
+        {
+            Vector3 axis = palm.normalized;
+            Vector3 across = knuckle - thumbSide;
+            return Vector3.Dot(Vector3.Cross(axis, thumbDirection), across) >= 0f ? axis : -axis;
+        }
 
         /// <summary>
         /// The curl axis expressed in one joint's rest frame.
@@ -63,5 +109,17 @@ namespace Pickleball.Sandbox.Hands
         /// about its local curl axis.</summary>
         public static Quaternion Curled(Quaternion restLocal, Vector3 localAxis, float degrees)
             => restLocal * Quaternion.AngleAxis(degrees, localAxis);
+
+        /// <summary>
+        /// The thumb's first joint: bent about its flex axis and swung across
+        /// the palm, both axes in the joint's rest frame. Bending about the rest
+        /// axis and then swinging is the same as swinging first and then
+        /// bending about the swung thumb's own axis, so the bend stays a bend
+        /// whatever the swing.
+        /// </summary>
+        public static Quaternion Opposed(Quaternion restLocal, Vector3 localSwingAxis, float swingDegrees,
+                                         Vector3 localFlexAxis, float flexDegrees)
+            => restLocal * Quaternion.AngleAxis(swingDegrees, localSwingAxis)
+                         * Quaternion.AngleAxis(flexDegrees, localFlexAxis);
     }
 }

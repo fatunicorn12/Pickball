@@ -249,6 +249,33 @@ namespace Pickleball.Tests
         }
 
         [Test]
+        public void ClosedFist_PalmDepthIsTakenUnderTheHandle_NotAtTheHeel()
+        {
+            var knuckles = new List<Vector3>
+            {
+                new(0.1f, 0f, 0.06f), new(0.1f, 0f, 0.02f), new(0.1f, 0f, -0.02f), new(0.1f, 0f, -0.06f),
+            };
+            // Under the knuckles the palm is 2.5 cm deep; the heel by the wrist
+            // bulges to 5 cm but lies nowhere near the handle.
+            var palm = new List<Vector3> { new(0.08f, -0.025f, 0f), new(0.005f, -0.05f, 0.01f) };
+            var fingers = new List<Vector3> { new(0.13f, -0.01f, 0f), new(0.13f, 0.01f, 0f) };
+
+            Assert.IsTrue(GripFrameSolver.TrySolveClosedFist(Vector3.zero, knuckles, Vector3.forward, true,
+                                                             palm, fingers, 0.015f, 0f, out var frame));
+            AssertVector(new Vector3(0.1f - (0.01f + 0.015f), -(0.025f + 0.015f), 0f), frame.Position);
+        }
+
+        [Test]
+        public void PalmUnderHandle_NoPointInTheStrip_UsesTheWholePalm()
+        {
+            GripFrameSolver.TryHandAxes(Vector3.right, Vector3.forward, true, out var axes);
+            var palm = new List<Vector3> { new(0.0f, -0.04f, 0f), new(0.02f, -0.03f, 0f) };
+            Assert.AreEqual(0.04f, GripFrameSolver.PalmUnderHandle(palm, new Vector3(0.1f, 0f, 0f), axes, 0.01f, 0.015f),
+                            Tolerance);
+            Assert.AreEqual(0f, GripFrameSolver.PalmUnderHandle(null, Vector3.zero, axes, 0.01f, 0.015f), Tolerance);
+        }
+
+        [Test]
         public void ClosedFist_OneKnuckle_FallsBackOnTheThumbHint()
         {
             var knuckles = new List<Vector3> { new(0.1f, 0f, 0f) };
