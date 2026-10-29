@@ -56,6 +56,7 @@ public static class SwordAbilitySetup
     {
         public string Asset, Display, State, Clip;
         public float Speed = 2.4f, BlendIn = 0.1f, Lunge;
+        public bool FullBody;
         public SwingWindows Windows = SwingWindows.Default;
         public HitSettings Hit;
         public AreaBurst Burst;
@@ -70,31 +71,38 @@ public static class SwordAbilitySetup
     /// (and on the assets). Every comboOpen is at least its activeEnd, which is
     /// what SwingTimeline enforces anyway. Measured directions alternate A/B;
     /// see the clip audit in the system doc.
+    ///
+    /// The seeds hold the values the shipped assets carry: the R1 tuning (3de63bf),
+    /// which set comboClose to 1, the lunges, and knockback 2 on the first two hits.
+    /// They are only ever written when an asset is missing. They used to hold the
+    /// pre-R1 values, so a deleted or fresh asset came back untuned (QA M-3). Keep
+    /// them in step with any retune.
     /// </summary>
     static readonly StepSeed[] Steps =
     {
         new() { Asset = "Step_Slash1", Display = "Opening Slash", State = "Attack1",
-                Clip = "sword and shield slash (5).fbx", Speed = 2.5f, BlendIn = 0.06f,
-                Windows = new SwingWindows(0.32f, 0.60f, 0.60f, 0.90f), Hit = new HitSettings(10f, 4f, 0f, 0.05f) },
+                Clip = "sword and shield slash (5).fbx", Speed = 2.5f, BlendIn = 0.06f, Lunge = 1.5f,
+                Windows = new SwingWindows(0.32f, 0.60f, 0.60f, 1f), Hit = new HitSettings(10f, 2f, 0f, 0.05f) },
         new() { Asset = "Step_Slash2", Display = "Return Sweep", State = "Attack2",
-                Clip = "sword and shield attack (3).fbx", Speed = 2.5f,
-                Windows = new SwingWindows(0.35f, 0.62f, 0.62f, 0.92f), Hit = new HitSettings(12f, 4f, 0f, 0.05f) },
+                Clip = "sword and shield attack (3).fbx", Speed = 2.5f, Lunge = 1.2f,
+                Windows = new SwingWindows(0.35f, 0.62f, 0.62f, 1f), Hit = new HitSettings(12f, 2f, 0f, 0.05f) },
+        // Full body when standing: a lunge whose pose the upper body alone cannot carry.
         new() { Asset = "Step_Slash3", Display = "Downstroke", State = "Attack3",
-                Clip = "sword and shield slash.fbx", Speed = 2.4f,
-                Windows = new SwingWindows(0.34f, 0.62f, 0.62f, 0.92f), Hit = new HitSettings(14f, 3f, 0f, 0.07f) },
+                Clip = "sword and shield slash.fbx", Speed = 2.4f, Lunge = 1.8f, FullBody = true,
+                Windows = new SwingWindows(0.34f, 0.62f, 0.62f, 1f), Hit = new HitSettings(14f, 3f, 0f, 0.07f) },
         new() { Asset = "Step_Slash4", Display = "Rising Finish", State = "Attack4",
                 Clip = "sword and shield slash (3).fbx", Speed = 2.2f,
                 Windows = new SwingWindows(0.34f, 0.64f, 0.64f, 0.95f), Hit = new HitSettings(20f, 8f, 12.8f, 0.1f),
                 Shake = 0.25f },
         new() { Asset = "Step_AirSlash", Display = "Air Slash", State = "AirAttack",
                 Clip = "sword and shield attack (4).fbx", Speed = 2.2f, BlendIn = 0.06f,
-                Windows = new SwingWindows(0.25f, 0.60f, 0.60f, 0.90f), Hit = new HitSettings(12f, 3f, 0f, 0.05f) },
+                Windows = new SwingWindows(0.25f, 0.60f, 0.60f, 1f), Hit = new HitSettings(12f, 3f, 0f, 0.05f) },
 
         // Lv 2 — + C. Attack1's flat sweep, played faster as a quick fourth hit:
         // direction A, so it alternates into the B-direction Rising Finish.
         new() { Asset = "Step_PlusC", Display = "+ C", State = "PlusC",
                 Clip = "sword and shield slash (5).fbx", Speed = 3.0f,
-                Windows = new SwingWindows(0.30f, 0.58f, 0.58f, 0.88f), Hit = new HitSettings(13f, 1.5f, 0f, 0.05f),
+                Windows = new SwingWindows(0.30f, 0.58f, 0.58f, 1f), Hit = new HitSettings(13f, 1.5f, 0f, 0.05f),
                 Trail = new Color(1f, 0.85f, 0.35f, 0.95f), HitFx = "PlusPop" },
         // Lv 3 — Phase Shift. The downstroke, as a second air hit after the
         // compact Air Slash: the wave dips.
@@ -113,7 +121,7 @@ public static class SwordAbilitySetup
         // Lv 5 — Area Under the Curve. The rising launcher, slower and heavier,
         // stepping in and releasing a 3 m Riemann ring along the ground.
         new() { Asset = "Step_AreaUnderCurve", Display = "Area Under the Curve", State = "AreaUnderCurve",
-                Clip = "sword and shield slash (3).fbx", Speed = 2.0f, Lunge = 2.5f,
+                Clip = "sword and shield slash (3).fbx", Speed = 2.0f, Lunge = 4f,
                 Windows = new SwingWindows(0.34f, 0.64f, 0.64f, 0.95f), Hit = new HitSettings(20f, 8f, 12.8f, 0.1f),
                 Burst = new AreaBurst(0.62f, 3f, 0.35f, new HitSettings(12f, 6f, 2f, 0.08f), 0.8f, 0.6f),
                 Trail = new Color(0.55f, 1f, 0.45f, 0.95f), Shake = 0.3f, ShakeSeconds = 0.22f, Fov = 4f,
@@ -268,6 +276,7 @@ public static class SwordAbilitySetup
             so.FindProperty("playbackSpeed").floatValue = seed.Speed;
             so.FindProperty("blendIn").floatValue = seed.BlendIn;
             so.FindProperty("lungeSpeed").floatValue = seed.Lunge;
+            so.FindProperty("fullBodyWhenStanding").boolValue = seed.FullBody;
             WriteWindows(so.FindProperty("windows"), seed.Windows);
             WriteHit(so.FindProperty("hit"), seed.Hit);
             WriteBurst(so.FindProperty("burst"), seed.Burst);
@@ -423,6 +432,10 @@ public static class SwordAbilitySetup
         EditorUtility.SetDirty(controller);
         Debug.Log($"Attack layer: {added} sword-ability state(s) added, {updated} updated, " +
                   $"{claimed.Count} step(s) checked.");
+
+        // Steps flagged Full Body When Standing also need their full-body layer
+        // state. Done here so every path that rebuilds the Attack layer keeps it.
+        FullBodySwingSetup.Wire(controller);
     }
 
     static void WarnIfNotHumanoid(ComboStepDefinition step)

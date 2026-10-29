@@ -182,6 +182,27 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
   the ability states (see §5).
 - New states get their hip turn baked by `SwingTwistSetup.Bake`, which the setup menu calls.
   Without the bake they would bring back the "swatting flies" pose.
+- **Full body when standing** (Step_Slash3 only, so far):
+  - **The layer.** A step flagged `fullBodyWhenStanding` also gets a state on the full-body
+    **AttackBody** layer. That layer sits at index 1: Override, no mask, weight 0, no IK pass,
+    Foot IK on its states.
+  - **Who builds it.** `FullBodySwingSetup.Wire` builds the layer, called from
+    `WireAttackStatesFromAssets`, so every Attack-layer rebuild keeps it. The menu is
+    **Tools ▸ Pickleball ▸ Setup Full-Body Swings**. It also bakes the flagged clip's
+    root height into the pose. Otherwise its crouch is lost to root motion, which is off, and
+    the feet float.
+  - **When it plays.** `SwordAnimatorDriver` plays the flagged state there in step with the
+    masked layer, if the swing starts grounded with the Animator's damped `Speed` at or under
+    `standingMaxSpeed` (0.12, the same as the foot plant's). `FullBodySwing` (plain C#,
+    `FullBodySwingTests`) fades the weight: in over the step's blend-in; out over
+    `bodyReleaseSeconds` (0.15 s) when he moves, leaves the ground, the swing ends, or a masked
+    swing chains in. It never re-engages mid-swing.
+  - **What changes hands.** The masked Attack layer above still owns the arms, spine and head;
+    AttackBody only gives the legs and hips. While the clip supplies the hips, SwingTwist's
+    correction drops to about 0° by itself, so nothing is corrected twice. Being a full-body
+    override, the layer also replaces the base layer's foot-IK pose, so ChibiFootIK's plant
+    cannot pin the feet against the clip's footwork. Root motion stays off: the step's scripted
+    lunge moves him, and with the clip's XZ extracted the planted feet stay put while it does.
 
 ## 3. How to tune
 
@@ -201,6 +222,12 @@ Tune everything live in Play mode on the assets.
   - `radius` (m) and `expandSeconds` (s): together these set how readable and jumpable the ring is.
   - `triggerAt`: line it up with the clip's impact frame.
   - `heightTolerance` (m): small for a ground wave, large for an air spin.
+- **Whole-body swings:** tick `fullBodyWhenStanding` on a step whose clip is a whole-body move
+  (a lunge, a step-in) that the upper body alone wrenches over standing legs. Then run **Setup
+  Full-Body Swings**.
+  - On `SwordAnimatorDriver`: `standingMaxSpeed` (m/s) decides what counts as standing, and
+    `bodyReleaseSeconds` (s) how fast the legs hand back to locomotion. A shorter release pops; a
+    longer one drags the lunge into the first stride.
 - **Look:** the `presentation` block.
   - `trailColor`, `shakeAmount` and `shakeSeconds`, `fovPunch`.
   - `SwordEffects.lastHitShakeScale` boosts every chain's last hit.
@@ -346,7 +373,19 @@ A boss drop can grant an ability early; its level is the fallback.
     - Strength 0.5 still bends swing 3 by 38°.
     - Step_Slash3's lunge of 0 leaves the pose unchanged (121°, 41°), but removes the 14
       frames of re-plant steps the 16 cm lunge forces during the strike.
-    - No fix has been chosen yet.
+  - **Fixed** by playing it full-body when standing (§2 Animator). Same scenario, same
+    standing chain:
+    - Swing 3's twist fell from 126° to 66° and its sideways bend from 41° to 29°. Those are
+      the clip's own values, with 0 wrenched frames.
+    - SwingTwist's correction is under 0.5° while the layer is at full weight.
+    - Walking, swing 3 stays masked, exactly as before.
+    - Starting to walk mid-swing hands the legs back over 0.15 s. Its worst single-frame foot
+      jump was 12 cm, against 47 cm for the masked swing in the same test.
+  - **Still open:**
+    - Swung while moving, swing 3 still twists the waist about 97°.
+    - Swings 1, 2 and 4 are unchanged; they read as a sweep, a spin and a launcher.
+    - The full-body downstroke is a deep lunge; the back knee nearly touches the floor on the
+      chibi.
 - **Two sources for the base states:** `WeaponSetup.AttackClips` still builds the `Attack1–4` and
   `AirAttack` states, and the base step assets re-apply their own clip and speed straight after. A
   later cleanup could build the layer from the step assets alone.
