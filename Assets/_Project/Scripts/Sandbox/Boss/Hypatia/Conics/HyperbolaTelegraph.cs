@@ -35,8 +35,8 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
         public Vector3 IncomingDirection { get; }
 
         /// <summary>Unit ray from <see cref="Centre"/> along which the shot leaves.
-        /// With Hyperbola Exit At Player on, this ray passes through the player's
-        /// position at fire time.</summary>
+        /// With Hyperbola Exit At Player on, the PATH's outgoing leg (not this ray)
+        /// passes through the player's position at fire time.</summary>
         public Vector3 OutgoingDirection { get; }
 
         /// <summary>The closest point of the path to her.</summary>

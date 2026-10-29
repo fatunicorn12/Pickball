@@ -316,9 +316,19 @@ namespace Pickleball.Tests.Hypatia.Conics
             Assert.That(t.LeadSeconds, Is.EqualTo(0.8f).Within(1e-5f));
             Assert.That(t.Eccentricity, Is.EqualTo(1.5f).Within(1e-5f));
 
-            Vector3 w = new Vector3(9f, t.Centre.y, 3f) - t.Centre;
-            float cross = t.OutgoingDirection.x * w.z - t.OutgoingDirection.z * w.x;
-            Assert.That(Mathf.Abs(cross) / w.magnitude, Is.LessThan(1e-3f), "exit ray runs through the player");
+            // The PATH's outgoing leg passes through the player (7377d1b), not the
+            // asymptote: aiming the asymptote let the curve bend past a player
+            // who stood still.
+            var player = new Vector2(9f, 3f);
+            float best = float.MaxValue;
+            for (int i = t.Path.Count / 2; i < t.Path.Count - 1; i++)
+            {
+                Vector2 a = new(t.Path[i].x, t.Path[i].z), b = new(t.Path[i + 1].x, t.Path[i + 1].z);
+                Vector2 ab = b - a;
+                float u = Mathf.Clamp01(Vector2.Dot(player - a, ab) / Mathf.Max(1e-8f, ab.sqrMagnitude));
+                best = Mathf.Min(best, (a + ab * u - player).magnitude);
+            }
+            Assert.That(best, Is.LessThan(0.15f), "outgoing path runs through the player");
 
             _caster.Tick(0.79f);
             Assert.IsNull(released);

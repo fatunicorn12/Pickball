@@ -250,7 +250,8 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         [Tooltip("Distance from her where the shot enters and leaves, m.")]
         [SerializeField, Min(1f)] private float hyperbolaReach = 16f;
 
-        [Tooltip("Aim the outgoing asymptote at the player.")]
+        [Tooltip("Aim the shot's outgoing path through the player's position at fire " +
+                 "time (periapsis on them if they stand inside it). Off = a random bearing.")]
         [SerializeField] private bool hyperbolaExitAtPlayer = true;
 
         [Tooltip("Shot height above the plate, m.")]
