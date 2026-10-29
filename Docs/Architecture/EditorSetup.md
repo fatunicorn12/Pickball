@@ -48,6 +48,8 @@ scripts:
    - **Setup Birdy UAL Trial** only to re-make Birdy's death clip (`Animation/Birdy/Death.anim`, copied from the Quaternius UAL FBX) or the all-UAL trial controller. Both are committed, so normally skip it. If it does run, run **Setup Birdy NPC** after it.
 9. **Build Training Stage**. It copies ChibiSandbox.
 10. **Spacetime ▸ Create Spacetime Lab Scene**
+11. **Build Academy Greybox**. It copies ChibiSandbox too, and keeps Birdy (see
+    `Docs/World/TheAcademy.md` §8).
 
 Setup Chibi Sandbox already runs the player-level setups as part of its build:
 - `MovementSetup.WirePlayer` and `EnsureConfigs`
@@ -94,7 +96,7 @@ Three are in use:
   - It predates the Unity MCP tooling, which removed its original reason ("the Editor holds the
     project lock").
 - **Build Training Stage deletes and re-copies the scene,** so `TrainingStage.unity` gets a new
-  GUID on every run.
+  GUID on every run. Build Academy Greybox does the same to `AcademyGreybox.unity`.
 - **Organize's duplicate-model sweep** deletes any model outside `_Project` whose file name
   matches one inside it, anywhere in the tree. Its comment says root level only.
 - **Setup World Look writes a GPU-captured panorama** to a tracked LFS PNG on every run. That is
