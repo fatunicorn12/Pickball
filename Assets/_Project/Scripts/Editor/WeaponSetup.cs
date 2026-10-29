@@ -425,8 +425,6 @@ public static class WeaponSetup
 
         var grip = HandGripSetup.Attach(animator, rightHand: true, socket, profile);
         grip.Hold(item);
-        EditorUtility.SetDirty(grip);
-        EditorUtility.SetDirty(item);
 
         // The blade runs from the centre of the fist to the weapon's far end:
         // WeaponClearance turns it about that grip point, MeleeCombat sweeps it
@@ -437,6 +435,25 @@ public static class WeaponSetup
         if (bladeTip != null)
             bladeTip.SetLocalPositionAndRotation(socket.InverseTransformPoint(visual.TransformPoint(tipInModel)),
                                                  Quaternion.identity);
+
+        RecordInstanceChanges(socket, visual, grip, item, bladeBase, bladeTip);
+    }
+
+    /// <summary>
+    /// Marks objects changed through their C# API as dirty and, when they
+    /// belong to a prefab instance (the Chibi in every saved scene), records
+    /// the change as an instance override. Without the record, an edit to a
+    /// prefab-owned object made outside a SerializedObject can be dropped on
+    /// the next save or reload. Harmless on objects outside a prefab.
+    /// </summary>
+    static void RecordInstanceChanges(params Object[] objects)
+    {
+        foreach (var o in objects)
+        {
+            if (o == null) continue;
+            PrefabUtility.RecordPrefabInstancePropertyModifications(o);
+            EditorUtility.SetDirty(o);
+        }
     }
 
     /// <summary>
@@ -460,15 +477,12 @@ public static class WeaponSetup
     static HeldItem PrepareHeldItem(GameObject visual, float wanted, bool gripFarEnd, out Vector3 tipInModel)
     {
         var tr = visual.transform;
-        var parent = tr.parent;
 
-        // Measure in isolation. Renderer.bounds is a WORLD AABB, so at the world
-        // origin with no rotation it is exactly the model's own local AABB —
-        // measuring it parented to the hand would fold the bone's rotation in.
-        tr.SetParent(null, false);
-        tr.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
-        tr.localScale = Vector3.one;
-        var local = MeasureBounds(visual);
+        // Measured in place, in the model's own space. The visual is never
+        // moved out to the world origin to read Renderer.bounds (the old trick):
+        // in every saved scene it sits inside the Chibi prefab instance, where
+        // it can't be reparented, and Setup Weapon Grip threw on exactly that.
+        var local = MeasureModelBounds(visual);
 
         // Longest dimension is the weapon's length; the other two are its girth.
         int axis = 0;
@@ -495,9 +509,11 @@ public static class WeaponSetup
         float handle = MeasureHandle(visual, local, axis, gripEnd, along, span);
         Vector3 anchorInModel = gripEnd + along * (handle * 0.5f);
 
-        tr.SetParent(parent, false);
         tr.localScale = Vector3.one * scale;
 
+        // A new child and a new component are allowed on a prefab instance
+        // (they become added-object overrides); only reparenting or destroying
+        // what the prefab owns is not.
         var anchor = tr.Find(GripAnchorName);
         if (anchor == null)
         {
@@ -510,6 +526,7 @@ public static class WeaponSetup
         if (!visual.TryGetComponent(out HeldItem item))
             item = visual.AddComponent<HeldItem>();
         item.SetGripAnchor(anchor);
+        RecordInstanceChanges(tr, anchor, item);
 
         Debug.Log(handle > 0f
             ? $"Weapon handle: {handle * scale:0.000} m from the held end; the fist closes on its middle."
@@ -518,10 +535,42 @@ public static class WeaponSetup
     }
 
     /// <summary>
+    /// Axis-aligned bounds of everything a model renders, in the model root's
+    /// own space (its local axes, unscaled), wherever the root sits and however
+    /// it is scaled. Each mesh's bounds box is carried into root space through
+    /// the transform matrices, which is exactly what Renderer.bounds gives for
+    /// a root at the world origin, without having to move the root there.
+    /// </summary>
+    static Bounds MeasureModelBounds(GameObject root)
+    {
+        var toRoot = root.transform.worldToLocalMatrix;
+        var bounds = new Bounds();
+        bool any = false;
+        foreach (var r in root.GetComponentsInChildren<Renderer>())
+        {
+            Mesh mesh = r is SkinnedMeshRenderer skinned ? skinned.sharedMesh
+                : r.TryGetComponent(out MeshFilter mf) ? mf.sharedMesh : null;
+            if (mesh == null) continue;
+            var meshToRoot = toRoot * r.transform.localToWorldMatrix;
+            var mb = mesh.bounds;
+            for (int i = 0; i < 8; i++)
+            {
+                var corner = mb.center + Vector3.Scale(mb.extents,
+                    new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                var p = meshToRoot.MultiplyPoint3x4(corner);
+                if (any) bounds.Encapsulate(p);
+                else { bounds = new Bounds(p, Vector3.zero); any = true; }
+            }
+        }
+        return bounds;
+    }
+
+    /// <summary>
     /// Length of the weapon's handle from its held end, in model units: slices
     /// the mesh along its length and finds where it first widens sharply (see
     /// <see cref="GripSeat.HandleLength"/>). Vertices only, which is enough:
-    /// a knob, guard or disc is where a mesh puts its vertices.
+    /// a knob, guard or disc is where a mesh puts its vertices. Like
+    /// <see cref="MeasureModelBounds"/>, it reads the model in place.
     /// </summary>
     static float MeasureHandle(GameObject visual, Bounds local, int axis, Vector3 gripEnd, Vector3 along, float span)
     {
@@ -731,14 +780,5 @@ public static class WeaponSetup
             .Where(p => p.ToLowerInvariant().Contains(keyword))
             .OrderBy(p => p.Length)
             .FirstOrDefault();
-    }
-
-    static Bounds MeasureBounds(GameObject go)
-    {
-        var rs = go.GetComponentsInChildren<Renderer>();
-        if (rs.Length == 0) return new Bounds(go.transform.position, Vector3.zero);
-        var b = rs[0].bounds;
-        foreach (var r in rs) b.Encapsulate(r.bounds);
-        return b;
     }
 }

@@ -219,11 +219,25 @@ public static class HandGripSetup
             so.FindProperty("grip").objectReferenceValue = grip;
             so.FindProperty("profile").objectReferenceValue = profile;
             so.FindProperty("rightHand").boolValue = rightHand;
+            so.FindProperty("m_Enabled").boolValue = true;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
         else
         {
-            if (curl != null) Object.DestroyImmediate(curl);
+            if (curl != null)
+            {
+                // A component the prefab asset owns can't be destroyed from an
+                // instance; switch it off instead, which is a plain override.
+                if (PrefabUtility.IsPartOfPrefabInstance(curl) && !PrefabUtility.IsAddedComponentOverride(curl))
+                {
+                    curl.enabled = false;
+                    PrefabUtility.RecordPrefabInstancePropertyModifications(curl);
+                }
+                else
+                {
+                    Object.DestroyImmediate(curl);
+                }
+            }
             Debug.Log($"{animator.name}: the avatar maps no finger bones, so the hand can't close on " +
                       "the grip (the clips' finger curves have nothing to drive). The grab point sits " +
                       "in the hand's volume instead. Add finger bones to the rig and map them to " +
