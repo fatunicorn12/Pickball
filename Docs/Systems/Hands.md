@@ -147,6 +147,32 @@ stale one otherwise and logs why.
 - `HandGrip` serializes the held item and re-seats it in `OnEnable`.
 - Nothing runtime-built is kept in a `readonly` field.
 
+### Prefab instances
+
+In every saved scene the Chibi is an instance of `Chibi.prefab`, so the socket and the compass
+belong to the prefab. **Setup Weapon Grip** works in place and never reparents or destroys
+anything:
+
+- It measures the compass in its own space through the transform matrices instead of moving it
+  to the world origin.
+- `HandGrip.Hold` only reparents an item that isn't already on the grab point.
+- It records every changed transform and component as an instance override.
+- `HandGrip`, `HeldItem` and the `GripAnchor` child become added-component and added-object
+  overrides.
+- A stale `FingerCurl` that the prefab owns is switched off rather than destroyed.
+
+Re-running it gives the same pose and adds nothing new. That still holds after `Chibi.prefab`
+is rebuilt with these objects inside it.
+
+The first version moved the compass to the world origin to measure it. Unity refuses to
+reparent a prefab's own object from an instance: it logs "Setting the parent of a transform
+which resides in a Prefab instance is not possible" and leaves the object where it was.
+
+Full **Setup Weapon** also works on the instance in Unity 6000.3. It destroys the old socket and
+BladeTrail, which Unity records as removed-object overrides, and builds new ones as added
+objects. That leaves the scene further from `Chibi.prefab`, so prefer Setup Weapon Grip for a
+re-fit.
+
 ## 3. How to tune
 
 The asset is `ScriptableObjects/Hands/HandGripProfile.asset`. Setup creates it with defaults

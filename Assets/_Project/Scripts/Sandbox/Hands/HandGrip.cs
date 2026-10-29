@@ -71,7 +71,11 @@ namespace Pickleball.Sandbox.Hands
             }
             if (held != null && held != item) Release();
 
-            item.transform.SetParent(transform, false);
+            // Only reparent when it changes. In the Editor an item inside a
+            // prefab instance (the sword in every saved scene) can't be moved
+            // to another parent: Unity logs an error and leaves it where it
+            // is. Re-holding what is already here must not even try.
+            if (item.transform.parent != transform) item.transform.SetParent(transform, false);
             Seat(item);
             bool changed = held != item;
             held = item;
