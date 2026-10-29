@@ -88,7 +88,6 @@ IDs are referenced from the test plan below. Confidence: **H**igh, **M**edium, *
 |---|---|---|---|
 | NB1 | **A script reload in Play mode breaks the fight.** `Health` and `_player` are cached only in `Awake`/`Start`, so the boss NREs and attacks silently stop. | `NewtonBoss`, four attack components | H (not reproduced) |
 | NB2 | **Player death does nothing.** Nothing subscribes to the player's `Health.Died`. | — | ✔ |
-| NB3 | **`Health.Damage(NaN)` kills instantly**, `Heal(NaN)` fully heals, and `CreditDamageDealt(NaN)` cashes in all grey. Tests: the three `*_NaN_*` cases in `Boss/HealthGuardTests` (ignored until fixed). | `Health` guards | ✔ |
 | NB4 | Apples spawned close in time and space cancel each other almost immediately, undercutting the barrage. | `Apple`, `AppleBarrage` | M |
 | NB5 | The barrage ground height is sampled once, under the boss (who stands about 1.7 m up), so markers and splats near the player may float. | `AppleBarrage` | M |
 | NB6 | At point blank, 2–3 orbs of one volley ring hit (60–90 damage against 100 HP, twice in phase 2). There are no i-frames. | `InverseSquareVolley`, `Health` | M |
