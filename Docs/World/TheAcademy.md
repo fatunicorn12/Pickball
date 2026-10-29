@@ -301,6 +301,12 @@ pickups and the anchors, so the player, camera, HUD, dialogue and Birdy are wire
 It then builds this map in grid-shaded boxes, so heights read off the surfaces. The scene is
 regenerated on every run: change the numbers in the script, not the scene.
 
+**The scene is a snapshot of ChibiSandbox.** Re-run the menu whenever ChibiSandbox changes (a new
+Setup Dialogue, an animator or movement change, a new HUD), or the greybox plays with the old
+player. Re-running is safe: it deletes the scene and builds it again, so its GUID changes each
+time, as with TrainingStage. It finds what to strip, and Birdy, by component and asset rather than
+by name. It never touches ChibiSandbox, TrainingStage or EditorBuildSettings.
+
 | Gate | Built as | Number |
 |---|---|---|
 | Birdy's Perch | The bell tower's top | 7 m above the 5 m roof (base kit 6 m, with the feather about 8 m) |

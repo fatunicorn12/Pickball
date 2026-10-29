@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Pickleball.Sandbox;
+using Pickleball.Sandbox.Npc;
 using Pickleball.UI;
 using TMPro;
 using UnityEditor;
@@ -51,7 +52,8 @@ public static class AcademyGreyboxSetup
 {
     const string SourceScenePath = "Assets/_Project/Scenes/ChibiSandbox.unity";
     const string ScenePath = "Assets/_Project/Scenes/AcademyGreybox.unity";
-    const string ArtDir = "Assets/_Project/Art/World/Greybox";
+    const string WorldArtDir = "Assets/_Project/Art/World/";
+    const string ArtDir = WorldArtDir + "Greybox";
     const string GridShaderName = "Pickball/Training Grid";
     const string WedgePath = ArtDir + "/Wedge.asset";
     const string PickupDir = "Assets/_Project/Prefabs/Pickups";
@@ -805,20 +807,21 @@ public static class AcademyGreyboxSetup
         cam.farClipPlane = Mathf.Max(cam.farClipPlane, 2000f);
     }
 
-    /// <summary>Birdy stands just ahead of the spawn, turned to greet you.</summary>
+    /// <summary>Birdy stands just ahead of the spawn, turned to greet you.
+    /// Found by component, not by name: he is the NPC with a rotor.</summary>
     static void PlaceBirdy()
     {
-        var npcs = GameObject.Find("AcademyNpcs");
-        if (npcs == null || npcs.transform.childCount == 0)
+        var bodies = Object.FindObjectsByType<NpcBody>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        var birdy = bodies.FirstOrDefault(b => b.GetComponentInChildren<NpcRotor>(true) != null);
+        if (birdy == null) birdy = bodies.FirstOrDefault();
+        if (birdy == null)
         {
-            Debug.LogWarning("No AcademyNpcs in ChibiSandbox; the greybox has no Birdy. Run Setup Birdy NPC there.");
+            Debug.LogWarning("ChibiSandbox has no NPC; the greybox has no Birdy. Run Setup Birdy NPC there.");
             return;
         }
-        var birdy = npcs.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name.Contains("Birdy"));
-        if (birdy == null) birdy = npcs.transform.GetChild(0);
         var face = SpawnPosition - BirdyPosition;
         face.y = 0f;
-        birdy.SetPositionAndRotation(BirdyPosition, Quaternion.LookRotation(face));
+        birdy.transform.SetPositionAndRotation(BirdyPosition, Quaternion.LookRotation(face));
     }
 
     /// <summary>Speed / height / jump readout in the top-right corner, read by
@@ -901,11 +904,14 @@ public static class AcademyGreyboxSetup
         var hud = GameObject.Find("FightHUD");
         if (hud != null && hud.transform.Find("NewtonBark") is { } bark) Object.DestroyImmediate(bark.gameObject);
 
+        // Everything is matched by what it is, not by name: the academy model
+        // is an instance of a .glb under Art/World, the rest carry their components.
         var kept = new List<string>();
         foreach (var go in player.gameObject.scene.GetRootGameObjects())
         {
             if (go == player.gameObject) continue;
-            bool sandboxOnly = go.name.StartsWith("AcademyWorld")
+            string source = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(go) ?? "";
+            bool sandboxOnly = (source.StartsWith(WorldArtDir) && source.EndsWith(".glb"))
                                || go.GetComponentInChildren<NewtonBoss>(true) != null
                                || go.GetComponentInChildren<AbilityPickup>(true) != null
                                || go.GetComponentInChildren<TetherAnchor>(true) != null;
