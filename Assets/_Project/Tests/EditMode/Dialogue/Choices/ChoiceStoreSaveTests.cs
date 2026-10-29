@@ -298,6 +298,96 @@ namespace Pickleball.Tests.Dialogue
             Assert.That(ChoiceStoreSave.Delete(SavePath, out string error), Is.True, error);
         }
 
+        // ---- where saves live: per project in the Editor, plain in players (DLG-C-4) ----
+
+        [Test]
+        public void DirectoryFor_APlayer_IsThePlainSavesFolder()
+        {
+            string root = Path.Combine(TempDir, "persistent");
+            Assert.That(ChoiceStoreSave.DirectoryFor(root, null), Is.EqualTo(Path.Combine(root, "Saves")));
+            Assert.That(ChoiceStoreSave.DirectoryFor(root, ""), Is.EqualTo(Path.Combine(root, "Saves")));
+        }
+
+        [Test]
+        public void DirectoryFor_TheEditor_IsKeyedToTheProject()
+        {
+            string root = Path.Combine(TempDir, "persistent");
+            string assets = Path.Combine(TempDir, "Pickball", "Assets");
+            Assert.That(ChoiceStoreSave.DirectoryFor(root, assets),
+                Is.EqualTo(Path.Combine(root, "Saves", "Editor", ChoiceStoreSave.ProjectKey(assets))));
+        }
+
+        [Test]
+        public void ProjectKey_NamesTheProjectFolder_WithAnEightDigitHash()
+        {
+            string key = ChoiceStoreSave.ProjectKey(Path.Combine(TempDir, "Pickball", "Assets"));
+            Assert.That(key, Does.Match("^Pickball-[0-9a-f]{8}$"));
+        }
+
+        [Test]
+        public void ProjectKey_IsStableForOneProject_WhateverTheSpelling()
+        {
+            string assets = Path.Combine(TempDir, "Pickball", "Assets");
+            string key = ChoiceStoreSave.ProjectKey(assets);
+
+            Assert.That(ChoiceStoreSave.ProjectKey(assets), Is.EqualTo(key));
+            Assert.That(ChoiceStoreSave.ProjectKey(assets + Path.DirectorySeparatorChar), Is.EqualTo(key));
+            Assert.That(ChoiceStoreSave.ProjectKey(assets.Replace('\\', '/')), Is.EqualTo(key));
+            Assert.That(ChoiceStoreSave.ProjectKey(Path.Combine(TempDir, "Pickball", "x", "..", "Assets")), Is.EqualTo(key));
+            Assert.That(ChoiceStoreSave.ProjectKey(assets.ToUpperInvariant()), Does.EndWith(key.Substring(key.Length - 9)),
+                "The hash ignores case (Windows paths are case-insensitive).");
+        }
+
+        [Test]
+        public void ProjectKey_DiffersBetweenWorktrees_EvenWithTheSameFolderName()
+        {
+            string main = ChoiceStoreSave.ProjectKey(Path.Combine(TempDir, "Pickball", "Assets"));
+            string worktree = ChoiceStoreSave.ProjectKey(Path.Combine(TempDir, "Pickball", ".claude", "worktrees", "agent-a1", "Assets"));
+            string sameName = ChoiceStoreSave.ProjectKey(Path.Combine(TempDir, "elsewhere", "Pickball", "Assets"));
+
+            Assert.That(worktree, Is.Not.EqualTo(main));
+            Assert.That(worktree, Does.StartWith("agent-a1-"));
+            Assert.That(sameName, Does.StartWith("Pickball-"));
+            Assert.That(sameName, Is.Not.EqualTo(main));
+        }
+
+        [Test]
+        public void ProjectKey_KeepsTheFolderNameSafeAndShort()
+        {
+            string key = ChoiceStoreSave.ProjectKey(Path.Combine(TempDir, "My Game (copy) éa very long project folder name", "Assets"));
+            string name = key.Substring(0, key.Length - 9);
+
+            Assert.That(name.Length, Is.LessThanOrEqualTo(32));
+            Assert.That(name, Does.Match("^[A-Za-z0-9._-]+$"));
+            Assert.That(name, Does.StartWith("My_Game__copy__"));
+            Assert.That(ChoiceStoreSave.ProjectKey(null), Does.Match("^[A-Za-z0-9._-]+-[0-9a-f]{8}$"));
+        }
+
+        [Test]
+        public void DefaultDirectory_InTheEditor_IsThisProjectsFolder_OutsideAssets()
+        {
+            // Reads the paths only; nothing is written.
+            string directory = ChoiceStoreSave.DefaultDirectory;
+            Assert.That(directory, Is.EqualTo(ChoiceStoreSave.DirectoryFor(Application.persistentDataPath, Application.dataPath)));
+            Assert.That(directory, Does.Contain(ChoiceStoreSave.ProjectKey(Application.dataPath)));
+            Assert.That(ChoiceStoreSave.IsInside(directory, Application.dataPath), Is.False);
+        }
+
+        [Test]
+        public void HasContent_IsAPickOrAFact()
+        {
+            ChoiceStore store = NewStore();
+            Assert.That(ChoiceStoreSave.HasContent(null), Is.False);
+            Assert.That(ChoiceStoreSave.HasContent(store), Is.False);
+
+            store.SetFact("a", FactValue.Of(false));
+            Assert.That(ChoiceStoreSave.HasContent(store), Is.True);
+
+            store.ResetAll();
+            store.RecordChoice("d", "n", "c");
+            Assert.That(ChoiceStoreSave.HasContent(store), Is.True);
+        }
+
         // ---- paths and the Assets guard ----
 
         [Test]

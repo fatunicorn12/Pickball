@@ -49,11 +49,9 @@ namespace Pickleball.Tests.Dialogue
             }
         }
 
+        // DLG-C-3, fixed: PlayTimeClock is monotonic, and ChoiceStoreHost skips
+        // OnDisable's save after OnApplicationQuit and never banks less than the file holds.
         [Test]
-        [Ignore("Known bug DLG-C-3: play time goes back to the loaded value when the real-time source " +
-                "resets. Unity zeroes Time.unscaledTimeAsDouble before OnDisable at the end of Play, so " +
-                "ChoiceStoreHost.OnDisable overwrites the OnApplicationQuit save with the session's time " +
-                "lost. See reports/R-dialogue-choices.md.")]
         public void PlayTime_NeverGoesBack_WhenTheRealTimeSourceResets_AsAtTheEndOfPlay()
         {
             double realtime = 0;

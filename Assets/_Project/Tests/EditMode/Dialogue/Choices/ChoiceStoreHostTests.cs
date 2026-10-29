@@ -120,19 +120,102 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
-        public void LifecycleSaves_WriteEvenWhenClean_SoPlayTimeIsBanked()
+        public void LifecycleSaves_WriteEvenWhenClean_SoPlayTimeIsBanked_ButNotAgainOnDisableAfterQuit()
+        {
+            ChoiceStoreHost host = NewHost();
+            host.Store.SetFact("rep", FactValue.Of(1));
+            host.FlushIfDirty();
+            Assert.That(host.SavesWritten, Is.EqualTo(1));
+
+            Invoke(host, "OnApplicationPause", true);
+            Assert.That(host.SavesWritten, Is.EqualTo(2));
+            Invoke(host, "OnApplicationPause", false);
+            Invoke(host, "OnDisable");
+            Assert.That(host.SavesWritten, Is.EqualTo(3), "Disabled without quitting (a script reload): saves.");
+            Invoke(host, "OnApplicationQuit");
+            Assert.That(host.SavesWritten, Is.EqualTo(4));
+            Invoke(host, "OnDisable");
+            Assert.That(host.SavesWritten, Is.EqualTo(4), "The OnDisable after a quit does not save again (DLG-C-3).");
+            Assert.That(TempFiles(), Is.EqualTo(new[] { "choices.json" }));
+        }
+
+        [Test]
+        public void TheEndOfPlay_KeepsTheSessionsPlayTime_WhenUnityZeroesTheClockBeforeOnDisable()
+        {
+            ChoiceStore seed = NewStore();
+            seed.SetFact("met_birdy", FactValue.Of(true));
+            Assert.That(ChoiceStoreSave.Save(SavePath, seed, 100, out string error), Is.True, error);
+
+            ChoiceStoreHost host = NewHost();
+            _ = host.Store;
+            double unscaled = 50;
+            SetPrivate(host, "_clock", new PlayTimeClock(() => unscaled, 100));   // what the load banked
+            unscaled = 53;   // three seconds of play
+
+            Invoke(host, "OnApplicationQuit");
+            unscaled = 0;    // Unity's reset before OnDisable at the end of Play (measured by QA)
+            Invoke(host, "OnDisable");
+
+            Assert.That(ChoiceStoreSave.Load(SavePath, NewStore()).PlayTime, Is.EqualTo(103).Within(1e-9));
+            Assert.That(host.PlayTime, Is.EqualTo(103).Within(1e-9), "The clock is frozen at the quit.");
+        }
+
+        [Test]
+        public void ASave_NeverBanksLessPlayTimeThanTheFileHolds()
+        {
+            ChoiceStore seed = NewStore();
+            seed.SetFact("met_birdy", FactValue.Of(true));
+            Assert.That(ChoiceStoreSave.Save(SavePath, seed, 100, out string error), Is.True, error);
+
+            ChoiceStoreHost host = NewHost();
+            _ = host.Store;
+            SetPrivate(host, "_clock", new PlayTimeClock(() => 0, 10));   // a clock that somehow reads low
+
+            Assert.That(host.SaveNow(), Is.True);
+            Assert.That(ChoiceStoreSave.Load(SavePath, NewStore()).PlayTime, Is.EqualTo(100).Within(1e-9));
+        }
+
+        [Test]
+        public void PlayingWithoutPickingAnything_NeverCreatesASave()
         {
             ChoiceStoreHost host = NewHost();
             _ = host.Store;
 
             Invoke(host, "OnApplicationPause", true);
-            Assert.That(host.SavesWritten, Is.EqualTo(1));
             Invoke(host, "OnApplicationPause", false);
+            host.FlushIfDirty();
+            Assert.That(host.SaveNow(), Is.False);
             Invoke(host, "OnApplicationQuit");
-            Assert.That(host.SavesWritten, Is.EqualTo(2));
             Invoke(host, "OnDisable");
-            Assert.That(host.SavesWritten, Is.EqualTo(3));
-            Assert.That(TempFiles(), Is.EqualTo(new[] { "choices.json" }));
+
+            Assert.That(host.SavesWritten, Is.Zero);
+            Assert.That(TempFiles(), Is.Empty, "Play time alone does not create a file (DLG-C-4).");
+        }
+
+        [Test]
+        public void TheFirstPickOrFact_CreatesTheSave()
+        {
+            ChoiceStoreHost host = NewHost();
+            host.Store.RecordChoice("birdy", "ask", "polite");
+            host.FlushIfDirty();
+            Assert.That(File.Exists(SavePath), Is.True);
+        }
+
+        [Test]
+        public void AnEmptiedStore_StillOverwritesItsExistingSave_SoAClearedFactStaysCleared()
+        {
+            ChoiceStoreHost host = NewHost();
+            host.Store.SetFact("quest_started", FactValue.Of(true));
+            host.FlushIfDirty();
+            Assert.That(host.SavesWritten, Is.EqualTo(1));
+
+            host.Store.ClearFact("quest_started");
+            host.FlushIfDirty();
+
+            Assert.That(host.SavesWritten, Is.EqualTo(2));
+            ChoiceStore check = NewStore();
+            Assert.That(ChoiceStoreSave.Load(SavePath, check).Status, Is.EqualTo(ChoiceLoadStatus.Loaded));
+            Assert.That(check.TryGetFact("quest_started", out _), Is.False);
         }
 
         [Test]
@@ -155,6 +238,7 @@ namespace Pickleball.Tests.Dialogue
             // What a domain reload in Play mode does: OnDisable, every
             // non-serialized object dropped, then OnEnable (no Awake).
             Invoke(host, "OnDisable");
+            Assert.That(host.SavesWritten, Is.EqualTo(1), "OnDisable saved before the reload.");
             SetPrivate(host, "_store", null);
             SetPrivate(host, "_clock", null);
             Invoke(host, "OnEnable");

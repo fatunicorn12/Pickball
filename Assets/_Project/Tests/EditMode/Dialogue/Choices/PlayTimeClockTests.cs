@@ -76,6 +76,54 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
+        public void ARealTimeSourceSteppingBack_KeepsWhatWasCounted_AndCountsOnFromTheNewValue()
+        {
+            // DLG-C-3: Unity zeroes unscaled time before OnDisable at the end of Play.
+            double realtime = 50;
+            var clock = new PlayTimeClock(() => realtime, 100);
+            realtime = 53;
+            Assert.That(clock.Now, Is.EqualTo(103));
+
+            realtime = 0;
+            Assert.That(clock.Now, Is.EqualTo(103), "The 3 s already counted are kept.");
+            realtime = 2;
+            Assert.That(clock.Now, Is.EqualTo(105), "Counting continues from the new source value.");
+
+            realtime = 1;
+            Assert.That(clock.Now, Is.EqualTo(105), "A second step back is survived the same way.");
+            realtime = 1.5;
+            Assert.That(clock.Now, Is.EqualTo(105.5));
+        }
+
+        [Test]
+        public void Now_NeverDecreases_UnderAJitteringSource()
+        {
+            double[] readings = { 5, 7, 6, 9, 0, 0, 3, 2, 10, 4 };
+            int i = 0;
+            var clock = new PlayTimeClock(() => readings[i], 1);
+            double last = clock.Now;
+            for (i = 1; i < readings.Length; i++)
+            {
+                double now = clock.Now;
+                Assert.That(now, Is.GreaterThanOrEqualTo(last), $"reading {i} ({readings[i]})");
+                last = now;
+            }
+        }
+
+        [Test]
+        public void Restart_IsTheOneWayToSetTheClockLower()
+        {
+            double realtime = 0;
+            var clock = new PlayTimeClock(() => realtime, 100);
+            realtime = 10;
+            Assert.That(clock.Now, Is.EqualTo(110));
+            clock.Restart(0);
+            Assert.That(clock.Now, Is.Zero);
+            realtime = 12;
+            Assert.That(clock.Now, Is.EqualTo(2));
+        }
+
+        [Test]
         public void ANullSource_Throws()
         {
             Assert.Throws<ArgumentNullException>(() => new PlayTimeClock(null));

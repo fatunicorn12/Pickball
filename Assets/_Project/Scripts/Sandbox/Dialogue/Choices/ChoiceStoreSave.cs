@@ -12,12 +12,20 @@ namespace Pickleball.Sandbox.Dialogue
     /// (<see cref="ChoiceSaveData"/>). Static and stateless: the caller passes
     /// the path, so tests use a temp folder and never the real save.
     ///
-    /// <b>Where.</b> <see cref="DefaultDirectory"/> is
-    /// <c>&lt;Application.persistentDataPath&gt;/Saves/</c>; the file is
-    /// <see cref="DefaultFileName"/> unless the host names another. Every write
-    /// (save, delete, quarantine) refuses a path inside <c>Application.dataPath</c>
-    /// (the project's Assets/ folder in the Editor), so a save can never land in
-    /// the repository.
+    /// <b>Where.</b> <see cref="DefaultDirectory"/>; the file is
+    /// <see cref="DefaultFileName"/> unless the host names another.
+    /// <list type="bullet">
+    /// <item>A built player: <c>&lt;persistentDataPath&gt;/Saves/</c>.</item>
+    /// <item>The Editor, including batch and test-runner runs:
+    /// <c>&lt;persistentDataPath&gt;/Saves/Editor/&lt;project&gt;-&lt;hash&gt;/</c>,
+    /// keyed to this project's Assets path (<see cref="ProjectKey"/>).
+    /// <c>persistentDataPath</c> is per user, not per project, so without the
+    /// key every checkout, worktree, test run and agent on the machine shared
+    /// one save (QA bug DLG-C-4).</item>
+    /// </list>
+    /// Every write (save, delete, quarantine) refuses a path inside
+    /// <c>Application.dataPath</c> (the project's Assets/ folder in the Editor),
+    /// so a save can never land in the repository.
     ///
     /// <b>Atomic writes.</b> <see cref="Save"/> writes <c>&lt;file&gt;.tmp</c>,
     /// flushes it to disk, then swaps it over the old file with
@@ -49,12 +57,86 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>The folder under <c>Application.persistentDataPath</c> that holds saves.</summary>
         public const string SaveFolderName = "Saves";
 
+        /// <summary>The folder under <see cref="SaveFolderName"/> that holds the
+        /// Editor's per-project save folders.</summary>
+        public const string EditorFolderName = "Editor";
+
         const string TempSuffix = ".tmp";
         const string CorruptInfix = ".corrupt-";
+        const int MaxProjectNameLength = 32;
 
-        /// <summary><c>&lt;Application.persistentDataPath&gt;/Saves</c>: outside the
-        /// project in the Editor, the per-user app data folder on device.</summary>
-        public static string DefaultDirectory => Path.Combine(Application.persistentDataPath, SaveFolderName);
+        /// <summary>
+        /// Where this run keeps its saves: <see cref="DirectoryFor"/> with
+        /// <c>Application.persistentDataPath</c>, and with
+        /// <c>Application.dataPath</c> as the project key when running in the
+        /// Editor. Outside the project in both cases.
+        /// </summary>
+        public static string DefaultDirectory
+            => DirectoryFor(Application.persistentDataPath, Application.isEditor ? Application.dataPath : null);
+
+        /// <summary>
+        /// The save folder under <paramref name="persistentDataPath"/>:
+        /// <c>Saves</c> when <paramref name="editorDataPath"/> is null or empty
+        /// (a built player), otherwise
+        /// <c>Saves/Editor/&lt;<see cref="ProjectKey"/>(editorDataPath)&gt;</c>.
+        /// </summary>
+        public static string DirectoryFor(string persistentDataPath, string editorDataPath)
+        {
+            string saves = Path.Combine(persistentDataPath ?? string.Empty, SaveFolderName);
+            return string.IsNullOrEmpty(editorDataPath)
+                ? saves
+                : Path.Combine(saves, EditorFolderName, ProjectKey(editorDataPath));
+        }
+
+        /// <summary>
+        /// A short folder name that is stable for one project and different
+        /// for another: the project folder's name (letters, digits, '.', '-'
+        /// and '_' only, at most 32 characters) and an 8-hex-digit FNV-1a hash
+        /// of its full Assets path, e.g. <c>Pickball-1f0c93a7</c>. The path is
+        /// normalized first (full path, '/' separators, no trailing separator,
+        /// lower case), so the same project always gets the same key.
+        /// </summary>
+        public static string ProjectKey(string dataPath)
+        {
+            string full = dataPath ?? string.Empty;
+            try
+            {
+                full = Path.GetFullPath(full);
+            }
+            catch (Exception e) when (e is ArgumentException || e is NotSupportedException || e is PathTooLongException)
+            {
+                // Key the text as given.
+            }
+            full = full.Replace('\\', '/').TrimEnd('/');
+
+            uint hash = 2166136261;
+            foreach (char c in full.ToLowerInvariant())
+            {
+                hash ^= c;
+                hash *= 16777619;
+            }
+
+            // The project folder is the one holding Assets: ".../Pickball/Assets" gives "Pickball".
+            int slash = full.LastIndexOf('/');
+            string parent = slash > 0 ? full.Substring(0, slash) : string.Empty;
+            string project = SafeName(parent.Substring(parent.LastIndexOf('/') + 1));
+            if (project.Length == 0) project = "project";
+
+            return project + "-" + hash.ToString("x8", CultureInfo.InvariantCulture);
+        }
+
+        static string SafeName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return string.Empty;
+            var builder = new StringBuilder(Math.Min(name.Length, MaxProjectNameLength));
+            foreach (char c in name)
+            {
+                if (builder.Length == MaxProjectNameLength) break;
+                bool safe = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_';
+                builder.Append(safe ? c : '_');
+            }
+            return builder.ToString().Trim('.');
+        }
 
         /// <summary>The temp file a save writes before swapping it in.</summary>
         public static string TempPathFor(string path) => path + TempSuffix;
@@ -131,6 +213,11 @@ namespace Pickleball.Sandbox.Dialogue
         }
 
         static string TrimSeparators(string path) => path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        /// <summary>Whether <paramref name="store"/> holds anything worth a save
+        /// file: a pick or a fact. Play time alone is not.</summary>
+        public static bool HasContent(IChoiceStore store)
+            => store != null && (store.Choices.Count > 0 || store.Facts.Count > 0);
 
         /// <summary>The store as save-file JSON at <see cref="CurrentVersion"/>,
         /// facts in ordinal key order.</summary>
