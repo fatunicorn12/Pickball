@@ -115,7 +115,7 @@ namespace Pickleball.Sandbox.Magic
             for (int i = 0; i < ticks && Target != null; i++)
             {
                 float damage = Ticker.DamagePerTick;
-                _target.TakeHit(damage, BodyCentre, Vector3.zero, false);
+                _target.TakeHit(damage, BodyCentre, Vector3.zero, false, DamageKind.Spell);
                 Ticked?.Invoke(this, damage);
             }
 

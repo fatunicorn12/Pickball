@@ -97,6 +97,11 @@ namespace Pickleball.Sandbox
         /// </summary>
         public Func<float, Vector3, float> IncomingDamageFilter;
 
+        /// <summary>Same as <see cref="IncomingDamageFilter"/>, but also told the
+        /// hit's <see cref="DamageKind"/> — Newton uses it to exempt spells from his
+        /// range rule. Applied after <see cref="IncomingDamageFilter"/> when both are set.</summary>
+        public Func<float, Vector3, DamageKind, float> IncomingDamageFilterByKind;
+
         /// <summary>What <see cref="IncomingDamageFilter"/> did to the most recent
         /// hit, as applied ÷ raw: above 1 the hit was amplified (Newton's close-range
         /// weak point), below 1 it was resisted. Valid inside a <see cref="Hurt"/>
@@ -146,7 +151,9 @@ namespace Pickleball.Sandbox
         /// nothing enters the grey pool and nothing can win it back.</param>
         /// <param name="continuous">True marks a per-frame tick that must never be
         /// refused by, or open, hit grace. Tiny hits are treated so automatically.</param>
-        public void Damage(float amount, Vector3 at, bool recoverable = true, bool continuous = false)
+        /// <param name="kind">What dealt it; passed to <see cref="IncomingDamageFilterByKind"/>.</param>
+        public void Damage(float amount, Vector3 at, bool recoverable = true, bool continuous = false,
+                           DamageKind kind = DamageKind.Physical)
         {
             if (amount <= 0f || IsDead) return;
 
@@ -157,6 +164,7 @@ namespace Pickleball.Sandbox
 
             float raw = amount;
             if (IncomingDamageFilter != null) amount = IncomingDamageFilter(amount, at);
+            if (IncomingDamageFilterByKind != null) amount = IncomingDamageFilterByKind(amount, at, kind);
             if (amount <= 0f) return;
 
             float applied = Mathf.Min(amount, Current);
@@ -225,9 +233,10 @@ namespace Pickleball.Sandbox
         /// <summary>Weapon entry point. The sword's knockback and launch are for
         /// the receiver to interpret — a boss ignores being launched, a crate
         /// does not — so they are passed on rather than applied here.</summary>
-        public void TakeHit(float amount, Vector3 hitPoint, Vector3 knockback, bool launch)
+        public void TakeHit(float amount, Vector3 hitPoint, Vector3 knockback, bool launch,
+                            DamageKind kind = DamageKind.Physical)
         {
-            Damage(amount, hitPoint);
+            Damage(amount, hitPoint, kind: kind);
             Knocked?.Invoke(knockback, launch);
         }
 

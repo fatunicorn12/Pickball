@@ -464,6 +464,9 @@ the target's setup menu.
 - **Already working on Newton with no change:** the damage of every spell, the Fireball's burn
   (through `IDamageable`, each tick through his `IncomingDamageFilter` at his body centre, and each
   tick paying the regain credit), and the strike's tracking and chain.
+- **Spells ignore Newton's range rule:** every spell hit (orb, blast, burn tick, strike, splash
+  and chain) passes `DamageKind.Spell` to `TakeHit`. With `NewtonBoss.rangeScalesSpells` off (the
+  default), his inverse-square multiplier leaves spell damage unscaled.
 
 **Swap in a model (Tripo meshes):** set the spell asset's `modelPrefab` (and, for the Thunderbolt,
 `secondaryModelPrefab`). Colliders and rigidbodies on it are stripped when it spawns

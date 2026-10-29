@@ -227,7 +227,7 @@ namespace Pickleball.Sandbox.Magic
             if (target != null)
             {
                 Remember(target);
-                target.TakeHit(_spell.DirectDamage, contact, Push(_direction, _spell.Knockback), false);
+                target.TakeHit(_spell.DirectDamage, contact, Push(_direction, _spell.Knockback), false, DamageKind.Spell);
                 hits++;
             }
 
@@ -256,7 +256,7 @@ namespace Pickleball.Sandbox.Magic
                     Vector3 away = col.bounds.center - centre;
                     if (away.sqrMagnitude < 1e-6f) away = _direction;
                     float share = max > 0f ? Mathf.Clamp01(damage / max) : 1f;
-                    victim.TakeHit(damage, point, Push(away, _spell.Knockback * share), false);
+                    victim.TakeHit(damage, point, Push(away, _spell.Knockback * share), false, DamageKind.Spell);
                     hits++;
                 }
             }

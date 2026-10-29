@@ -196,7 +196,7 @@ namespace Pickleball.Sandbox.Magic
                 _impact = directCollider.bounds.center;
                 Remember(direct);
                 Vector3 away = _owner != null ? _impact - _owner.position : Vector3.zero;
-                direct.TakeHit(_spell.DirectDamage, _impact, Push(away, _spell.Knockback), false);
+                direct.TakeHit(_spell.DirectDamage, _impact, Push(away, _spell.Knockback), false, DamageKind.Spell);
                 hits++;
                 if (_spell.StaggerSeconds > 0f)
                 {
@@ -224,7 +224,7 @@ namespace Pickleball.Sandbox.Magic
                     if (damage <= 0f) continue;
                     Remember(victim);
                     float share = max > 0f ? Mathf.Clamp01(damage / max) : 1f;
-                    victim.TakeHit(damage, at, Push(col.bounds.center - _point, _spell.Knockback * share), false);
+                    victim.TakeHit(damage, at, Push(col.bounds.center - _point, _spell.Knockback * share), false, DamageKind.Spell);
                     hits++;
                 }
             }
@@ -271,7 +271,7 @@ namespace Pickleball.Sandbox.Magic
                 var victim = _chainTargets[pick];
                 Vector3 to = _chainPositions[pick];
                 Remember(victim);
-                victim.TakeHit(_spell.ChainDamage, to, Vector3.zero, false);
+                victim.TakeHit(_spell.ChainDamage, to, Vector3.zero, false, DamageKind.Spell);
                 hits++;
                 Chained?.Invoke(this, from, to);
                 from = to;
