@@ -343,7 +343,7 @@ Mixamo set in `Pickball-mixamo-inbox` is imported:
 | Rollout | placeholder: the trimmed front flip |
 | SpinJump | placeholder: Falling Idle, with the model spun about Y in code |
 | Dive | `Run To Dive.fbx` frames 15–20, holding the last: body flat, both hands straight ahead and together, legs scissored. Past about frame 22 the take pitches into a roll. |
-| BellySlide | `Belly Slide Pose.fbx`, an authored two-frame pose held for the whole slide: arms ahead and together, torso flat, head up, legs together with the knees bent. The model is lowered 0.45 m (`bellySlideOffset`), which puts its lowest point about 1 cm above the floor. |
+| BellySlide | `Belly Slide Pose Wide.fbx`, an authored two-frame pose held for the whole slide: arms ahead in a shallow V (17° out, 6° up), torso flat, head up, legs together with the knees bent. The V puts the hands beside the big head rather than under it. An arms-together version was tried first, and its hands sat under the head, mostly hidden from the side. The model is lowered 0.45 m (`bellySlideOffset`), which puts its lowest point about 1 cm above the floor. |
 
 Both are Mixamo X Bot clips. Their `.meta` files carry the canonical X Bot reference skeleton
 from the clip audit: every `mixamorig:*` rotation in `humanDescription.skeleton` is the same as
@@ -428,9 +428,10 @@ carries its own pose, set that move's pitch to 0. For a new flip clip, set
   authored Belly Slide Pose. The per-clip import and motion-matching recipes are in the
   side-session notes. The remaining roles need per-role exceptions in `SetupClips`: Body
   orientation for the turning roles, and a per-role Y bake for grounded and prone roles.
-- **The chibi's arms are short for the dive poses.** The hands reach only just past the big
-  head, so from the chase camera the arms-forward read is mostly hidden. If that matters, the
-  pose's arm height or spread can be adjusted in the source file rather than in the rig.
+- **From the chase camera the dive and slide arms don't show.** The cape covers the shoulders
+  and the big head covers everything ahead of them, so from behind you see head, cape and soles.
+  The arms read from the side and front, and the slide's V spread is what makes them visible
+  there. Changing that would mean a different pose or cape behaviour, not the rig.
 - **The skid swing drags a planted foot** about 0.4 m. The body turns 180° in about 0.06 s over
   planted feet. A dedicated turn clip and foot IK off (already off on SkidTurn) only hide part
   of it.

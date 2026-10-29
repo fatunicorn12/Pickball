@@ -76,7 +76,7 @@ namespace Pickleball.Sandbox.Movement.Presentation
                  "clip, which is already flat; about 82 if the slide falls back to the fall loop.")]
         [SerializeField, Range(0f, 90f)] private float bellySlidePitch = 0f;
         [Tooltip("Model offset while belly sliding, m (local), so the body lies on the floor " +
-                 "instead of floating at standing hip height. -0.45 puts Belly Slide Pose's " +
+                 "instead of floating at standing hip height. -0.45 puts Belly Slide Pose Wide's " +
                  "lowest point about 1 cm above the floor.")]
         [SerializeField] private Vector3 bellySlideOffset = new(0f, -0.45f, 0f);
         [Tooltip("How fast poses blend in and out, 1/s (exponential).")]

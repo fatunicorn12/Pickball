@@ -172,11 +172,13 @@ public static class ChibiSandboxSetup
         // reference skeleton from the clip audit; without it the knees and feet
         // play 30-40 deg off.
         ("dive",       ClipDir + "/Run To Dive.fbx",         false, 15, 20),
-        // Belly Slide Pose: an authored two-frame pose on the same X Bot
-        // skeleton (arms straight ahead and together, torso flat, head up, legs
-        // together, knees bent), held for the whole slide. Its .meta carries
-        // the same canonical reference skeleton as Run To Dive.
-        ("bellySlide", ClipDir + "/Belly Slide Pose.fbx",    false,  0,  1),
+        // Belly Slide Pose Wide: an authored two-frame pose on the same X Bot
+        // skeleton (arms ahead in a shallow V, 17 deg out and 6 deg up; torso
+        // flat, head up, legs together, knees bent), held for the whole slide.
+        // The V puts the hands beside the big head instead of under it, so the
+        // arms read from the side and front. Its .meta carries the same
+        // canonical reference skeleton as Run To Dive.
+        ("bellySlide", ClipDir + "/Belly Slide Pose Wide.fbx", false, 0,  1),
         // Skateboarding loops (0.95 and 0.93 m/s). Imported and ready, but not
         // yet placed in the state machine: without a board mesh he would ride
         // thin air. Wired up once the skateboard prop exists.
@@ -234,7 +236,7 @@ public static class ChibiSandboxSetup
         // animation for a prop and file it under Art/Props.
         ("Hanging.fbx", ClipDir), ("Throw.fbx", ClipDir),
         ("Skateboarding (1).fbx", ClipDir), ("Run To Dive.fbx", ClipDir),
-        ("Belly Slide Pose.fbx", ClipDir),
+        ("Belly Slide Pose Wide.fbx", ClipDir),
         ("Standing Sprint Forward.fbx", ClipDir), ("Sprint Turn.fbx", ClipDir),
         ("Crouched To Sprinting.fbx", ClipDir),
         (WorldFile, WorldDir), (ColliderFile, WorldDir),
