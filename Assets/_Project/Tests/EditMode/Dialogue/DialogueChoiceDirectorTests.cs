@@ -21,7 +21,8 @@ namespace Pickleball.Tests.Dialogue
     {
         const float Settle = 0.25f;
         const float TextDelay = 0.2f;
-        const float ChoiceLockout = 0.3f;
+        const float ChoiceLockout = 0.5f;
+        const float ChoiceQuiet = 1.1f;
 
         DialogueConfig _config;
         PlayerInputGate _gate;
@@ -52,6 +53,7 @@ namespace Pickleball.Tests.Dialogue
             SetFloat(_config, "charactersPerSecond", 0f);        // instant text: the choice logic is the point
             SetFloat(_config, "advanceLockoutSeconds", 0f);
             SetFloat(_config, "choiceLockoutSeconds", ChoiceLockout);
+            SetFloat(_config, "choiceQuietSeconds", ChoiceQuiet);
             SetBool(_config, "pauseAudio", false);
 
             var playerHost = NewHost("Player");
@@ -86,7 +88,8 @@ namespace Pickleball.Tests.Dialogue
             Assert.That(_director.IsChoosing, Is.True, $"state {_director.State}");
         }
 
-        void PastLockout() => _director.Tick(ChoiceLockout + 0.01f, false);
+        /// <summary>Long enough, with Interact left alone, that a press would pick.</summary>
+        void PastLockout() => _director.Tick(Mathf.Max(ChoiceLockout, ChoiceQuiet) + 0.01f, false);
 
         [Test]
         public void Options_AppearInThePausedWorld_AndTheNpcHearsAboutThem()
@@ -146,26 +149,61 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
-        public void HoverClickAndNumberKeys_GoThroughTheSameGuardedPick()
+        public void HoverAndClick_NumberKeys_PickAtOnce_WhileInteractStillWaits()
         {
             var highlighted = new List<int>();
             _director.ChoiceHighlighted += highlighted.Add;
             StartToOptions();
 
-            Assert.That(_director.ConfirmChoice(1), Is.False, "inside the lockout a click only points");
-            Assert.That(highlighted, Is.EqualTo(new[] { 1 }));
-            Assert.That(Store.Choices, Is.Empty);
-
+            _director.MoveChoiceHighlight(1);
             _director.MoveChoiceHighlight(1);       // wraps back to 0
             Assert.That(_director.HighlightChoice(1), Is.True);
             Assert.That(_director.HighlightChoice(5), Is.False);
+            Assert.That(highlighted, Is.EqualTo(new[] { 1, 0, 1 }));
 
-            PastLockout();
-            Assert.That(_director.ConfirmChoice(1), Is.True);
+            Assert.That(_director.IsChoiceReady, Is.False, "Interact would not pick yet");
+            _director.Tick(0.01f, true);
+            Assert.That(Store.Choices, Is.Empty);
+
+            Assert.That(_director.ConfirmChoice(1), Is.True, "a click or number key is deliberate");
             Assert.That(Store.LastChoice("test.talk", "ask"), Is.EqualTo("no"));
             Assert.That(Store.Facts, Is.Empty, "'no' has no effects");
             Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Closing), "an empty next ends the talk");
             Assert.That(_director.ConfirmChoice(0), Is.False);
+        }
+
+        [Test]
+        public void IsChoiceReady_OnlyOnceTheAnswersWereUpAndInteractLeftAlone()
+        {
+            StartToOptions();
+            Assert.That(_director.IsChoiceReady, Is.False);
+            _director.Tick(ChoiceQuiet * 0.6f, false);
+            Assert.That(_director.IsChoiceReady, Is.False);
+            _director.Tick(0.01f, true);                           // a press too soon restarts the quiet
+            _director.Tick(ChoiceQuiet * 0.6f, false);
+            Assert.That(_director.IsChoiceReady, Is.False);
+            _director.Tick(ChoiceQuiet * 0.5f, false);
+            Assert.That(_director.IsChoiceReady, Is.True);
+            _director.Tick(0.01f, true);
+            Assert.That(Store.LastChoice("test.talk", "ask"), Is.EqualTo("yes"));
+        }
+
+        [Test]
+        public void ATalkThatWouldSayNothing_IsNeitherOfferedNorStarted()
+        {
+            var gated = NewTalkable(Track(DialogueDefinition.CreateRuntime("Birdy", "test.gated", "gate",
+                DialogueNode.CreateBranch("gate", new[] { FactCondition.Fact(FactConditionKind.FactEquals, "promised", FactValue.Of(true)) },
+                                          "thanks", ""),
+                DialogueNode.CreateLine("thanks", "You kept your promise!"))), new Vector3(1f, 0f, 2f));
+
+            Assert.That(gated.CanTalk, Is.True, "the Talkable alone can't tell");
+            Assert.That(_director.WouldSaySomething(gated), Is.False);
+            Assert.That(_director.TryStart(gated, _player), Is.False);
+            Assert.That(_director.State, Is.EqualTo(DialogueDirector.Phase.Idle));
+
+            Store.SetFact("promised", FactValue.Of(true));
+            Assert.That(_director.WouldSaySomething(gated), Is.True);
+            Assert.That(_director.TryStart(gated, _player), Is.True);
         }
 
         [Test]

@@ -146,10 +146,10 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
-        public void ALoopWithNoWayOut_IsAWarning_ALoopWithOneIsNot()
+        public void ALoopWithNoWayOut_IsAnError_ALoopWithOneIsNot()
         {
             var trapped = Graph("a", Line("a", "b"), Choice("b", "", Option("again", "a"), Option("other", "a")));
-            Single(trapped, DialogueIssueSeverity.Warning, "loop with no way out");
+            Single(trapped, DialogueIssueSeverity.Error, "loop with no way out");
 
             var exit = Graph("a", Line("a", "b"), Choice("b", "", Option("again", "a"), Option("leave")));
             Assert.That(DialogueValidator.Validate(exit), Is.Empty);
@@ -160,7 +160,7 @@ namespace Pickleball.Tests.Dialogue
         {
             // The else link of a branch with no conditions is never taken.
             var def = Graph("a", Line("a", "b"), DialogueNode.CreateBranch("b", null, "a", ""));
-            Single(def, DialogueIssueSeverity.Warning, "loop with no way out");
+            Single(def, DialogueIssueSeverity.Error, "loop with no way out");
             Single(def, DialogueIssueSeverity.Warning, "no conditions, so it always goes to next");
         }
 
@@ -186,6 +186,18 @@ namespace Pickleball.Tests.Dialogue
             Assert.That(DialogueValidator.Validate(
                 Graph("b", DialogueNode.CreateBranch("b", new[] { FactCondition.Choice(true, "other.talk", "x") }, "", ""))),
                 Is.Empty);
+        }
+
+        [Test]
+        public void AnOptionLeadingStraightToAChoiceWithNoPrompt_IsAWarning()
+        {
+            var chained = Graph("one", Choice("one", "", Option("x", "two")), Choice("two", "", Option("y")));
+            var issue = Single(chained, DialogueIssueSeverity.Warning, "under the question just answered");
+            Assert.That(issue.NodeId, Is.EqualTo("one"));
+
+            var prompted = Graph("one", Choice("one", "", Option("x", "two")),
+                                 DialogueNode.CreateChoice("two", "And then?", DialogueEmote.Talk, "", Option("y")));
+            Assert.That(DialogueValidator.Validate(prompted), Is.Empty);
         }
 
         [Test]

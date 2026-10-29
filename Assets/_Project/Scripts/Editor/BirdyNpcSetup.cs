@@ -1051,7 +1051,7 @@ public static class BirdyNpcSetup
     /// <see cref="PromisedHelpFact"/>), ask about Newton (offered only until
     /// asked: it loops back to the same question without itself), or not now;</item>
     /// <item>promised: "You came back! Still up for helping?", where backing out
-    /// clears the promise;</item>
+    /// sets the promise back to false (the fact stays, false);</item>
     /// <item>asked before but never promised: he asks again.</item>
     /// </list>
     /// Uses all three emotes.

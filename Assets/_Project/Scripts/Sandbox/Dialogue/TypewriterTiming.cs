@@ -15,10 +15,12 @@ namespace Pickleball.Sandbox.Dialogue
         public float SentencePause;
         /// <summary>A press this soon after a line starts or is revealed is ignored, s.</summary>
         public float AdvanceLockout;
-        /// <summary>Quiet time after options appear before a pick counts, s. An
-        /// Interact press inside it restarts it (a debounce, so mashing through
-        /// text never picks the first option unread); a number key or click inside
-        /// it only moves the cursor.</summary>
+        /// <summary>How long options must have been up before Interact can pick one, s.</summary>
         public float ChoiceLockout;
+        /// <summary>How long Interact must have been left alone before a press can pick
+        /// an option, s. Every press during the talk (skipping text included) restarts
+        /// it, so a steady tap through the text never picks an answer unread.
+        /// Number keys and clicks are deliberate and pick at once.</summary>
+        public float ChoiceQuiet;
     }
 }

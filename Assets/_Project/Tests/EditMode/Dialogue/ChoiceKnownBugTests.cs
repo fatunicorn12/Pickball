@@ -12,9 +12,6 @@ namespace Pickleball.Tests.Dialogue
     public class ChoiceKnownBugTests
     {
         [Test]
-        [Ignore("Known bug DLG-C-1: tapping E at about 3 Hz (or slower) to skip text picks the first " +
-                "answer unread. The 0.3 s choice debounce only stops presses faster than ~3.4 Hz. " +
-                "See reports/R-dialogue-choices.md.")]
         public void TappingE_ThreeTimesASecond_ThroughTheQuestion_NeverPicksUnread()
         {
             var config = ScriptableObject.CreateInstance<DialogueConfig>();   // the shipped defaults
@@ -65,9 +62,6 @@ namespace Pickleball.Tests.Dialogue
         }
 
         [Test]
-        [Ignore("Known bug DLG-C-2: a reachable loop with no way out is only a validator warning, so " +
-                "DialogueAssetTests passes while the talk can never end (time stopped, no exit). " +
-                "See reports/R-dialogue-choices.md.")]
         public void AReachableLoopWithNoWayOut_IsAnError()
         {
             var definition = DialogueDefinition.CreateRuntime("Birdy", "qa.loop", "a",

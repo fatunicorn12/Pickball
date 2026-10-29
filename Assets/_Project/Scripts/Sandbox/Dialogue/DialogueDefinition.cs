@@ -62,6 +62,7 @@ namespace Pickleball.Sandbox.Dialogue
         // survives a script reload by being rebuilt.
         [NonSerialized] Dictionary<string, DialogueNode> _index;
         [NonSerialized] List<DialogueLine> _authoredLines;
+        [NonSerialized] HashSet<string> _canEnd;
 
         /// <summary>The conversation's stable id; may be empty for a linear one. Never null.</summary>
         public string Id => id ?? string.Empty;
@@ -108,6 +109,19 @@ namespace Pickleball.Sandbox.Dialogue
         {
             node = null;
             return !string.IsNullOrEmpty(nodeId) && Index.TryGetValue(nodeId, out node);
+        }
+
+        /// <summary>
+        /// Whether some path from node <paramref name="nodeId"/> ends the
+        /// conversation (see <see cref="DialogueValidator.NodesThatCanEnd"/>).
+        /// False for a node in a loop with no way out; the runner ends the talk
+        /// rather than walk into one. Always true for a linear definition.
+        /// </summary>
+        public bool CanReachEnd(string nodeId)
+        {
+            if (!HasGraph) return true;
+            _canEnd ??= DialogueValidator.NodesThatCanEnd(nodes);
+            return _canEnd.Contains(nodeId ?? string.Empty);
         }
 
         /// <summary>
@@ -189,6 +203,7 @@ namespace Pickleball.Sandbox.Dialogue
         {
             _index = null;
             _authoredLines = null;
+            _canEnd = null;
         }
 
         void ISerializationCallbackReceiver.OnBeforeSerialize() { }

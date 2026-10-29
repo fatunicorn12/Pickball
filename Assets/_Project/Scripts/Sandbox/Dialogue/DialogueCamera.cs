@@ -100,6 +100,9 @@ namespace Pickleball.Sandbox.Dialogue
         RaycastHit[] _hits;
         DialogueOrbit _look;
         bool _canLook;
+        bool _wasChoosing;
+        int _mouseSkipFrames;
+        const int MouseSkipFramesAfterChoice = 2;
         Vector2 _pendingLook;
         float _shoulder = -1f;      // −1 over the left shoulder, +1 the right; chosen per talk
 
@@ -135,8 +138,16 @@ namespace Pickleball.Sandbox.Dialogue
 
         void LateUpdate()
         {
+            // The view captures the cursor again when answers go; the warp back to
+            // centre can arrive as one big mouse delta. Skip the mouse for a couple
+            // of frames after the answers so the camera never jumps.
+            bool choosing = director != null && director.IsChoosing;
+            if (_wasChoosing && !choosing) _mouseSkipFrames = MouseSkipFramesAfterChoice;
+            _wasChoosing = choosing;
+            bool mouse = MouseCaptured() && _mouseSkipFrames <= 0;
+            if (_mouseSkipFrames > 0) _mouseSkipFrames--;
             if (_canLook && config != null && config.LookEnabled)
-                _pendingLook += DialogueLookInput.Read(config.Look, MouseCaptured(), Time.unscaledDeltaTime);
+                _pendingLook += DialogueLookInput.Read(config.Look, mouse, Time.unscaledDeltaTime);
             Tick(Time.deltaTime, Time.unscaledDeltaTime);
         }
 

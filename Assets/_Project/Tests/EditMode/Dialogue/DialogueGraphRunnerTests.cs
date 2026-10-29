@@ -18,8 +18,9 @@ namespace Pickleball.Tests.Dialogue
     {
         const string Id = "test.talk";
 
-        static TypewriterTiming Timing(float cps = 0f, float lockout = 0f, float choiceLockout = 0f)
-            => new() { CharactersPerSecond = cps, AdvanceLockout = lockout, ChoiceLockout = choiceLockout };
+        static TypewriterTiming Timing(float cps = 0f, float lockout = 0f, float choiceLockout = 0f, float choiceQuiet = 0f)
+            => new() { CharactersPerSecond = cps, AdvanceLockout = lockout, ChoiceLockout = choiceLockout,
+                       ChoiceQuiet = choiceQuiet };
 
         DialogueDefinition Graph(string start, params DialogueNode[] nodes)
             => Track(DialogueDefinition.CreateRuntime("Birdy", Id, start, nodes));
@@ -366,36 +367,95 @@ namespace Pickleball.Tests.Dialogue
         // ---------------------------------------------------- lockouts, aborts
 
         [Test]
-        public void ChoiceLockout_InteractInsideItRestartsIt_SoMashingNeverPicks()
+        public void Interact_PicksOnlyOnceTheAnswersAreUpAndItWasLeftAlone_EveryPressRestartsTheQuiet()
         {
             var store = new FakeChoiceStore();
-            var runner = new DialogueRunner(Timing(choiceLockout: 0.3f));
-            runner.Begin(Ask(Option("a", "after.a")), store);
+            var runner = new DialogueRunner(Timing(choiceLockout: 0.5f, choiceQuiet: 1.1f));
+            runner.Begin(Ask(Option("a", "after.a")), store);    // instant text: the answers are up at once
 
-            runner.Tick(0.2f);
+            runner.Tick(0.6f);
+            Assert.That(runner.IsChoiceReady, Is.False, "up long enough, but the talk press was 0.6 s ago");
             Assert.That(runner.Advance(), Is.EqualTo(DialogueRunner.AdvanceResult.Ignored));
-            runner.Tick(0.2f);       // 0.4 s since the options, but only 0.2 since that press
+            runner.Tick(1.0f);       // 1.6 s since the answers, but only 1.0 since that press
             Assert.That(runner.Advance(), Is.EqualTo(DialogueRunner.AdvanceResult.Ignored));
             Assert.That(store.Choices, Is.Empty);
 
-            runner.Tick(0.31f);
+            runner.Tick(1.11f);
+            Assert.That(runner.IsChoiceReady, Is.True);
             Assert.That(runner.Advance(), Is.EqualTo(DialogueRunner.AdvanceResult.Chose));
             Assert.That(store.Choices.Count, Is.EqualTo(1));
         }
 
+        [TestCase(1f / 15f)]
+        [TestCase(0.1f)]
+        [TestCase(0.25f)]
+        [TestCase(0.3f)]
+        [TestCase(0.35f)]
+        [TestCase(0.5f)]
+        [TestCase(0.75f)]
+        [TestCase(1f)]
+        public void TappingThroughTheText_AtAnyRateUpToOnceASecond_NeverPicks(float period)
+        {
+            // The shipped timing, Birdy's question, a steady tap from the start of the talk.
+            var config = Track(ScriptableObject.CreateInstance<DialogueConfig>());
+            var store = new FakeChoiceStore();
+            var runner = new DialogueRunner(config.Typewriter);
+            runner.Begin(Graph("ask",
+                Line("ask", "Say... could a Guardian spare a moment for a small bird with a big problem?", "choice"),
+                DialogueNode.CreateChoice("choice", "", DialogueEmote.Talk, "", Option("help"), Option("later"))), store);
+
+            const float dt = 1f / 60f;
+            float untilTap = period;
+            for (float t = 0f; t < 8f; t += dt)
+            {
+                runner.Tick(dt);
+                untilTap -= dt;
+                if (untilTap > 0f) continue;
+                untilTap += period;
+                runner.Advance();
+            }
+            Assert.That(runner.State, Is.EqualTo(DialogueRunner.Phase.Choosing), "the answers came up");
+            Assert.That(store.Choices, Is.Empty, $"a tap every {period:0.00} s picked an answer unread");
+        }
+
         [Test]
-        public void ChoiceLockout_ANumberOrClickInsideIt_OnlyMovesTheCursor()
+        public void AReader_NeverWaits_AndASkipperPicksWithOneDeliberatePress()
+        {
+            var config = Track(ScriptableObject.CreateInstance<DialogueConfig>());
+            var def = Graph("ask",
+                Line("ask", "Could you help me?", "choice"),
+                DialogueNode.CreateChoice("choice", "", DialogueEmote.Talk, "", Option("help"), Option("later")));
+
+            // Lets the question type out, reads the answers, presses once.
+            var store = new FakeChoiceStore();
+            var reader = new DialogueRunner(config.Typewriter);
+            reader.Begin(def, store);
+            for (int i = 0; i < 60; i++) reader.Tick(1f / 60f);      // the line is typed by now
+            Assert.That(reader.State, Is.EqualTo(DialogueRunner.Phase.Choosing));
+            for (int i = 0; i < 40; i++) reader.Tick(1f / 60f);      // reads the answers
+            Assert.That(reader.Advance(), Is.EqualTo(DialogueRunner.AdvanceResult.Chose));
+
+            // Skips the question with E, reads the answers, presses once.
+            var skipStore = new FakeChoiceStore();
+            var skipper = new DialogueRunner(config.Typewriter);
+            skipper.Begin(def, skipStore);
+            skipper.Tick(0.2f);
+            skipper.Advance();                                       // shows the whole question
+            Assert.That(skipper.State, Is.EqualTo(DialogueRunner.Phase.Choosing));
+            for (int i = 0; i < 70; i++) skipper.Tick(1f / 60f);     // reads for 1.17 s
+            Assert.That(skipper.Advance(), Is.EqualTo(DialogueRunner.AdvanceResult.Chose));
+        }
+
+        [Test]
+        public void NumberKeysAndClicks_PickAtOnce()
         {
             var store = new FakeChoiceStore();
-            var runner = new DialogueRunner(Timing(choiceLockout: 0.3f));
+            var runner = new DialogueRunner(Timing(choiceLockout: 0.5f, choiceQuiet: 1.1f));
             runner.Begin(Ask(Option("a", "after.a"), Option("b", "after.b")), store);
 
-            Assert.That(runner.Choose(1), Is.False);
-            Assert.That(runner.HighlightedOption, Is.EqualTo(1));
-            Assert.That(store.Choices, Is.Empty);
-
-            runner.Tick(0.31f);
+            Assert.That(runner.IsChoiceReady, Is.False);
             Assert.That(runner.Choose(1), Is.True);
+            Assert.That(store.LastChoice(Id, "ask"), Is.EqualTo("b"));
         }
 
         [Test]
@@ -441,6 +501,41 @@ namespace Pickleball.Tests.Dialogue
             runner.Begin(Graph("a", Line("a", "Hi.", "nowhere")));
             // The link is resolved when the line is revealed, so the press finishes.
             Assert.That(runner.Advance(), Is.EqualTo(DialogueRunner.AdvanceResult.Finished));
+        }
+
+        [Test]
+        public void ALinkIntoALoopWithNoWayOut_EndsTheTalkInsteadOfTrappingThePlayer()
+        {
+            var store = new FakeChoiceStore();
+            var def = Graph("ask",
+                DialogueNode.CreateChoice("ask", "Well?", DialogueEmote.Talk, "", Option("leave"), Option("loop", "a")),
+                Line("a", "Round...", "b"),
+                Line("b", "...and round.", "a"));
+            var runner = new DialogueRunner(Timing());
+            runner.Begin(def, store);
+            Assert.That(runner.State, Is.EqualTo(DialogueRunner.Phase.Choosing));
+
+            LogAssert.Expect(LogType.Warning, new Regex("loop with no way out"));
+            runner.Choose(1);
+
+            Assert.That(runner.State, Is.EqualTo(DialogueRunner.Phase.Finished));
+            Assert.That(store.LastChoice(Id, "ask"), Is.EqualTo("loop"), "the pick itself still counts");
+        }
+
+        [Test]
+        public void HasSomethingToSay_IsFalse_WhenTheStartBranchesStraightToTheEnd()
+        {
+            var store = new FakeChoiceStore();
+            var def = Graph("gate",
+                DialogueNode.CreateBranch("gate", new[] { FactIsTrue("quest.done") }, "thanks", ""),
+                Line("thanks", "You did it!"));
+
+            Assert.That(DialogueRunner.HasSomethingToSay(def, store), Is.False);
+            Assert.That(DialogueRunner.HasSomethingToSay(def, null), Is.False);
+            store.SetFact("quest.done", FactValue.Of(true));
+            Assert.That(DialogueRunner.HasSomethingToSay(def, store), Is.True);
+            Assert.That(DialogueRunner.HasSomethingToSay(Definition("Hi."), null), Is.True);
+            Assert.That(DialogueRunner.HasSomethingToSay(Definition(), null), Is.False);
         }
 
         [Test]

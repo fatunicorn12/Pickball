@@ -53,17 +53,22 @@ and the views `UI/DialogueView.cs` (with `UI/DialogueViewOptionRow.cs`) and
 - **Choosing.** In a branching conversation, the moment a line has typed out (or been skipped
   to its end) the answers appear: no extra press, as in BotW. They stand in a column of dark
   plates on the box's top edge at its right end, first answer on top, with the line still in the
-  box below them. The highlighted answer has the accent ► beside it, lifts a little (5%) and its
-  plate brightens; an answer you can't give yet is greyed out and the cursor skips it. Move with
-  the **left** stick, the d-pad, the arrow keys or W/S (hold to repeat), or point with the mouse;
-  pick with E / RB, a click, or the number keys 1–9. The right stick still swings the camera; the
-  mouse stops turning it while the answers are up, because the cursor is set free to point with
-  (it is captured again the moment you pick). For 0.3 s after the answers appear nothing picks,
-  and every E inside that time restarts it, so mashing E through the text never picks the first
-  answer unread; a click or number key inside it only moves the cursor. A click only ever picks
-  an answer, never advances a line. In the rare mirrored shot (over the right shoulder, the NPC
-  on the right), the column moves to the box's left end, above the name tab, so it never covers
-  the NPC.
+  box below them; the column is never wider than 560 units, so a long answer wraps to a second
+  line rather than reach the NPC. The highlighted answer has the accent ► beside it, a clearly
+  lighter plate and a slight lift about its centre; an answer you can't give yet is greyed out and
+  the cursor skips it. Move with the **left** stick, the d-pad, the arrow keys or W/S (hold to
+  repeat), or point with the mouse; pick with E / RB, a click, or the number keys 1–9. The right
+  stick still swings the camera; the mouse stops turning it while the answers are up. A keyboard
+  and mouse player gets the pointer to point with (captured again the moment you pick); a pad
+  player gets no pointer unless the mouse moves.
+- **No picking by accident.** E / RB picks only a deliberate press: the answers show dimmed until
+  they have been up 0.5 s **and** E has been left alone 1.1 s, then brighten. Every E in the talk,
+  skipping text included, restarts that, so tapping steadily through the text (at any pace up to
+  about once a second) never picks an answer unread. A player who reads the answers before
+  pressing never waits for it. Number keys and clicks are deliberate and pick at once. A click
+  only ever picks an answer, never advances a line. In the rare mirrored shot (over the right
+  shoulder, the NPC on the right), the column moves to the box's left end, clear above the name
+  tab, so it never covers the NPC.
 - **Remembering.** What you picked is recorded and can set facts; a later talk can open
   differently. Talk to Birdy, promise to help, walk off and talk again: "You came back! Still up
   for helping?" A talk cut short while the answers are up (the NPC killed, a reload) records
@@ -292,15 +297,21 @@ test fails): no conversation id on a graph; an empty or duplicate node id; an em
 start; a `next`, `elseNext`, option or fallback link to a node that doesn't exist; a choice with no
 options or more than 9; an empty or duplicate option id; a choice whose every option has
 conditions and that has no fallback (it could strand the player); branches looping into each
-other with nothing shown. Warnings: unreachable nodes; a loop with no way out (cycles are fine
-if some path out of them ends the talk); a branch with no conditions; empty text; an option over
-48 characters; a condition or effect with no key; a `Chose` condition naming a node or option this
-conversation doesn't have; linear lines left beside nodes. The analysis is static and
+other with nothing shown; a reachable loop with no way out (cycles are fine if some path out of
+them ends the talk; one with none would hold the player in a stopped world). Warnings: unreachable
+nodes; a branch with no conditions; empty text; an option over 60 characters (two rows); a
+condition or effect with no key; a `Chose` condition naming a node or option this conversation
+doesn't have; an option leading straight to a choice with no prompt (its answers would appear
+under the question just answered); linear lines left beside nodes. The analysis is static and
 optimistic: an exit behind a condition counts.
 
 **The runner** walks the graph. Branches are resolved the moment they are reached (against the
-store), a choice with nothing pickable is replaced by its fallback, and a broken link or a run of
-64 branches with nothing shown ends the talk with a warning instead of hanging. When a line is
+store), a choice with nothing pickable is replaced by its fallback, and a broken link, a run of
+64 branches with nothing shown, or a link into a loop with no way out
+(`DialogueDefinition.CanReachEnd`) ends the talk with a warning instead of hanging or trapping
+the player. A conversation whose start resolves straight to the end right now (a branch that
+only talks after some quest) is not offered at all: `DialogueRunner.HasSomethingToSay` dry-runs
+the start against the store, the interactor shows no prompt and `TryStart` refuses. When a line is
 revealed it already knows what comes next: if that is a choice with no prompt, the options go
 up at once under the line; otherwise the next node waits for a press. A **pick**, in order:
 leaves the choosing state, `IChoiceStore.RecordChoice(conversationId, nodeId, optionId)`, the
@@ -312,9 +323,14 @@ shown in this talk (for a linear definition, the line's index); `Talkable.Curren
 `CurrentNodeId` say which.
 
 **The lockouts.** Lines keep `advanceLockoutSeconds` (0.12 s after a line starts or is revealed).
-Options add `choiceLockoutSeconds` (0.3 s after they appear), a debounce for Interact: a press
-inside it restarts it. A click or number key inside it only moves the cursor there. Everything
-is unscaled time; the world is paused.
+Interact picks an answer only when `IsChoiceReady`: the answers have been up
+`choiceLockoutSeconds` (0.5 s) **and** Interact has been left alone `choiceQuietSeconds` (1.1 s).
+Every Interact press of the talk resets the quiet (the press that opened the talk counts, and so
+do presses that skip text or come too soon), so taps closer together than 1.1 s never pick:
+whatever the tapping pace up to about 1 Hz, the first answer is never taken unread (QA measured
+the old 0.3 s debounce picking at 3.5 Hz and slower). A reader has usually waited longer than
+that already; a skipper who reads the answers presses once more after a second. Clicks and number
+keys don't wait. Everything is unscaled time; the world is paused.
 
 **Input.** The input gate keeps its single `InputBlock.All` claim; no new flag. While answers are
 up the director reads the option input itself (as the camera reads look input):
@@ -327,18 +343,24 @@ numbers. Interact picks the highlighted one. The right stick is untouched and st
 camera; `DialogueCamera` ignores the mouse while `IsChoosing`.
 
 **The view.** Setup Dialogue builds the column inside the box (`DialogueBox/Choices`, a
-VerticalLayoutGroup and ContentSizeFitter, so every plate is as wide as the longest answer, at
-least 300 units) with nine rows `Option1…9` (plate, `Label` 32 pt, a `Cursor` that is the box's ▼
-sprite turned a quarter). It starts hidden. On `ChoicesShown` the view fills and shows one row
-per answer, lays them out at once (so the mouse can hit them that frame), fades the column in
-over `optionFadeInSeconds`, and eases each row toward plain or highlighted (scale, plate and text
-colour) with a time constant of `optionHighlightSeconds`; the ► bobs with the ▼'s pulse. The
-mouse moves the highlight only when it moves, so a resting pointer never fights the keys. The
-cursor is freed when the answers appear, only if it was captured, and captured again on
-`ChoiceMade`, on the end of the talk and in `OnDisable`, the way the dialogue hands the cursor
-back to the orbit camera. The column is mirrored to the box's left end when the talk camera
-(`worldCamera`) has the NPC's head on the right half of the screen. Re-enabled mid-choice (a
-reload), the view puts the list back.
+VerticalLayoutGroup and ContentSizeFitter for the height) with nine rows `Option1…9` (plate,
+wrapping `Label` 32 pt, a `Cursor` that is the box's ▼ sprite turned a quarter; rows at least 64
+tall, growing for a wrapped answer). It starts hidden. On `ChoicesShown` the view fills and shows
+one row per answer, sets the column as wide as the longest answer on one line, at least 300 and
+at most `optionMaxWidth` (560) units, so a longer answer wraps, sizes each row from its answer
+measured at that width (one line stays 64 tall; only a wrapped answer's row grows), lays them out at once (so the
+mouse can hit them that frame), fades the column in over `optionFadeInSeconds` to
+`optionNotReadyAlpha` and up to full once `IsChoiceReady`, and eases each row toward plain or
+highlighted (scale about the row's centre, plate and text colour) with a time constant of
+`optionHighlightSeconds`; the ► bobs with the ▼'s pulse. The mouse moves the highlight only when
+it moves, so a resting pointer never fights the keys. The cursor is freed when the answers
+appear, only if it was captured and the last button pressed wasn't a pad's (a pad player gets no
+pointer; moving the mouse frees it), and captured again on `ChoiceMade`, on the end of the talk
+and in `OnDisable`, the way the dialogue hands the cursor back to the orbit camera.
+`DialogueCamera` skips the mouse for two frames after the answers go, so the warp of the
+re-capture can't jerk the view. The column is mirrored to the box's left end, 24 units clear
+above the name tab, when the talk camera (`worldCamera`) has the NPC's head on the right half of
+the screen. Re-enabled mid-choice (a reload), the view puts the list back.
 
 **Store wiring.** The director has one serialized `MonoBehaviour choiceStore` field, checked for
 `IChoiceStoreProvider` (`OnValidate` takes the provider on a dragged-in object, or clears anything
@@ -367,15 +389,24 @@ logged and the other listeners still run.
 **The host** (`ChoiceStoreHost`, on the "Dialogue" object, implements `IChoiceStoreProvider`)
 builds the store on first use (so `Store` is never null), loads the save into it, and writes it
 back: at most once per frame in `LateUpdate` after any change (which still runs while a talk has
-time stopped), and on application pause, quit and disable. Fields: `persist` (off: memory only,
-nothing read or written; for tests and quick runs) and `fileName`.
+time stopped), and on application pause, quit and disable, with no second save after quit. No
+save file is created until the store holds a pick or a fact; once it exists it is kept current.
+**Play time** never goes back: the clock is monotonic, and a save never banks less play time than
+the file already holds. Fields: `persist` (off: memory only, nothing read or written; for tests
+and quick runs) and `fileName`.
 
-**The save.** `<persistentDataPath>/Saves/choices.json` (`ChoiceStoreSave`), JSON with a format
-version, the play time, the log and the facts (sorted by key, so it diffs cleanly). Writes are
-atomic: a `.tmp` file, flushed, then swapped in with `File.Replace`, so a crash mid-save leaves
-the previous file whole. A path inside the project's Assets folder, or a file name with folders,
-is refused. Loading always leaves the store consistent and raises `Reset` once (no per-fact
-events):
+**The save** (`ChoiceStoreSave`):
+- in a built player, `<persistentDataPath>/Saves/choices.json`;
+- in the Editor, batch runs and tests included,
+  `<persistentDataPath>/Saves/Editor/<project>-<hash8>/choices.json`: a folder per checkout or
+  worktree, keyed by a hash of its Assets path, so worktrees, agents and test runs never share
+  (or overwrite) one another's save, or a player's.
+
+JSON with a format version, the play time, the log and the facts (sorted by key, so it diffs
+cleanly). Writes are atomic: a `.tmp` file, flushed, then swapped in with `File.Replace`, so a crash
+mid-save leaves the previous file whole. A path inside the project's Assets folder, or a file name
+with folders, is refused. Loading always leaves the store consistent and raises `Reset` once (no
+per-fact events):
 - **missing**: an empty store, a new game;
 - **corrupt** (unparsable, or no version): renamed to `choices.corrupt-<timestamp>.json` beside it,
   empty store;
@@ -385,7 +416,11 @@ events):
 
 **New game.** `ChoiceStoreHost.NewGame()` (also the component's ⋮ ▸ **New Game (clear choices)**)
 empties the store, restarts play time and deletes the save file; it is also the explicit way past
-a refused save.
+a refused save. From the Editor, **Tools ▸ Pickleball ▸ Dialogue**:
+- **New Game (delete choices save)** asks for confirmation, deletes this checkout's save (Birdy's
+  intro comes back) and, in Play mode, also clears the live stores so they don't write the old
+  state back;
+- **Reveal choices save** shows the file, or logs where it will be created.
 
 **Reading it from another system.** Hold a serialized reference to the host (as the director
 does), read facts when you need them, and listen for changes:
@@ -447,9 +482,10 @@ reference to it.
 | Text speed and rhythm | `charactersPerSecond` (0 = instant), `commaPauseSeconds`, `sentencePauseSeconds` |
 | NPC starts talking with his back half turned, or the first line waits too long | `waitForNpcFacingDegrees`, `waitForNpcFacingSeconds` |
 | Presses feel ignored, or lines get skipped | `advanceLockoutSeconds`, `textStartDelaySeconds` |
-| Mashing picks an answer, or a careful pick feels slow | `choiceLockoutSeconds` (a debounce for E / RB) |
+| Tapping through text picks an answer, or a careful pick feels slow | `choiceQuietSeconds` (E / RB left alone this long; taps closer than it never pick), `choiceLockoutSeconds` (answers up this long) |
 | The answer cursor: stick sensitivity, hold-to-repeat | `choiceStickThreshold`, `choiceRepeatDelaySeconds`, `choiceRepeatIntervalSeconds` |
-| The answer column's look | `optionPlateColour`, `optionHighlightPlateColour`, `optionTextColour`, `optionHighlightTextColour`, `optionDisabledTextColour`, `optionCursorColour`, `optionCursorBob`, `optionHighlightScale`, `optionHighlightSeconds`, `optionFadeInSeconds` |
+| The answer column's look | `optionPlateColour`, `optionHighlightPlateColour`, `optionTextColour`, `optionHighlightTextColour`, `optionDisabledTextColour`, `optionCursorColour`, `optionCursorBob`, `optionHighlightScale`, `optionHighlightSeconds`, `optionFadeInSeconds`, `optionNotReadyAlpha` |
+| Long answers crowd the NPC, or wrap too soon | `optionMaxWidth` (canvas units; past it answers wrap) |
 | E reopens the talk too easily, or too slowly after a deliberate press | `restartCooldownSeconds` (a debounce: presses inside it restart it) |
 | Camera position | `pushInDistance`, `cameraHeight` (above the Head bone; near 0 is level), `sideOffset` (sign = shoulder), `maxSideOffset`, `playerFocusHeight` (pivot only without a Head bone) |
 | Player's body or cloak still covers the NPC, or the camera swings too wide | `playerClearanceMargin` (added to the controller radius), `playerFallbackRadius`, `npcHalfWidth`, `maxSideOffset` |
@@ -464,7 +500,7 @@ reference to it.
 
 Box geometry (60% of a 1920-wide reference, 232 tall, 52 above the bottom; font sizes) is laid
 out by Setup Dialogue. Change it in `DialogueSetup.BuildBox` and re-run the menu. The answer
-column's geometry (64-unit rows, 10 apart, at least 300 wide, 32 pt text, 28 in from the box's
+column's geometry (rows at least 64 tall, 10 apart, at least 300 wide, 32 pt text, 28 in from the box's
 right end and 18 above its top) is in `DialogueSetup.BuildOptionList`. If the box
 height changes, move `npcFeetScreenHeight` with it.
 
@@ -527,8 +563,11 @@ the snippet in "Choices and facts: the store" shows. Don't listen to the dialogu
 - **No node-level effects.** Facts change only when an answer is picked. "Has met Birdy" is
   read from the log instead (`Chose` any option at the first question).
 - **A prompt-less choice at the very start** shows its answers over an empty box.
-- **Npc.md still says Birdy_Intro is seeded once and never overwritten**; it is now also upgraded
-  once from the original linear seed (that doc belongs to the NPC system).
+- **Play time before the first pick isn't carried to the next session** (no save file exists yet
+  to bank it in), and the Tools ▸ Pickleball ▸ Dialogue menu items have no automated test.
+- **The column keeps clear of the NPC by its width cap**, not by measuring the NPC: at the shot's
+  composition (NPC at a third of the screen) 560 units clears Birdy. A much wider NPC, or a much
+  wider `optionMaxWidth`, could still reach it.
 
 - **Play-tested headlessly only.** QA's PlayMode integration run (real Input System events,
   Birdy merged) passed every functional check. The redesigned shot was then re-run headlessly

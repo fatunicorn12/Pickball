@@ -17,12 +17,21 @@ namespace Pickleball.Sandbox.Dialogue
     /// <see cref="DialogueNodeKind.Choice"/> shows its options as soon as the
     /// line before it (or its own prompt) has typed out, as in Breath of the
     /// Wild: no extra press. A choice with nothing pickable is skipped to its
-    /// fallback. An empty link ends the conversation. A definition with no
+    /// fallback. An empty link ends the conversation, and so does a link into a
+    /// loop with no way out (<see cref="DialogueDefinition.CanReachEnd"/>), with
+    /// a warning, rather than hold the player in a stopped world. A definition with no
     /// nodes plays its linear lines as an implicit chain, exactly as before
     /// branching existed: same lines, same indices, same events.
     ///
     /// <b>Choosing.</b> While options are up the cursor rests on an enabled
-    /// option (<see cref="ChoiceSelection"/>). Picking one records it
+    /// option (<see cref="ChoiceSelection"/>). The talk button picks only a
+    /// deliberate press (<see cref="IsChoiceReady"/>): the options must have been
+    /// up <see cref="TypewriterTiming.ChoiceLockout"/> and the button left alone
+    /// <see cref="TypewriterTiming.ChoiceQuiet"/>, and every press of it in the
+    /// talk, skipping text included, restarts that quiet. So a player tapping
+    /// steadily through the text never picks an answer unread, while one who
+    /// reads the answers first never waits. <see cref="Choose"/> (a number key or
+    /// a click, which are deliberate) picks at once. Picking one records it
     /// (<see cref="IChoiceStore.RecordChoice"/>), applies its effects, raises
     /// <see cref="ChoiceMade"/> and moves on. Only a pick writes to the store;
     /// <see cref="Stop"/> (an abort) mid-choice records nothing. Without a
@@ -50,10 +59,10 @@ namespace Pickleball.Sandbox.Dialogue
     /// <b>Advance.</b> The first press while a line is typing shows all of it.
     /// The next press moves to the next node. A press on a fully shown line
     /// whose link is empty finishes the conversation. While options are up a
-    /// press picks the highlighted one. Presses within
-    /// <see cref="TypewriterTiming.AdvanceLockout"/> of a line starting or being
-    /// revealed are ignored, so a hurried double-tap cannot skip a line unread;
-    /// options take <see cref="TypewriterTiming.ChoiceLockout"/> of quiet first.
+    /// press picks the highlighted one once <see cref="IsChoiceReady"/>. Presses
+    /// within <see cref="TypewriterTiming.AdvanceLockout"/> of a line starting or
+    /// being revealed are ignored, so a hurried double-tap cannot skip a line
+    /// unread.
     ///
     /// No allocations per tick: the line's text is the definition's own string,
     /// and progress is two indices. Options are gathered into a reused list once
@@ -111,6 +120,7 @@ namespace Pickleball.Sandbox.Dialogue
         float _budget;        // seconds banked toward the next character
         float _pendingPause;  // pause owed to the next whitespace character
         float _sinceChange;   // seconds since the line started or was revealed, or the options appeared
+        float _sinceInteract; // seconds since the talk button was last pressed (any press, this talk)
 
         /// <summary>Creates an idle runner.</summary>
         public DialogueRunner(TypewriterTiming timing) => _timing = timing;
@@ -158,6 +168,15 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>Index into <see cref="Options"/> of the highlighted option, or -1.</summary>
         public int HighlightedOption => _highlight;
 
+        /// <summary>
+        /// True while options are up and the talk button would pick: they have
+        /// been up <see cref="TypewriterTiming.ChoiceLockout"/> and the button has
+        /// been left alone <see cref="TypewriterTiming.ChoiceQuiet"/>. The view
+        /// dims the answers until then.
+        /// </summary>
+        public bool IsChoiceReady => State == Phase.Choosing && _sinceChange >= _timing.ChoiceLockout
+                                     && _sinceInteract >= _timing.ChoiceQuiet;
+
         /// <summary>Line <c>index</c> started typing. <see cref="CurrentText"/> is already its text.</summary>
         public event Action<int> LineStarted;
 
@@ -202,6 +221,8 @@ namespace Pickleball.Sandbox.Dialogue
             if (definition == null || !definition.IsPlayable) return false;
             _definition = definition;
             _store = store;
+            // The press that opened the talk counts: the quiet before a pick starts now.
+            _sinceInteract = 0f;
             var first = Resolve(definition.StartNodeId);
             if (first == null)
             {
@@ -226,7 +247,7 @@ namespace Pickleball.Sandbox.Dialogue
             LineIndex = -1;
             _text = string.Empty;
             _cursor = _visible = _total = 0;
-            _budget = _pendingPause = _sinceChange = 0f;
+            _budget = _pendingPause = _sinceChange = _sinceInteract = 0f;
         }
 
         /// <summary>Advances the typewriter and the lockouts by <paramref name="unscaledDeltaTime"/> seconds.</summary>
@@ -234,6 +255,7 @@ namespace Pickleball.Sandbox.Dialogue
         {
             if (!IsActive || !(unscaledDeltaTime > 0f)) return;
             _sinceChange += unscaledDeltaTime;
+            _sinceInteract += unscaledDeltaTime;
             if (State != Phase.Typing) return;
 
             // Speed tuned to 0 (or NaN) mid-line: show the rest, as the tooltip says.
@@ -270,15 +292,16 @@ namespace Pickleball.Sandbox.Dialogue
 
             if (State == Phase.Choosing)
             {
-                // A debounce: a press inside the lockout restarts it, so mashing
-                // through the text can never pick an option the player hasn't read.
-                if (_sinceChange < _timing.ChoiceLockout)
-                {
-                    _sinceChange = 0f;
-                    return AdvanceResult.Ignored;
-                }
+                // Only a deliberate press picks. One that comes too soon restarts
+                // the quiet, so a steady tap through the text never picks unread.
+                bool ready = IsChoiceReady;
+                _sinceInteract = 0f;
+                if (!ready) return AdvanceResult.Ignored;
                 return Choose(_highlight) ? AdvanceResult.Chose : AdvanceResult.Ignored;
             }
+
+            // Every press counts toward the quiet a later pick needs, ignored ones too.
+            _sinceInteract = 0f;
 
             if (_sinceChange < _timing.AdvanceLockout) return AdvanceResult.Ignored;
 
@@ -317,22 +340,16 @@ namespace Pickleball.Sandbox.Dialogue
         }
 
         /// <summary>
-        /// Picks option <paramref name="index"/> (a number key, a click, or the
-        /// talk button on the highlighted one). False when options aren't up or
-        /// that one is greyed out or missing. Inside
-        /// <see cref="TypewriterTiming.ChoiceLockout"/> it only moves the cursor
-        /// there and returns false. Otherwise: records the pick, applies its
-        /// effects, raises <see cref="ChoiceMade"/>, and goes to its next node
-        /// (an empty one finishes the conversation).
+        /// Picks option <paramref name="index"/> at once: a number key or a click,
+        /// which are deliberate (the talk button goes through <see cref="Advance"/>,
+        /// which waits for <see cref="IsChoiceReady"/>). False when options aren't
+        /// up or that one is greyed out or missing. Otherwise: records the pick,
+        /// applies its effects, raises <see cref="ChoiceMade"/>, and goes to its
+        /// next node (an empty one finishes the conversation).
         /// </summary>
         public bool Choose(int index)
         {
             if (!CanPick(index)) return false;
-            if (_sinceChange < _timing.ChoiceLockout)
-            {
-                SetHighlight(index);
-                return false;
-            }
 
             var picked = _options[index];
             var node = _node;
@@ -389,39 +406,64 @@ namespace Pickleball.Sandbox.Dialogue
         /// pickable is replaced by its fallback. Null means the talk ends there
         /// (an empty id, a missing node, or a loop that never shows anything).
         /// </summary>
-        DialogueNode Resolve(string id)
+        DialogueNode Resolve(string id) => Resolve(_definition, _store, id, warn: true);
+
+        /// <summary>
+        /// Whether a talk with <paramref name="definition"/> would show anything
+        /// now, reading <paramref name="store"/>: its start doesn't resolve
+        /// straight to the end (a branch to an empty link, a choice with nothing
+        /// pickable and no fallback, a loop with no way out). A dry run, for
+        /// deciding whether to offer the talk at all; logs nothing, writes nothing.
+        /// </summary>
+        public static bool HasSomethingToSay(DialogueDefinition definition, IChoiceStore store)
+            => definition != null && definition.IsPlayable
+               && Resolve(definition, store, definition.StartNodeId, warn: false) != null;
+
+        static DialogueNode Resolve(DialogueDefinition definition, IChoiceStore store, string id, bool warn)
         {
+            string dialogueId = definition.Id;
             for (int hops = 0; hops <= MaxHops; hops++)
             {
                 if (string.IsNullOrEmpty(id)) return null;
-                if (!_definition.TryGetNode(id, out var node))
+                if (!definition.TryGetNode(id, out var node))
                 {
-                    Debug.LogWarning($"Dialogue '{DialogueId}': no node '{id}', so the talk ends there. " +
-                                     "Its validator lists every broken link.");
+                    if (warn)
+                        Debug.LogWarning($"Dialogue '{dialogueId}': no node '{id}', so the talk ends there. " +
+                                         "Its validator lists every broken link.");
                     return null;
                 }
                 switch (node.Kind)
                 {
                     case DialogueNodeKind.Branch:
-                        id = FactCondition.AllMet(node.Conditions, _store, DialogueId) ? node.Next : node.ElseNext;
+                        id = FactCondition.AllMet(node.Conditions, store, dialogueId) ? node.Next : node.ElseNext;
                         continue;
                     case DialogueNodeKind.Choice:
-                        if (AnyPickable(node)) return node;
+                        if (AnyPickable(node, store, dialogueId)) break;
                         id = node.Next;
                         continue;
-                    default:
-                        return node;
                 }
+                // A node in a loop with no way out would hold the player in a
+                // stopped world for ever: end the talk at its door instead.
+                if (!definition.CanReachEnd(node.Id))
+                {
+                    if (warn)
+                        Debug.LogWarning($"Dialogue '{dialogueId}': '{node.Id}' is in a loop with no way out, so " +
+                                         "the talk ends here instead of trapping the player. Its validator " +
+                                         "reports the loop.");
+                    return null;
+                }
+                return node;
             }
-            Debug.LogWarning($"Dialogue '{DialogueId}': {MaxHops} branches in a row without a line or a choice; " +
-                             "the talk ends. Its validator reports the loop.");
+            if (warn)
+                Debug.LogWarning($"Dialogue '{dialogueId}': {MaxHops} branches in a row without a line or a " +
+                                 "choice; the talk ends. Its validator reports the loop.");
             return null;
         }
 
-        bool AnyPickable(DialogueNode choice)
+        static bool AnyPickable(DialogueNode choice, IChoiceStore store, string dialogueId)
         {
             foreach (var option in choice.Options)
-                if (option != null && option.IsAvailable(_store, DialogueId)) return true;
+                if (option != null && option.IsAvailable(store, dialogueId)) return true;
             return false;
         }
 

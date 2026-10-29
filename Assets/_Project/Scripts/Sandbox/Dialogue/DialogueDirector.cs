@@ -178,6 +178,11 @@ namespace Pickleball.Sandbox.Dialogue
         /// <summary>Index into <see cref="Choices"/> of the highlighted option, or -1.</summary>
         public int HighlightedChoice => Runner.HighlightedOption;
 
+        /// <summary>True while options are up and Interact would pick: they have been
+        /// up long enough and Interact has been left alone long enough (see
+        /// <see cref="DialogueRunner.IsChoiceReady"/>). The view dims them until then.</summary>
+        public bool IsChoiceReady => IsChoosing && Runner.IsChoiceReady;
+
         /// <summary>The conversation's id; empty when idle.</summary>
         public string DialogueId => Runner.DialogueId;
 
@@ -332,23 +337,34 @@ namespace Pickleball.Sandbox.Dialogue
         public bool HighlightChoice(int index) => IsChoosing && Runner.Highlight(index);
 
         /// <summary>
-        /// Picks option <paramref name="index"/> (a click or a number key). False
-        /// unless options are up and that one is enabled; inside the choice
-        /// lockout it only moves the cursor there and returns false.
+        /// Picks option <paramref name="index"/> at once (a click or a number key,
+        /// which are deliberate; Interact waits for <see cref="IsChoiceReady"/>).
+        /// False unless options are up and that one is enabled.
         /// </summary>
         public bool ConfirmChoice(int index) => IsChoosing && Runner.Choose(index);
+
+        /// <summary>
+        /// Whether a talk with <paramref name="talkable"/> would show anything now,
+        /// with this director's store: false when its start resolves straight to
+        /// the end (say, a branch that only talks after some quest). The
+        /// interactor offers no prompt then, and <see cref="TryStart"/> refuses.
+        /// </summary>
+        public bool WouldSaySomething(Talkable talkable)
+            => talkable != null && DialogueRunner.HasSomethingToSay(talkable.Dialogue, Store);
 
         /// <summary>
         /// Starts a conversation between <paramref name="talkable"/> and
         /// <paramref name="partner"/> (the player's root). Returns false, and
         /// changes nothing, when one is already running, the restart cooldown is
         /// active, there is no config, time is already stopped, or the Talkable
-        /// cannot talk.
+        /// cannot talk or would say nothing right now (<see cref="WouldSaySomething"/>).
         /// </summary>
         public bool TryStart(Talkable talkable, Transform partner)
         {
             if (!CanStartConversation || talkable == null || !talkable.CanTalk) return false;
             if (!(Time.timeScale > 0f)) return false;
+            // Nothing to say right now: no talk at all, rather than a frozen, empty one.
+            if (!WouldSaySomething(talkable)) return false;
 
             Current = talkable;
             Partner = partner;

@@ -201,7 +201,10 @@ namespace Pickleball.Sandbox.Dialogue
         void Add(Talkable t)
         {
             Vector3 focus = t.FocusPosition;
-            _candidates.Add(new TalkCandidate(focus, t.CanTalk && PromptInView(focus)));
+            // A conversation that would show nothing right now (its start branches
+            // straight to the end) gets no prompt, so E stays Dash.
+            bool talkable = t.CanTalk && (director == null || director.WouldSaySomething(t));
+            _candidates.Add(new TalkCandidate(focus, talkable && PromptInView(focus)));
             _candidateTalkables.Add(t);
         }
 

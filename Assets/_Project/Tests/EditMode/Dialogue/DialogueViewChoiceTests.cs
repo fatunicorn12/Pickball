@@ -18,7 +18,7 @@ namespace Pickleball.Tests.Dialogue
     public class DialogueViewChoiceTests : DialogueTestFixture
     {
         const int Rows = 4;
-        const float ChoiceLockout = 0.3f;
+        const float ChoiceLockout = 0.5f;
 
         DialogueConfig _config;
         DialogueDirector _director;
@@ -57,7 +57,9 @@ namespace Pickleball.Tests.Dialogue
             _rows = new DialogueViewOptionRow[Rows];
             for (int i = 0; i < Rows; i++)
             {
-                var row = new GameObject($"Option{i + 1}", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
+                var row = new GameObject($"Option{i + 1}", typeof(RectTransform), typeof(Image), typeof(LayoutElement))
+                    .GetComponent<RectTransform>();
+                row.GetComponent<LayoutElement>().minHeight = 64f;    // as Setup Dialogue builds them
                 row.SetParent(list, false);
                 row.sizeDelta = new Vector2(300f, 60f);
                 row.position = new Vector3(500f, 400f - 70f * i, 0f);   // first option on top
@@ -87,6 +89,9 @@ namespace Pickleball.Tests.Dialogue
             so.ApplyModifiedPropertiesWithoutUndo();
             Lifecycle(_view, "OnEnable");
         }
+
+        [TearDown]
+        public void DisableView() => Lifecycle(_view, "OnDisable");      // drops its input listener
 
         void StartToOptions()
         {
@@ -139,6 +144,31 @@ namespace Pickleball.Tests.Dialogue
 
             Assert.That(_view.OptionsShown, Is.False);
             for (int i = 0; i < Rows; i++) Assert.That(_rows[i].Row.gameObject.activeSelf, Is.False, $"row {i}");
+        }
+
+        [Test]
+        public void TheColumn_IsAsWideAsItsLongestAnswer_UpToTheMaximum()
+        {
+            StartToOptions();
+            var list = _rows[0].Row.parent as RectTransform;
+            float shortWidth = list.rect.width;
+            Assert.That(shortWidth, Is.GreaterThan(0f).And.LessThan(_config.OptionMaxWidth));
+
+            _director.Abort();
+            for (int i = 0; i < 20; i++) _director.Tick(0.1f, false);
+            var longTalk = NewTalkable(Track(DialogueDefinition.CreateRuntime("Birdy", "view.long", "ask",
+                DialogueNode.CreateChoice("ask", "Well?", DialogueEmote.Talk, "",
+                    DialogueOption.Create("a", "An answer far too long to sit on one line beside an NPC's wing", ""),
+                    DialogueOption.Create("b", "Short.", "")))), new Vector3(0f, 0f, 2f));
+            Assert.That(_director.TryStart(longTalk, _player), Is.True);
+            _director.Tick(0.01f, false);
+            _director.Tick(0.01f, false);
+            Assert.That(_director.IsChoosing, Is.True);
+            Assert.That(list.rect.width, Is.EqualTo(_config.OptionMaxWidth).Within(0.01f), "capped; the answer wraps");
+            float wrapped = _rows[0].Row.GetComponent<LayoutElement>().preferredHeight;
+            float single = _rows[1].Row.GetComponent<LayoutElement>().preferredHeight;
+            Assert.That(single, Is.EqualTo(64f), "a one-line answer keeps the row's minimum height");
+            Assert.That(wrapped, Is.GreaterThan(single), "only the wrapped answer's row grows");
         }
 
         [Test]

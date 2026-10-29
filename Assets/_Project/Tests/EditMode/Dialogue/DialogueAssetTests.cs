@@ -144,7 +144,7 @@ namespace Pickleball.Tests.Dialogue
             Assert.That(runner.CurrentLine.Emote, Is.EqualTo(DialogueEmote.Excited));
             Assert.That(runner.State, Is.EqualTo(DialogueRunner.Phase.Choosing), "his options follow at once");
 
-            // Backing out clears the promise; next time he asks again instead.
+            // Backing out sets the promise back to false; next time he asks again instead.
             runner.Choose(IndexOf(runner, "no"));
             ReadOn(runner);
             Assert.That(store.GetBool(PromisedHelp, fallback: true), Is.False);

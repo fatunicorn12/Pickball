@@ -518,8 +518,10 @@ public static class DialogueSetup
     /// <summary>
     /// The option list, Breath of the Wild style: a column of dark rounded
     /// plates standing on the box's top edge at its right end, first option on
-    /// top, all as wide as the longest answer (a VerticalLayoutGroup and a
-    /// ContentSizeFitter size it; each row is sized by its text). The ► cursor
+    /// top, all as wide as the longest answer up to the config's maximum (the
+    /// view sets the width; a VerticalLayoutGroup and a ContentSizeFitter stack
+    /// the rows, and an answer too long for the width wraps and its row grows
+    /// taller). The ► cursor
     /// sits outside each plate's left edge, ignored by the layout; it is the
     /// box's ▼ sprite turned a quarter. Every row starts hidden; the view shows
     /// one per option. Found by name and re-configured on a re-run, never
@@ -550,32 +552,36 @@ public static class DialogueSetup
         column.childScaleWidth = false;
         column.childScaleHeight = false;
         var fitter = GetOrAdd<ContentSizeFitter>(list.gameObject);
-        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        // Width: the view's (longest answer, capped). Height: the rows'.
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        list.sizeDelta = new Vector2(OptionRowMinWidth, list.sizeDelta.y);
 
         var rows = new DialogueViewOptionRow[OptionRowCount];
         for (int i = 0; i < OptionRowCount; i++)
         {
             var row = Child(list, $"Option{i + 1}");
             row.SetSiblingIndex(i);
-            row.pivot = new Vector2(1f, 0.5f);            // the highlight grows leftward, about its middle
+            row.pivot = new Vector2(0.5f, 0.5f);          // the highlight lifts about its centre
             row.localScale = Vector3.one;
             var plate = GetOrAdd<Image>(row.gameObject);
             Rounded(plate, round, config.OptionPlateColour, 2.6f);   // about 18-unit corners
             var size = GetOrAdd<LayoutElement>(row.gameObject);
             size.minWidth = OptionRowMinWidth;
             size.minHeight = OptionRowHeight;
-            size.preferredHeight = OptionRowHeight;
+            size.preferredHeight = -1f;                   // the view sets it: taller for a wrapped answer
+            size.flexibleHeight = 0f;                     // rows never stretch to fill the column
             var line = GetOrAdd<HorizontalLayoutGroup>(row.gameObject);
-            line.padding = new RectOffset(30, 36, 4, 4);
+            line.padding = new RectOffset(30, 36, 10, 10);
             line.childAlignment = TextAnchor.MiddleLeft;
             line.childControlWidth = true;
             line.childControlHeight = true;
-            line.childForceExpandWidth = false;
-            line.childForceExpandHeight = true;
+            line.childForceExpandWidth = true;
+            line.childForceExpandHeight = true;           // the label fills the row; its text is centred
 
             var label = Text(Child(row, "Label"), font, OptionFontSize, TextAlignmentOptions.MidlineLeft,
                              config.OptionTextColour, "");
+            label.textWrappingMode = TextWrappingModes.Normal;
             label.rectTransform.SetSiblingIndex(0);
 
             var cursorRect = Child(row, "Cursor");

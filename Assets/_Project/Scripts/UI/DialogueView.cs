@@ -1,7 +1,9 @@
+using System;
 using Pickleball.Sandbox.Dialogue;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Utilities;
 using UnityEngine.UI;
 
 namespace Pickleball.UI
@@ -14,17 +16,22 @@ namespace Pickleball.UI
     ///
     /// <b>Options.</b> When the director puts a choice up, a vertical list of
     /// dark plates appears above the box's right end, first option on top. The
-    /// highlighted one gets the ► cursor and lifts a little (scale and a
-    /// brighter plate, eased in unscaled time); greyed-out options are dimmed
-    /// and skipped. The mouse can hover and click them: the cursor is released
-    /// while they are up (only if it was captured) and captured again once a
-    /// pick is made or the talk ends, matching how the dialogue hands the
-    /// cursor back to the orbit camera. Hover and click go to
+    /// highlighted one gets the ► cursor, a clearly lighter plate and a slight
+    /// lift about its centre, eased in unscaled time; greyed-out options are
+    /// dimmed and skipped. The column is at most
+    /// <see cref="DialogueConfig.OptionMaxWidth"/> wide (longer answers wrap),
+    /// which keeps it clear of the NPC. The answers show dimmed until Interact
+    /// can pick (<see cref="DialogueDirector.IsChoiceReady"/>), so a player
+    /// tapping through text sees they aren't taken yet. The mouse can hover and
+    /// click them: for a keyboard and mouse player the cursor is released while
+    /// they are up (only if it was captured), and for a pad player only once
+    /// the mouse moves; it is captured again once a pick is made or the talk
+    /// ends, matching how the dialogue hands the cursor back to the orbit
+    /// camera. Hover and click go to
     /// <see cref="DialogueDirector.HighlightChoice"/> and
     /// <see cref="DialogueDirector.ConfirmChoice"/>, so a click can only ever
-    /// pick an option, never advance a line, and the director's lockout applies
-    /// to it as to every other pick. Hover follows the mouse only when it moves,
-    /// so a resting pointer never fights the keys or the stick.
+    /// pick an option, never advance a line. Hover follows the mouse only when
+    /// it moves, so a resting pointer never fights the keys or the stick.
     ///
     /// Presentation only. It listens to the <see cref="DialogueDirector"/> and
     /// never drives the conversation itself: the typewriter and the option
@@ -85,6 +92,8 @@ namespace Pickleball.UI
 
         // The ▼ never fades out completely while pulsing, so it is always findable.
         const float ContinueMinAlpha = 0.35f;
+        // Canvas units between the name tab and a column moved above it.
+        const float MirroredTabGap = 24f;
 
         float _visibility;      // 0 hidden … 1 shown, before easing
         float _target;          // where _visibility is heading
@@ -101,6 +110,8 @@ namespace Pickleball.UI
         float[] _rowBlend;          // per row: 0 plain … 1 highlighted, eased
         Vector2[] _cursorHome;
         bool _releasedCursor;       // we freed a captured cursor for the options
+        bool _gamepadLast;          // the last button pressed was a pad's
+        IDisposable _anyButton;
         bool _warnedNoRows;
         Canvas _canvas;
         (Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 position) _listHome;
@@ -126,6 +137,7 @@ namespace Pickleball.UI
                 director.ConversationEnding += OnEnding;
                 director.ConversationEnded += OnEnded;
             }
+            _anyButton = InputSystem.onAnyButtonPress.Call(OnAnyButton);
             ApplyStyle();
             _target = 0f;
             _visibility = 0f;
@@ -148,6 +160,8 @@ namespace Pickleball.UI
             HideOptions();
             // Back to the setup placement, so a script reload re-reads the right one.
             if (_hasListHome && optionList != null) PlaceOptionList(false);
+            _anyButton?.Dispose();
+            _anyButton = null;
             if (director == null) return;
             director.ConversationStarted -= OnStarted;
             director.LineStarted -= OnLineStarted;
@@ -251,12 +265,59 @@ namespace Pickleball.UI
             if (optionList != null)
             {
                 PlaceOptionList(NpcOnRight(director.Current));
+                SizeOptionList(count);
                 optionList.gameObject.SetActive(true);
                 // Lay the rows out now, so the mouse can hit them this frame.
                 LayoutRebuilder.ForceRebuildLayoutImmediate(optionList);
             }
             ApplyOptions(0f);
-            ReleaseCursor();
+            // A pad player gets no pointer in the middle of the screen; moving the
+            // mouse frees it (PollPointer).
+            if (!_gamepadLast) ReleaseCursor();
+        }
+
+        void OnAnyButton(InputControl control) => _gamepadLast = control != null && control.device is Gamepad;
+
+        /// <summary>
+        /// The column is as wide as its longest answer on one line, at least the
+        /// rows' minimum and at most <see cref="DialogueConfig.OptionMaxWidth"/>;
+        /// an answer longer than that wraps to a second line. Each row's height is
+        /// set here from its text measured at the column's real inner width, so it
+        /// never depends on when TextMeshPro last measured itself (a layout pass
+        /// can ask before the label has its final width, and every row came out
+        /// as tall as a wrapped one).
+        /// </summary>
+        void SizeOptionList(int count)
+        {
+            if (config == null) return;
+            float widest = 0f, padding = 0f, minWidth = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                var row = optionRows[i];
+                if (row.Label == null || row.Row == null) continue;
+                widest = Mathf.Max(widest, row.Label.GetPreferredValues(row.Label.text, float.PositiveInfinity,
+                                                                          float.PositiveInfinity).x);
+                if (row.Row.TryGetComponent(out HorizontalOrVerticalLayoutGroup line))
+                    padding = Mathf.Max(padding, line.padding.horizontal);
+                if (row.Row.TryGetComponent(out LayoutElement size)) minWidth = Mathf.Max(minWidth, size.minWidth);
+            }
+            float width = Mathf.Clamp(widest + padding, minWidth, Mathf.Max(minWidth, config.OptionMaxWidth));
+            optionList.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+
+            for (int i = 0; i < count; i++)
+            {
+                var row = optionRows[i];
+                if (row.Label == null || row.Row == null || !row.Row.TryGetComponent(out LayoutElement size)) continue;
+                float rowPadding = 0f, vertical = 0f;
+                if (row.Row.TryGetComponent(out HorizontalOrVerticalLayoutGroup line))
+                {
+                    rowPadding = line.padding.horizontal;
+                    vertical = line.padding.vertical;
+                }
+                float text = row.Label.GetPreferredValues(row.Label.text, Mathf.Max(1f, width - rowPadding),
+                                                          float.PositiveInfinity).y;
+                size.preferredHeight = Mathf.Max(size.minHeight, text + vertical);
+            }
         }
 
         void OnChoiceHighlighted(int index) => _highlight = index;
@@ -291,9 +352,10 @@ namespace Pickleball.UI
                 position.x = -position.x;
                 if (nameTab != null && nameTab.gameObject.activeSelf)
                 {
+                    // Clear of the name tab by a gap, so it doesn't read as part of the box.
                     var tab = nameTab.rectTransform;
                     float tabTop = tab.anchoredPosition.y + tab.rect.height * (1f - tab.pivot.y);
-                    position.y = Mathf.Max(position.y, tabTop + 8f);
+                    position.y = Mathf.Max(position.y, tabTop + MirroredTabGap);
                 }
             }
             optionList.anchorMin = min;
@@ -332,11 +394,14 @@ namespace Pickleball.UI
         void ApplyOptions(float dt)
         {
             if (config == null) return;
+            // Dimmed until Interact can pick, then up to full.
             float fade = config.OptionFadeInSeconds;
-            _optionsVisibility = fade > 0f ? Mathf.MoveTowards(_optionsVisibility, 1f, dt / fade) : 1f;
+            bool ready = director == null || director.IsChoiceReady;
+            float target = ready ? 1f : config.OptionNotReadyAlpha;
+            _optionsVisibility = fade > 0f ? Mathf.MoveTowards(_optionsVisibility, target, dt / fade) : target;
             if (optionGroup != null)
             {
-                optionGroup.alpha = DialogueFraming.SmoothStep01(_optionsVisibility);
+                optionGroup.alpha = _optionsVisibility;
                 optionGroup.blocksRaycasts = false;
                 optionGroup.interactable = false;
             }
@@ -373,8 +438,14 @@ namespace Pickleball.UI
         void PollPointer()
         {
             var mouse = Mouse.current;
-            if (mouse == null || director == null || Cursor.lockState == CursorLockMode.Locked) return;
+            if (mouse == null || director == null) return;
             bool moved = mouse.delta.ReadValue().sqrMagnitude > 0f;
+            if (Cursor.lockState == CursorLockMode.Locked)
+            {
+                // A pad player kept the cursor captured; reaching for the mouse frees it.
+                if (moved) ReleaseCursor();
+                return;
+            }
             bool clicked = mouse.leftButton.wasPressedThisFrame;
             if (!moved && !clicked) return;
             int row = RowAt(mouse.position.ReadValue());
