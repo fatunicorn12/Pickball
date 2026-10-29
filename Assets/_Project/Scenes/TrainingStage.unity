@@ -6194,8 +6194,8 @@ MonoBehaviour:
   lockDistanceBonus: 0.6
   recenterSmoothTime: 0.12
   aimSource: {fileID: 1195753252314885923}
-  aimShoulderOffset: {x: 1.2, y: 0.55, z: 0}
-  aimDistance: 3
+  aimShoulderOffset: {x: 1.2, y: 0.2, z: 0}
+  aimDistance: 3.3
   aimFovScale: 0.8
   aimBlendTime: 0.1
   aimFollowSmoothTime: 0.03

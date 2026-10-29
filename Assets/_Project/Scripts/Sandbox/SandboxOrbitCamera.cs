@@ -98,12 +98,13 @@ namespace Pickleball.Sandbox
         [Tooltip("Over-the-shoulder offset while aiming, in metres in camera space " +
                  "(x right, y up). Moves the player off the crosshair so the line " +
                  "of fire past him is clear. Sized for the 2.5 m chibi, whose head is " +
-                 "the follow point: it lands in the lower-left third of the frame, as " +
-                 "in Expedition 33's free aim.")]
-        [SerializeField] private Vector3 aimShoulderOffset = new(1.2f, 0.55f, 0f);
+                 "the follow point: it lands in the left third of the frame, as " +
+                 "in Expedition 33's free aim. Kept low so more of the player's body " +
+                 "shows below the head.")]
+        [SerializeField] private Vector3 aimShoulderOffset = new(1.2f, 0.2f, 0f);
         [Tooltip("Distance from the follow point while aiming, in metres. Closer " +
                  "than the orbit, so the target reads bigger behind the crosshair.")]
-        [SerializeField, Min(0.1f)] private float aimDistance = 3f;
+        [SerializeField, Min(0.1f)] private float aimDistance = 3.3f;
         [Tooltip("Field of view while aiming, as a fraction of the normal one. " +
                  "Below 1 zooms in a little; 1 leaves the FOV alone.")]
         [SerializeField, Range(0.3f, 1.2f)] private float aimFovScale = 0.8f;
