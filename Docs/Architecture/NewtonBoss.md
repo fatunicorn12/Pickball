@@ -50,8 +50,9 @@ Dead flag are never reset.
 4. `Died` fires once.
 
 Details:
-- `IncomingDamageFilter` is a **single slot**. `NewtonBoss` overwrites it in `OnEnable` and nulls
-  it in `OnDisable`.
+- Each filter is a **single slot**. `NewtonBoss` overwrites the kind-aware one,
+  `IncomingDamageFilterByKind`, in `OnEnable` and nulls it in `OnDisable`.
+- Hits marked `DamageKind.Spell` skip the range multiplier unless `rangeScalesSpells` is on (it defaults to off).
 - Knockback is forwarded for the receiver to interpret, and Newton ignores it.
 - The beam deals `recoverable: false` damage. That damage skips the grey pool, but it **does**
   restart the grace timer, so beam damage stops grey from draining.

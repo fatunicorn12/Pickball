@@ -97,6 +97,11 @@ namespace Pickleball.Sandbox
         [Tooltip("Ceiling on the close-range bonus.")]
         [SerializeField] private float closeDamageCap = 2f;
 
+        [Tooltip("Off: spells deal their listed damage at any range, so casting is " +
+                 "the ranged answer to him. On: spells obey the same (range/r)² rule " +
+                 "as the sword.")]
+        [SerializeField] private bool rangeScalesSpells;
+
         [Header("Personality / reward")]
         [SerializeField] private NewtonBarks barks;
 
@@ -222,14 +227,14 @@ namespace Pickleball.Sandbox
         {
             Health.Hurt += OnHurt;
             Health.Died += OnDied;
-            Health.IncomingDamageFilter = ScaleByRange;
+            Health.IncomingDamageFilterByKind = ScaleByRange;
         }
 
         void OnDisable()
         {
             Health.Hurt -= OnHurt;
             Health.Died -= OnDied;
-            Health.IncomingDamageFilter = null;
+            Health.IncomingDamageFilterByKind = null;
         }
 
         void Start()
@@ -637,11 +642,12 @@ namespace Pickleball.Sandbox
         /// His weak point is close range, by the inverse-square law: damage is
         /// scaled by (weakPointRange / r)², clamped between farDamageMultiplier
         /// and closeDamageCap. Applied as a filter on his own Health so the sword
-        /// stays ignorant of who it hit.
+        /// stays ignorant of who it hit. Spells are exempt unless rangeScalesSpells.
         /// </summary>
-        float ScaleByRange(float rawDamage, Vector3 point)
+        float ScaleByRange(float rawDamage, Vector3 point, DamageKind kind)
         {
             if (_player == null) return rawDamage;
+            if (kind == DamageKind.Spell && !rangeScalesSpells) return rawDamage;
 
             float distance = Vector3.Distance(_player.transform.position, transform.position);
             return rawDamage * RangeMultiplier(distance, weakPointRange,
