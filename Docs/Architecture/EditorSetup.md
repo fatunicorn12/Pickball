@@ -104,10 +104,10 @@ Three are in use:
 - **`Chibi.prefab` lags the scene.** `SwordAbilities`, `WeaponClearance`, `LockOnTargeting` and
   `Health` exist only as ChibiSandbox overrides. Scenes that instantiate the prefab, such as
   SpacetimeLab, don't get them.
-- **The `GetComponent<T>() ?? AddComponent<T>()` pattern** (still in `SwingTwistSetup`,
-  `ChibiSandboxSetup` and `NewtonBossSetup`) is unsafe on Unity's "fake null" objects, and
-  `WeaponClearanceSetup` warns against it. Use `TryGetComponent` or an explicit
-  `if (c == null)`, as `WeaponSetup` now does.
+- **The `GetComponent<T>() ?? AddComponent<T>()` pattern** (still in `ChibiSandboxSetup` and
+  `NewtonBossSetup`) is unsafe on Unity's "fake null" objects, and `WeaponClearanceSetup` warns
+  against it. Use `TryGetComponent` or an explicit `if (c == null)`, as `WeaponSetup` and
+  `SwingTwistSetup` now do.
 - **Lookups are by GameObject name** (`GameObject.Find("Chibi")`, "NewtonBoss", "AcademyWorld",
   "FightHUD"), mixed with lookups by type. Renaming a scene object breaks the menus.
 - **Several menus have no Play-mode guard:** Chibi Sandbox, World Look, Clean World, Lock-On,

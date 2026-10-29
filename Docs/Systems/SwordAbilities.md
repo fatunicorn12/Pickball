@@ -308,6 +308,39 @@ A boss drop can grant an ability early; its level is the fallback.
   - `WeaponSetup.RewireControllerFromImportedClips` calls `WireAttackStatesFromAssets`, which covers
     Rebuild Chibi Animator.
   - Run the menu by hand only after editing the step assets.
+- **Swing twist puts the clip's whole hip turn into the waist.** `SwingTwist` faces the chest the
+  way each clip authored it, while the legs stay with locomotion. The cost is the waist. This was
+  measured on 2026-10-28 in a preview scene, with the Attack layer masked over the idle stance and
+  the baked tracks applied, as at runtime.
+
+  The chest's rotation relative to the hips peaks at this many degrees away from idle:
+
+  | Swing | In the clip | At runtime |
+  |---|---|---|
+  | Attack1 | 50° | 82° |
+  | Attack2 | 22° | 170–180° (it spins) |
+  | Attack3 | 47° | 109° |
+  | Attack4 | 35° | 139° |
+
+  - Attack3 pairs that twist (up to −126° of yaw between the shoulder line and the hips) with the
+    largest sideways bend at the waist of the four: 42°, against Attack1's 36° and at most 25°
+    for the others. It holds that pose from n≈0.45 to 0.70, which covers the back half of its
+    active window. The clip itself bends only 29°, because its hips tilt and drop 27 cm into a
+    lunge.
+  - The same investigation ruled these out, for every swing:
+    - the bake: it matches the clip to 0°;
+    - hemisphere flips: none between neighbouring samples;
+    - long-way slerps: Unity's `Slerp` takes the short arc, and `SwingTwistMathTests` pins it;
+    - pops at chain crossfades: in a frame-by-frame 1→2→3→4 run the chest never moved more than
+      23° a frame;
+    - the hips or legs moving under the masked layer: 0 cm, 0°;
+    - clip import, mirror or state flags: identical across the four.
+  - `WeaponClearance` adds up to 57° during Attack3's overhead wind-up. Attack1 gets more.
+  - Swing 3 has been reported as "the whole body contorts". The leading suspect is the waist
+    cost above. Next step: in Play mode, set `SwingTwist.strength` to 0, then 0.5, and repeat
+    1-2-3. If swing 3 then stops wrenching, or starts flailing at the face instead, a cap on the
+    waist turn is the fix to design. Watch `SwingTwist.LastCorrection` and
+    `WeaponClearance.LastCorrection` while you do it.
 - **Two sources for the base states:** `WeaponSetup.AttackClips` still builds the `Attack1–4` and
   `AirAttack` states, and the base step assets re-apply their own clip and speed straight after. A
   later cleanup could build the layer from the step assets alone.

@@ -117,7 +117,8 @@ The `?.` and `??` operators bypass Unity's overloaded `== null` on destroyed or 
 objects. Several places use them on `UnityEngine.Object`:
 - `BallController`, `GameStateManager`, `PlayerController` and `AIController`, where wiring errors
   then fail silently.
-- The setup scripts' `GetComponent<T>() ?? AddComponent<T>()`, still in `ChibiSandboxSetup`,
-  `NewtonBossSetup` and `SwingTwistSetup`. `WeaponSetup` switched to `TryGetComponent`.
+- The setup scripts' `GetComponent<T>() ?? AddComponent<T>()`, still in `ChibiSandboxSetup` and
+  `NewtonBossSetup`. `WeaponSetup` switched to `TryGetComponent` and `SwingTwistSetup` to an
+  explicit `== null` check.
 
 Use an explicit `!= null` check on Unity objects.
