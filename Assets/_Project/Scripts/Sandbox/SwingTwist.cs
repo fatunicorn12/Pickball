@@ -27,6 +27,18 @@ namespace Pickleball.Sandbox
     ///
     /// Runs before every other LateUpdate (BladeTrail, SpringCloth) so they
     /// sample the corrected pose.
+    ///
+    /// The sampling, crossfade and correction maths live in
+    /// <see cref="SwingTwistMath"/> and are EditMode-tested there. The lookup
+    /// and bones are rebuilt in OnEnable, so a script reload in Play mode keeps
+    /// the twist working (QA ST3: Awake does not run again after a reload).
+    ///
+    /// The cost: the legs stay with locomotion, so the clip's whole hip turn
+    /// (yaw and tilt) is taken up at the waist. Measured over the idle stance,
+    /// the chest's rotation relative to the hips peaks at 82-180° away from
+    /// idle, depending on the swing. In the clips themselves it peaks at 22-50°,
+    /// because the hips turn too. <see cref="LastCorrection"/> reports the turn
+    /// applied each frame. See Docs/Systems/SwordAbilities.md §5.
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public class SwingTwist : MonoBehaviour
@@ -52,22 +64,41 @@ namespace Pickleball.Sandbox
                  "Setup Weapon).")]
         [SerializeField] private List<Track> tracks = new();
 
-        readonly Dictionary<int, Quaternion[]> _byHash = new();
+        // Built in OnEnable, never in a readonly initializer + Awake: a script
+        // reload in Play mode re-creates these empty and calls OnEnable, not
+        // Awake, which used to leave the twist dead until the scene reloaded.
+        Dictionary<int, Quaternion[]> _byHash;
         int _layer = -1;
         bool _layerResolved;
         Transform _hips, _spine;
 
-        void Awake()
+        /// <summary>The turn applied to the spine chain this frame, in degrees.
+        /// Zero when no swing is playing or the state has no baked track. For
+        /// debugging: read it while a swing plays to see how much of the pose is
+        /// this correction rather than the clip.</summary>
+        public float LastCorrection { get; private set; }
+
+        void OnEnable() => Resolve();
+
+        void Resolve()
         {
             if (animator == null) animator = GetComponentInChildren<Animator>();
+            _hips = _spine = null;
             if (animator != null && animator.isHuman)
             {
                 _hips = animator.GetBoneTransform(HumanBodyBones.Hips);
                 _spine = animator.GetBoneTransform(HumanBodyBones.Spine);
             }
-            foreach (var t in tracks)
-                if (t.hips is { Length: > 1 })
-                    _byHash[Animator.StringToHash(t.state)] = t.hips;
+
+            _byHash ??= new Dictionary<int, Quaternion[]>();
+            _byHash.Clear();
+            if (tracks != null)
+                foreach (var t in tracks)
+                    if (t != null && t.hips is { Length: > 1 })
+                        _byHash[Animator.StringToHash(t.state)] = t.hips;
+
+            _layerResolved = false;
+            _layer = -1;
         }
 
         /// <summary>Resolved on first use, not in Awake — the Animator is on the
@@ -84,6 +115,8 @@ namespace Pickleball.Sandbox
 
         void LateUpdate()
         {
+            LastCorrection = 0f;
+            if (_byHash == null) Resolve();
             if (_hips == null || _spine == null || _byHash.Count == 0) return;
             int layer = Layer();
             if (layer < 0) return;
@@ -93,33 +126,31 @@ namespace Pickleball.Sandbox
 
             // Hip rotation the clip wants, blended across a chain crossfade so
             // the correction moves with the swing rather than popping per state.
-            bool haveCur = TrySample(animator.GetCurrentAnimatorStateInfo(layer), out var cur);
-            Quaternion local = cur;
+            bool haveCur = TrySample(animator.GetCurrentAnimatorStateInfo(layer), out var local);
             if (animator.IsInTransition(layer) &&
                 TrySample(animator.GetNextAnimatorStateInfo(layer), out var next))
             {
                 float b = animator.GetAnimatorTransitionInfo(layer).normalizedTime;
-                if (haveCur) local = Quaternion.Slerp(cur, next, b);
+                if (haveCur) local = SwingTwistMath.BlendStates(local, next, b);
                 else { local = next; weight *= b; }      // fading in from None
                 haveCur = true;
             }
             if (!haveCur) return;
 
-            Quaternion want = animator.transform.rotation * local;
-            Quaternion delta = want * Quaternion.Inverse(_hips.rotation);
-            _spine.rotation = Quaternion.Slerp(Quaternion.identity, delta, weight) * _spine.rotation;
+            Quaternion turn = SwingTwistMath.Correction(animator.transform.rotation, local,
+                                                        _hips.rotation, weight);
+            _spine.rotation = turn * _spine.rotation;
+            LastCorrection = Quaternion.Angle(Quaternion.identity, turn);
         }
 
         bool TrySample(AnimatorStateInfo info, out Quaternion rot)
         {
-            rot = Quaternion.identity;
-            if (!_byHash.TryGetValue(info.shortNameHash, out var samples)) return false;
-
-            // Swings are one-shots that hold their last frame while the layer
-            // fades out, so clamp rather than wrap.
-            float f = Mathf.Clamp01(info.normalizedTime) * (samples.Length - 1);
-            int i = Mathf.Min((int)f, samples.Length - 2);
-            rot = Quaternion.Slerp(samples[i], samples[i + 1], f - i);
+            if (!_byHash.TryGetValue(info.shortNameHash, out var samples))
+            {
+                rot = Quaternion.identity;
+                return false;
+            }
+            rot = SwingTwistMath.SampleTrack(samples, info.normalizedTime);
             return true;
         }
 
@@ -129,6 +160,7 @@ namespace Pickleball.Sandbox
         {
             animator = target;
             tracks = baked;
+            _byHash = null;     // rebuilt from the new tracks on next use
         }
 #endif
     }

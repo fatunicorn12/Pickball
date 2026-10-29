@@ -100,7 +100,12 @@ public static class SwingTwistSetup
         // Put the rig back in its bind pose; the graph left it on the last sample.
         animator.Rebind();
 
-        var twist = player.GetComponent<SwingTwist>() ?? Undo.AddComponent<SwingTwist>(player);
+        // Explicit null check, not GetComponent ?? AddComponent: in the Editor a
+        // missing component comes back as a "fake null" object that ?? treats
+        // as real, so a player without one never got it (see
+        // Docs/Architecture/RuntimeConventions.md, "Unity null semantics").
+        var twist = player.GetComponent<SwingTwist>();
+        if (twist == null) twist = Undo.AddComponent<SwingTwist>(player);
         Undo.RecordObject(twist, "Bake Swing Twist");
         twist.SetTracks(animator, tracks);
         EditorUtility.SetDirty(twist);

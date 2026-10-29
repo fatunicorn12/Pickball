@@ -105,7 +105,7 @@ IDs are referenced from the test plan below. Confidence: **H**igh, **M**edium, *
 | ID | Finding | Where | Conf. |
 |---|---|---|---|
 | ST2 | **The tether's targeted highlight never shows:** `SetState` runs twice per frame on the best anchor, so the blend settles around 0.13, varying with frame rate. | `TetherSystem.Update`, `TetherAnchor.SetState` | ✔ |
-| ST3 | A reload in Play mode kills `SpringCloth` (goes rigid), `SwingTwist` (twist stops), the `TetherSystem` reticle and `DashEffects` ghosts. | Awake-only state | M–H |
+| ST3 | A reload in Play mode kills `SpringCloth` (goes rigid), the `TetherSystem` reticle and `DashEffects` ghosts. `SwingTwist` is fixed: it now rebuilds its lookup and bones in `OnEnable`. | Awake-only state | M–H |
 | ST4 | Disabling `LockOnTargeting` while locked leaves the reticle drawn at a stale point. | `LockOnTargeting.OnDisable` | M |
 | ST5 | Lock-on calls `FindObjectsByType<Health>` every frame and `RaycastAll` per candidate. | `LockOnTargeting` | H |
 | ST7 | Ended worldlines go stale across off→on cycles and scene changes. The previous scene's ghosts can be drawn. Documented in `Spacetime.md`, not fixed. | `SpacetimeSettings.Ended`, `WorldlineRecorder` | L–M |
@@ -255,7 +255,7 @@ All of these are writable today.
 | Movement | `InternalsVisibleTo` plus an internal `IMoveContext` passed to `MoveState.Next` | Ground priority order (Fall > Jump > Dive > Crouch > Skid > RunStop); locked never skids; stop delay; side flip vs spin jump; skid exit speeds; landing records the chain step; coyote beats feather; belly slide rules; `LandAtRest_AfterSprint_IsGround` |
 | Movement | Pure helpers for the variable jump, intent mapping and animator mapping | `TapApex_FrameRateIndependent` ⚠ MV2; camera-relative intent; trigger choice and flip speed |
 | Traversal | One state per anchor per frame in `TetherSystem`; `SetState(state, dt)` | `TetherAnchor_HeldTarget_ReachesFullTargetBlend` ⚠ ST2 |
-| Traversal | Extract `LockOnScoring`, `LockOnState`, `OrbitMath`, `SwingTwist.SampleTrack` | Angle-first scoring, cone and range rejection, side flicks, handover on death, break range, sight grace; pitch normalisation ⚠ ST9; zoom and pitch clamps |
+| Traversal | Extract `LockOnScoring`, `LockOnState`, `OrbitMath`. `SwingTwist`'s maths is already in `SwingTwistMath`, covered by `SwingTwistMathTests` | Angle-first scoring, cone and range rejection, side flicks, handover on death, break range, sight grace; pitch normalisation ⚠ ST9; zoom and pitch clamps |
 | Spacetime | none (EditMode physics) | Intangible beam through a `CharacterController` starts disabled and becomes solid when clear; owner-ignore collisions; `onlyIn4D`/`onlyIn3D` dressing; `RecordApples` binds a recorder |
 | Editor | New `Pickleball.Tests.EditorTools` assembly, `[Category("EditorSetup")]`, worktree only | Each Setup menu twice → `git status` clean; Setup Chibi Sandbox smoke (components on Chibi, 4 pickups, 4 anchors, 0 missing scripts); Spacetime Add/Remove idempotent and a no-op while off |
 
