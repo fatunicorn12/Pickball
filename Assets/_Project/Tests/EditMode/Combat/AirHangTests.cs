@@ -4,54 +4,106 @@ using Pickleball.Sandbox.Combat;
 namespace Pickleball.Tests.Combat
 {
     /// <summary>
-    /// Air-combo hang time: an air swing holds the player up, and the hold
-    /// lapses on its own once the chain ends because it is only ever refreshed.
+    /// Air-combo hang time is earned by connecting: a landed air hit holds the
+    /// player up for a while, a whiff holds nothing, and the chain's end, a
+    /// landing or a dash drops him at once.
     /// </summary>
     public class AirHangTests
     {
         const float Frame = 1f / 60f;
-        const float Release = 0.08f;
+        const float PerHit = 0.6f;
 
-        [Test]
-        public void AirSwing_HoldsForTheRelease()
+        static int FramesHeld(AirHang hang, float dt, int maxFrames = 1000)
         {
-            float hold = AirHang.HoldSeconds(true, true, false, false, Release, Frame);
-            Assert.That(hold, Is.EqualTo(Release).Within(1e-6f));
+            int held = 0;
+            for (int i = 0; i < maxFrames; i++)
+            {
+                if (hang.Tick(true, false, false, dt) <= 0f) break;
+                held++;
+            }
+            return held;
         }
 
         [Test]
-        public void NoAirSwing_DoesNotHold()
+        public void Whiff_DoesNotHold()
         {
-            Assert.That(AirHang.HoldSeconds(false, true, false, false, Release, Frame), Is.Zero);
+            var hang = new AirHang();
+            Assert.That(hang.Tick(true, false, false, Frame), Is.Zero);
+            Assert.That(hang.IsHolding, Is.False);
+        }
+
+        [TestCase(1f / 30f)]
+        [TestCase(1f / 60f)]
+        [TestCase(1f / 144f)]
+        public void LandedHit_HoldsForItsWindow_ThenReleases(float dt)
+        {
+            var hang = new AirHang();
+            hang.HitLanded(PerHit);
+            float heldSeconds = FramesHeld(hang, dt) * dt;
+            Assert.That(heldSeconds, Is.EqualTo(PerHit).Within(dt + 1e-4f));
+            Assert.That(hang.IsHolding, Is.False);
         }
 
         [Test]
-        public void StepThatOptsOut_Falls()
+        public void EachHit_RefreshesTheHold()
         {
-            Assert.That(AirHang.HoldSeconds(true, false, false, false, Release, Frame), Is.Zero);
+            var hang = new AirHang();
+            hang.HitLanded(PerHit);
+            for (int i = 0; i < 30; i++) hang.Tick(true, false, false, Frame);   // 0.5 s later
+            hang.HitLanded(PerHit);
+            float heldSeconds = FramesHeld(hang, Frame) * Frame;
+            Assert.That(heldSeconds, Is.EqualTo(PerHit).Within(Frame + 1e-4f));
         }
 
         [Test]
-        public void Grounded_DoesNotHold()
+        public void SimultaneousHits_DoNotStack()
         {
-            Assert.That(AirHang.HoldSeconds(true, true, true, false, Release, Frame), Is.Zero);
+            // A ring striking three targets in one frame is one hit's worth.
+            var hang = new AirHang();
+            hang.HitLanded(PerHit);
+            hang.HitLanded(PerHit);
+            hang.HitLanded(PerHit);
+            float heldSeconds = FramesHeld(hang, Frame) * Frame;
+            Assert.That(heldSeconds, Is.EqualTo(PerHit).Within(Frame + 1e-4f));
         }
 
         [Test]
-        public void DashOrTether_EndsTheHang()
+        public void ChainEnding_DropsAtOnce_AndForgetsTheHit()
         {
-            Assert.That(AirHang.HoldSeconds(true, true, false, true, Release, Frame), Is.Zero);
+            var hang = new AirHang();
+            hang.HitLanded(PerHit);
+            Assert.That(hang.Tick(false, false, false, Frame), Is.Zero);
+            // A fresh air swing afterwards must not inherit the old hit's time.
+            Assert.That(hang.Tick(true, false, false, Frame), Is.Zero);
         }
 
-        [TestCase(0f, 1f / 30f)]
-        [TestCase(0f, 1f / 144f)]
-        [TestCase(0.01f, 1f / 30f)]
-        public void ShortRelease_StillCoversTwoFrames(float release, float dt)
+        [Test]
+        public void Landing_Drops()
+        {
+            var hang = new AirHang();
+            hang.HitLanded(PerHit);
+            Assert.That(hang.Tick(true, true, false, Frame), Is.Zero);
+            Assert.That(hang.IsHolding, Is.False);
+        }
+
+        [Test]
+        public void DashOrTether_Drops()
+        {
+            var hang = new AirHang();
+            hang.HitLanded(PerHit);
+            Assert.That(hang.Tick(true, false, true, Frame), Is.Zero);
+            Assert.That(hang.IsHolding, Is.False);
+        }
+
+        [TestCase(1f / 30f)]
+        [TestCase(1f / 144f)]
+        public void Hold_CoversTwoFrames(float dt)
         {
             // The motor may tick its countdown before this frame's refresh lands;
-            // a hold shorter than that would flicker gravity on mid-combo.
-            float hold = AirHang.HoldSeconds(true, true, false, false, release, dt);
-            Assert.That(hold, Is.GreaterThanOrEqualTo(2f * dt - 1e-6f));
+            // a shorter hold would flicker gravity on mid-hang.
+            var hang = new AirHang();
+            hang.HitLanded(PerHit);
+            Assert.That(hang.Tick(true, false, false, dt), Is.EqualTo(2f * dt).Within(1e-6f));
         }
     }
 }

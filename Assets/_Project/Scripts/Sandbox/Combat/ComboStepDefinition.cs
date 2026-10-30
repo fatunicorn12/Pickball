@@ -69,9 +69,10 @@ namespace Pickleball.Sandbox.Combat
                  "stops you; a few m/s makes a finisher or gap-closer step in.")]
         [Min(0f)] [SerializeField] private float lungeSpeed;
 
-        [Tooltip("Air track only: while this swing plays the player hangs in the air " +
-                 "(gravity off, vertical speed eased to rest), and falls once the chain " +
-                 "ends. Turn off for a step that should drop, such as a plunge finisher. " +
+        [Tooltip("Air track only: a hit from this swing that lands holds the player up " +
+                 "(gravity off, vertical speed eased to rest) for MeleeCombat's " +
+                 "airHangPerHitSeconds; whiffs hold nothing, and the chain's end drops him. " +
+                 "Turn off for a step that should drop, such as a plunge finisher. " +
                  "Ignored on the ground chain.")]
         [SerializeField] private bool hangInAir = true;
 
@@ -94,8 +95,8 @@ namespace Pickleball.Sandbox.Combat
         public HitSettings Hit => hit;
         public float LungeSpeed => lungeSpeed;
 
-        /// <summary>Holds the player up while this step plays on the air track;
-        /// see <see cref="AirHang"/>.</summary>
+        /// <summary>This step's landed air hits hold the player up; see
+        /// <see cref="AirHang"/>.</summary>
         public bool HangInAir => hangInAir;
         public AreaBurst Burst => burst;
         public SwingPresentation Presentation => presentation;

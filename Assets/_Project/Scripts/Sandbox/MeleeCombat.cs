@@ -30,7 +30,8 @@ namespace Pickleball.Sandbox
     ///  - Swinging neither moves nor stops the character. Steps may add a
     ///    one-off lunge impulse, never a per-frame push: a per-frame lunge once
     ///    slid the player metres per swing. The one per-frame request is the
-    ///    air hang (<see cref="AirHang"/>), which only holds gravity off.
+    ///    air hang (<see cref="AirHang"/>), which only holds gravity off, and
+    ///    only while air hits keep landing.
     /// </summary>
     public class MeleeCombat : MonoBehaviour
     {
@@ -81,10 +82,11 @@ namespace Pickleball.Sandbox
                  "the chain instead of restarting it. R1: 0.9 s-apart clicks always reset.")]
         [Range(0f, 1f)] [SerializeField] private float chainGraceSeconds = 0.45f;
 
-        [Tooltip("Seconds an air combo keeps holding the player up after its last swing " +
-                 "ends, before he falls. 0 drops him the frame the chain ends; a little " +
-                 "gives the fall a beat.")]
-        [Range(0f, 0.5f)] [SerializeField] private float airHangReleaseSeconds = 0.08f;
+        [Tooltip("Seconds one landed air hit holds the player up. Each hit refreshes it, " +
+                 "so he floats while he keeps connecting and drops once he stops; the end " +
+                 "of the air chain drops him regardless. Longer forgives slow chains; " +
+                 "shorter means only a tight combo stays up. 0 = no hang.")]
+        [Range(0f, 1.5f)] [SerializeField] private float airHangPerHitSeconds = 0.6f;
 
         [Header("Lunge homing")]
         [Tooltip("A locked target within this many metres bends the lunge toward it. 0 = off.")]
@@ -161,6 +163,7 @@ namespace Pickleball.Sandbox
         bool _queued;
         float _startBufferedUntil = -1f;
         ChainGrace _grace;
+        AirHang _airHang;
 
         /// <summary>One ring in flight. Pooled: a finisher every second must not
         /// allocate.</summary>
@@ -207,6 +210,7 @@ namespace Pickleball.Sandbox
             _sweep = new BladeSweep();
             _contact = new GroundContact();
             _grace = new ChainGrace();
+            _airHang = new AirHang();
             _segments = new (Vector3, Vector3)[BladeSweep.MaxSegments];
             _hitstopLeft = 0f;
             _queued = false;
@@ -318,16 +322,14 @@ namespace Pickleball.Sandbox
             if (justLeft) _progress.LeaveGround();
         }
 
-        /// <summary>Air-combo hang time: keep the player up while an air swing
-        /// plays; see <see cref="AirHang"/>. Runs ahead of the hitstop return so a
-        /// connecting air hit doesn't drop him mid-freeze.</summary>
+        /// <summary>Air-combo hang time: keep the player up while his air hits
+        /// keep landing; see <see cref="AirHang"/>. Runs ahead of the hitstop
+        /// return so a connecting air hit doesn't drop him mid-freeze.</summary>
         void HoldInAir(float dt)
         {
-            if (_impulses == null) return;
             bool airSwing = IsAttacking && _current.Track == ComboTrack.Air;
-            float hold = AirHang.HoldSeconds(airSwing, airSwing && _current.Step.HangInAir,
-                                             IsGroundedRaw, !CanSwing, airHangReleaseSeconds, dt);
-            if (hold > 0f) _impulses.SuspendGravity(hold);
+            float hold = _airHang.Tick(airSwing, IsGroundedRaw, !CanSwing, dt);
+            if (hold > 0f && _impulses != null) _impulses.SuspendGravity(hold);
         }
 
         bool IsGroundedRaw => _movement == null || _movement.IsGrounded;
@@ -464,6 +466,9 @@ namespace Pickleball.Sandbox
             target.TakeHit(hit.Damage, point, push, hit.IsLauncher);
             // Max, not sum: a ring sweeping three targets in one frame is one impact.
             _hitstopLeft = Mathf.Max(_hitstopLeft, hit.Hitstop);
+            // Connecting in the air is what buys hang time; a whiff buys none.
+            if (placement.Track == ComboTrack.Air && placement.Step.HangInAir)
+                _airHang.HitLanded(airHangPerHitSeconds);
             HitLanded?.Invoke(report);
         }
 

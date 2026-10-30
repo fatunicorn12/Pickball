@@ -31,10 +31,14 @@ How the chains behave:
   chain, and landing starts the ground chain fresh.
 - **One jump buys one air combo.** The air chain refills only when you land, which is what makes
   Air Combo Plus worth learning.
-- **An air combo holds you up (KH hang time).** While an air swing plays, gravity is off and your
-  vertical speed eases to rest. When the chain ends you fall. A late press inside the chain grace
-  continues the chain and catches you again. The hang lasts as long as the air chain, so every air
-  hit you learn lengthens it. A dash or tether ends it at once.
+- **Air hits that land hold you up.** Each air hit that connects (blade or ring) turns your gravity
+  off for `airHangPerHitSeconds` (0.6 s), and your vertical speed eases to rest. Each hit refreshes
+  the hold, so you float as long as you keep connecting.
+  - Swinging at nothing doesn't float you.
+  - You drop as soon as you stop landing hits, the air chain ends, you land, or a dash or tether
+    takes over.
+  - The longest float is bounded by the air chain (one per airtime), so every air hit you learn
+    lengthens it.
 - **The ground chain resets whenever a swing ends without a follow-up press.**
 - **Mashing never cuts a hit short.** A buffered press chains at the step's `comboOpen`, but never
   before its blade window has closed or its finisher ring has gone out.
@@ -142,14 +146,16 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
   - That one answer picks the chain for a press and drops the ground chain, so a one-frame flicker
     on a slope does neither.
   - Landing counts at once.
-- **`AirHang`** (in `CombatFeel.cs`): how long to hold gravity off this frame.
-  - It holds while a swing started on the air track is playing (hitstop included) and its step has
-    `hangInAir`. It doesn't hold while grounded or while an exclusive move owns the body.
-  - `MeleeCombat` refreshes `ICombatImpulses.SuspendGravity` with the answer every frame. The adapter
-    forwards it to `MovementMotor.SuspendGravity`, which eases vertical speed to rest at
+- **`AirHang`** (in `CombatFeel.cs`): the hang timer.
+  - `MeleeCombat.Deal` calls `HitLanded` for every connecting hit from an air-track step that has
+    `hangInAir`. Hits refresh the timer rather than stack, so a ring striking three targets buys one
+    hit's worth.
+  - Each frame, `Tick` holds while the timer runs and an air-track swing is playing (hitstop
+    included). It clears the timer when the chain ends, you land, or an exclusive move owns the body.
+  - `MeleeCombat` passes the answer to `ICombatImpulses.SuspendGravity`. The adapter forwards it to
+    `MovementMotor.SuspendGravity`, which eases vertical speed to rest at
     `MovementConfig.anchorHaltRate` and clears the hang on landing.
-  - The hold is at least two frames, because the motor may tick its countdown before the refresh
-    lands.
+  - A hold is two frames long, because the motor may tick its countdown before the refresh lands.
 - **`XpLedger`:** what a hit is worth.
   - Only damage actually applied pays (health before minus after).
   - The defeat bonus is paid only for the blow that takes a target from above zero to zero.
@@ -233,8 +239,9 @@ Tune everything live in Play mode on the assets.
 - **Air hang:**
   - Untick `hangInAir` on a step that should drop instead, such as a plunge finisher. The flag is
     ignored on the ground chain.
-  - `MeleeCombat.airHangReleaseSeconds` (s) is how long you stay up after the chain ends. 0 drops you
-    the frame the last swing finishes; longer gives the fall a beat.
+  - `MeleeCombat.airHangPerHitSeconds` (s) is how long one landed air hit holds you up. It has to
+    cover the gap to the next hit in the chain, about 0.45–0.6 s with the shipped steps, or a mashed
+    chain dips between hits. Shorter rewards only a tight combo; 0 turns the hang off.
   - How quickly a rising or falling jump is stopped is `MovementConfig.anchorHaltRate` (m/s²),
     shared with the Gravity Anchor.
 - **Finisher rings:** the `burst` block.
@@ -415,9 +422,11 @@ A boss drop can grant an ability early; its level is the fallback.
 - **Gamepad:** the sword attack (`SwordInput`) is Gamepad `buttonWest` and nothing else uses it.
   The skateboard Mount moved to D-pad Right in the movement rework.
 - **Hang time is in; plunges are not yet:**
-  - Air swings hold you up through `ICombatImpulses.SuspendGravity` (see `AirHang`). This makes
-    every air step hang, so "Stationary Point" (Lv 8) needs a new identity: a longer hang, or a
-    hop up.
+  - Landed air hits hold you up through `ICombatImpulses.SuspendGravity` (see `AirHang`). Every air
+    step already hangs this way, so "Stationary Point" (Lv 8) needs a new identity: a hang that
+    doesn't need a hit, a longer per-hit hold, or a hop up.
+  - The first hit of a jump-attack usually connects while you are still rising, so the hang first
+    stops the rise, over about 0.3 s from a full jump.
   - The hang reuses the Gravity Anchor's halt rate. If combat wants its own, it is a new
     `MovementConfig` field or a rate argument on `SuspendGravity`.
   - Plunges ("Vertical Asymptote") still need `SetVerticalVelocity` on `ICombatImpulses` and the

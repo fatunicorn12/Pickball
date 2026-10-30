@@ -67,34 +67,47 @@ namespace Pickleball.Sandbox.Combat
     }
 
     /// <summary>
-    /// Air-combo hang time (KH): while an air swing plays the player stays up,
-    /// and when the chain ends he falls. MeleeCombat asks this every frame and
-    /// refreshes movement's gravity suspension with the answer, so the hang
-    /// lasts exactly as long as the chain plus a short release, and stops the
-    /// frame a dash or tether takes the body.
+    /// Air-combo hang time, earned by connecting: each air hit that lands holds
+    /// the player up for a short while, so he stays up only while he keeps
+    /// hitting something. Swinging at nothing doesn't float him, and the hang
+    /// ends at once when the air chain does, he lands, or a dash or tether takes
+    /// the body. MeleeCombat ticks this every frame and refreshes movement's
+    /// gravity suspension with the answer.
     ///
     /// Bounded by the air chain itself: one airtime buys one air combo, so the
-    /// hang grows only as the chain does (Air Combo Plus, air finishers).
+    /// longest hang grows only as the chain does (Air Combo Plus, air finishers).
     /// </summary>
-    public static class AirHang
+    public sealed class AirHang
     {
+        float _left;
+
+        /// <summary>True while a landed hit is still holding him up.</summary>
+        public bool IsHolding => _left > 0f;
+
+        /// <summary>An air hit connected: hold for <paramref name="seconds"/> from
+        /// now. Refreshes rather than stacks, so a ring striking three targets in
+        /// one frame buys no more than one hit.</summary>
+        public void HitLanded(float seconds) => _left = Mathf.Max(_left, seconds);
+
+        public void Cancel() => _left = 0f;
+
         /// <summary>
-        /// Seconds to hold gravity off from now, or 0 for no hang. Refreshed per
-        /// frame, so a hold always covers at least the next couple of frames:
-        /// the motor may tick its countdown before this frame's refresh lands.
+        /// Advance by <paramref name="dt"/>. Returns the seconds of gravity
+        /// suspension to request this frame, or 0 for none. A hold covers two
+        /// frames, because the motor may tick its countdown before this
+        /// frame's refresh lands; the hang therefore outlives its timer by at
+        /// most a frame or two.
         /// </summary>
-        /// <param name="swingOnAirTrack">A swing is playing (hitstop included) and it
-        /// was started on the air track.</param>
-        /// <param name="stepHangs">The playing step's <c>HangInAir</c>. Off for a
-        /// step that wants to fall, such as a plunge.</param>
+        /// <param name="inAirChain">An air-track swing is playing (hitstop included).
+        /// False drops him: the chain is over.</param>
         /// <param name="grounded">Raw grounded flag: nothing to hold up.</param>
         /// <param name="busy">An exclusive move (dash, tether) owns the body.</param>
-        /// <param name="releaseSeconds">How long the hang outlasts the chain.</param>
-        public static float HoldSeconds(bool swingOnAirTrack, bool stepHangs, bool grounded,
-                                        bool busy, float releaseSeconds, float dt)
+        public float Tick(bool inAirChain, bool grounded, bool busy, float dt)
         {
-            if (!swingOnAirTrack || !stepHangs || grounded || busy) return 0f;
-            return Mathf.Max(releaseSeconds, 2f * dt);
+            if (!inAirChain || grounded || busy) { _left = 0f; return 0f; }
+            if (_left <= 0f) return 0f;
+            _left = Mathf.Max(0f, _left - dt);
+            return 2f * dt;
         }
     }
 
