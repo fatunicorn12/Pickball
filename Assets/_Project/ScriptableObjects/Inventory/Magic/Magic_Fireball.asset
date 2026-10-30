@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c12cba05155dfb7418005c0a8303da30, type: 3}
+  m_Name: Magic_Fireball
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Inventory.MagicItemDefinition
+  id: fireball
+  displayName: Fireball
+  description: A fireball that sets whatever it hits burning. Aim with right mouse
+    / LT, cast with left mouse / RT.
+  icon: {fileID: 21300000, guid: 3d312e288a7bac142a0929c1fbec133d, type: 3}
+  spell: {fileID: 11400000, guid: 3fa7ad14e9035b34fb62c2607fc0f4d9, type: 2}
