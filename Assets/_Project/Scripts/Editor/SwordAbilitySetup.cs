@@ -19,7 +19,8 @@ using UnityEngine.UI;
 ///  1. <b>Data</b> — seeds the step, ability, moveset and leveling assets under
 ///     ScriptableObjects/Combat. A seed is written ONLY when its asset does not
 ///     exist yet; after that the asset is the source of truth and re-running
-///     never overwrites tuning (it only fills in a missing clip or effect).
+///     never overwrites tuning (it only fills in a missing clip or effect). The
+///     ruler sword's moveset is seeded here too (<see cref="RulerMovesetSetup"/>).
 ///  2. <b>VFX</b> — rebuilds the effect prefabs and materials under
 ///     Art/VFX/Sword (same content every run, GUIDs kept).
 ///  3. <b>Animator</b> — makes the Attack layer hold one state per step asset,
@@ -243,6 +244,11 @@ public static class SwordAbilitySetup
             AssetDatabase.CreateAsset(moveset, MovesetPath);
         }
 
+        // The ruler's moveset rides on the abilities and effects built above (its
+        // ability rows reference them), so it is seeded here, after them, and every
+        // path that rebuilds the compass data rebuilds it too.
+        RulerMovesetSetup.EnsureAssets(fx, reseed: false);
+
         leveling = AssetDatabase.LoadAssetAtPath<LevelingConfig>(LevelingPath);
         if (leveling == null)
         {
@@ -338,7 +344,7 @@ public static class SwordAbilitySetup
         return clip;
     }
 
-    static void WriteWindows(SerializedProperty p, SwingWindows w)
+    internal static void WriteWindows(SerializedProperty p, SwingWindows w)
     {
         p.FindPropertyRelative("activeStart").floatValue = w.ActiveStart;
         p.FindPropertyRelative("activeEnd").floatValue = w.ActiveEnd;
@@ -346,7 +352,7 @@ public static class SwordAbilitySetup
         p.FindPropertyRelative("comboClose").floatValue = w.ComboClose;
     }
 
-    static void WriteHit(SerializedProperty p, HitSettings h)
+    internal static void WriteHit(SerializedProperty p, HitSettings h)
     {
         p.FindPropertyRelative("damage").floatValue = h.Damage;
         p.FindPropertyRelative("knockback").floatValue = h.Knockback;
@@ -354,7 +360,7 @@ public static class SwordAbilitySetup
         p.FindPropertyRelative("hitstop").floatValue = h.Hitstop;
     }
 
-    static void WriteBurst(SerializedProperty p, AreaBurst b)
+    internal static void WriteBurst(SerializedProperty p, AreaBurst b)
     {
         p.FindPropertyRelative("enabled").boolValue = b.Enabled;
         p.FindPropertyRelative("triggerAt").floatValue = b.TriggerAt;
@@ -365,7 +371,7 @@ public static class SwordAbilitySetup
         WriteHit(p.FindPropertyRelative("hit"), b.Hit);
     }
 
-    static void SetList(SerializedProperty list, params Object[] items)
+    internal static void SetList(SerializedProperty list, params Object[] items)
     {
         list.arraySize = items.Length;
         for (int i = 0; i < items.Length; i++)
@@ -595,7 +601,7 @@ public static class SwordAbilitySetup
 
     /// <summary>Rebuild every sword effect prefab. Same content each run;
     /// saving over an existing prefab keeps its GUID, so step references hold.</summary>
-    static Dictionary<string, GameObject> BuildEffects()
+    internal static Dictionary<string, GameObject> BuildEffects()
     {
         ChibiSandboxSetup.EnsureFolderPublic(VfxDir);
         var glyph = ParticleMaterial("SwordGlyph", null, Color.white, additive: true);
@@ -609,6 +615,8 @@ public static class SwordAbilitySetup
             ["PlusPop"] = BuildPlusPop(glyph),
             ["RiemannRing"] = BuildRing("RiemannRing", line, glyph, fill, bars: 12, radiusLine: false),
             ["UnitCircleRing"] = BuildRing("UnitCircleRing", line, glyph, fill, bars: 0, radiusLine: true),
+            // The ruler slam's ground shock: a bare ring and fill, no dressing.
+            ["ShockRing"] = BuildRing("ShockRing", line, glyph, fill, bars: 0, radiusLine: false),
         };
     }
 
