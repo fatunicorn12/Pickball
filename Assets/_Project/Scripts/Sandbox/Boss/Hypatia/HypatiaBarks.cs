@@ -19,7 +19,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia
     /// </summary>
     public class HypatiaBarks : MonoBehaviour, Pickleball.UI.IBarkSource
     {
-        /// <summary>What prompted a line. Intro, PhaseTwo and Death always play;
+        /// <summary>What prompted a line. Intro, PhaseTwo, Toppled and Death always play;
         /// the rest are rate-limited and chance-gated.</summary>
         public enum Occasion
         {
@@ -43,10 +43,12 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             Death,
             /// <summary>Nothing happened for a while.</summary>
             Unprompted,
+            /// <summary>A batted orbiter toppled her. Always plays.</summary>
+            Toppled,
         }
 
-        [Tooltip("Minimum seconds (real time) between two lines, except Intro, Phase Two " +
-                 "and Death, which always play. Higher = quieter.")]
+        [Tooltip("Minimum seconds (real time) between two lines, except Intro, Phase Two, " +
+                 "Toppled and Death, which always play. Higher = quieter.")]
         [Min(0f)]
         [SerializeField] private float minGap = 5f;
 
@@ -81,7 +83,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia
 
         [SerializeField] private string[] ellipse =
         {
-            "Less than one: the ellipse. The wanderers never leave me.",
+            "Zero: the circle, an ellipse at rest. The wanderers never leave me.",
             "Apollonius taught me this curve. It always comes back, as I do to his books.",
         };
 
@@ -117,6 +119,13 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             "Remember the curves, student. Someone must remember.",
         };
 
+        [SerializeField] private string[] toppled =
+        {
+            "My own orbit, returned to me... Apollonius would laugh.",
+            "Struck by my own circle. Every curve comes home.",
+            "Down, among the scrolls. Let me... let me find the pole again.",
+        };
+
         [SerializeField] private string[] unprompted =
         {
             "My father and I corrected Ptolemy's tables by lamplight. Those were good nights.",
@@ -139,7 +148,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         /// </summary>
         public void Say(Occasion occasion)
         {
-            bool always = occasion is Occasion.Intro or Occasion.PhaseTwo or Occasion.Death;
+            bool always = occasion is Occasion.Intro or Occasion.PhaseTwo or Occasion.Death or Occasion.Toppled;
             if (!always)
             {
                 if (Time.time - _lastSpoke < minGap) return;
@@ -157,6 +166,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia
                 Occasion.PhaseTwo => phaseTwo,
                 Occasion.Hurt => hurt,
                 Occasion.Death => death,
+                Occasion.Toppled => toppled,
                 _ => unprompted,
             };
             if (lines == null || lines.Length == 0) return;

@@ -91,6 +91,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Presentation
             {
                 _subscribed.ConicTelegraphed += OnTelegraphed;
                 _subscribed.RecalibrationStarted += OnVolleyOver;
+                _subscribed.Toppled += OnVolleyOver;
                 _subscribed.Defeated += Rest;
             }
             Rest();
@@ -103,6 +104,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Presentation
             if (_subscribed == null) return;
             _subscribed.ConicTelegraphed -= OnTelegraphed;
             _subscribed.RecalibrationStarted -= OnVolleyOver;
+            _subscribed.Toppled -= OnVolleyOver;
             _subscribed.Defeated -= Rest;
             _subscribed = null;
         }
@@ -121,6 +123,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Presentation
             }
         }
 
+        // The window opening, or a topple (which cancels a conic still on the dial).
         void OnVolleyOver(float duration) => Rest();
 
         void Rest()

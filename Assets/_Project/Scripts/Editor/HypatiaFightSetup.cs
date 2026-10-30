@@ -9,6 +9,7 @@ using Pickleball.Sandbox.Boss.Hypatia;
 using Pickleball.Sandbox.Boss.Hypatia.Burning;
 using Pickleball.Sandbox.Boss.Hypatia.Conics;
 using Pickleball.Sandbox.Boss.Hypatia.Presentation;
+using Pickleball.Sandbox.Boss.Hypatia.Pulse;
 using Pickleball.Sandbox.Boss.Hypatia.Rings;
 using Pickleball.UI;
 using TMPro;
@@ -202,7 +203,7 @@ public static class HypatiaFightSetup
         sb.Append(EditorJsonUtility.ToJson(config));
         foreach (string asset in new[]
                  {
-                     HypatiaFightModel.ModelPath, HypatiaFightModel.IdleClipPath,
+                     HypatiaFightModel.ModelPath, HypatiaFightModel.IdleClipPath, HypatiaFightModel.ToppleClipPath,
                      $"{NewtonFightArt.VfxDir}/Glow.png", $"{NewtonFightArt.VfxDir}/Disc.png",
                      $"{NewtonFightArt.VfxDir}/TargetRing.png",
                  })
@@ -405,6 +406,11 @@ public static class HypatiaFightSetup
         // Scenery that hovers with her: kept out of lock-on's aim and size.
         HypatiaFightArt.Halo("Halo", body, 2.6f, new Color(0.62f, 0.68f, 1f, 0.3f), new Vector3(0f, 0.95f, -0.3f))
             .AddComponent<LockOnIgnore>();
+        // The knockback pulse's charge glow (PulseView swells it); hidden at rest.
+        var pulseGlow = HypatiaFightArt.Halo("PulseGlow", body, 0.6f, new Color(0.75f, 0.85f, 1f, 0.9f),
+                                             new Vector3(0f, 0.95f, 0.2f));
+        pulseGlow.AddComponent<LockOnIgnore>();
+        pulseGlow.SetActive(false);
 
         // Health as Newton's (NewtonFightSetup): no grey regain pool on the boss,
         // and she grants sword XP like him (per damage dealt plus the defeat bonus).
@@ -432,6 +438,7 @@ public static class HypatiaFightSetup
         Set(keeper, "burn", burn);
         Set(keeper, "scrollPrefab", scroll);
         var barks = root.AddComponent<HypatiaBarks>();
+        var pulse = root.AddComponent<KnockbackPulse>();
 
         var boss = root.AddComponent<HypatiaBoss>();
         var so = new SerializedObject(boss);
@@ -442,6 +449,7 @@ public static class HypatiaFightSetup
         so.FindProperty("rings").objectReferenceValue = rings;
         so.FindProperty("conics").objectReferenceValue = conics;
         so.FindProperty("burn").objectReferenceValue = burn;
+        so.FindProperty("pulse").objectReferenceValue = pulse;
         so.FindProperty("body").objectReferenceValue = body;
         so.FindProperty("animator").objectReferenceValue = animator;
         so.FindProperty("barks").objectReferenceValue = barks;
@@ -685,6 +693,37 @@ public static class HypatiaFightSetup
         SetArray(recal, "astrolabeParts", _astrolabeParts);
         Set(recal, "windowRing", windowRing);
         Set(recal, "windowRingRenderer", windowRing.GetComponent<Renderer>());
+
+        // Topple: pitches the model (not Body, which carries the hurtbox).
+        var toppleGo = new GameObject("Topple");
+        toppleGo.transform.SetParent(root, false);
+        var topple = toppleGo.AddComponent<ToppleView>();
+        var model = body.Find("HypatiaModel");
+        Set(topple, "boss", boss);
+        Set(topple, "model", model);
+        Set(topple, "animator", model != null ? model.GetComponent<Animator>() : null);
+
+        // Knockback pulse: the charge glow on her body, a ring and a low dome on
+        // the plate (world space, under this root; PulseView moves them to her).
+        var pulseGo = new GameObject("Pulse");
+        pulseGo.transform.SetParent(root, false);
+        var pulseRing = HypatiaFightArt.Primitive(PrimitiveType.Quad, "Ring", pulseGo.transform, Vector3.zero,
+                                                  Quaternion.Euler(90f, 0f, 0f), Vector3.one,
+                                                  HypatiaFightArt.PulseRingMat());
+        NoShadows(pulseRing);
+        pulseRing.SetActive(false);
+        var dome = HypatiaFightArt.Primitive(PrimitiveType.Sphere, "Dome", pulseGo.transform, Vector3.zero,
+                                             Quaternion.identity, Vector3.one, additive);
+        NoShadows(dome);
+        dome.SetActive(false);
+        var pulseView = pulseGo.AddComponent<PulseView>();
+        Set(pulseView, "pulse", boss.GetComponent<KnockbackPulse>());
+        Set(pulseView, "boss", boss);
+        Set(pulseView, "chargeGlow", body.Find("PulseGlow").GetComponent<Renderer>());
+        Set(pulseView, "ring", pulseRing.transform);
+        Set(pulseView, "ringRenderer", pulseRing.GetComponent<Renderer>());
+        Set(pulseView, "dome", dome.transform);
+        Set(pulseView, "domeRenderer", dome.GetComponent<Renderer>());
     }
 
     static GameObject ViewObject(Transform root, string name, out GameObject template, out Transform pool)

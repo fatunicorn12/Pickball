@@ -29,6 +29,14 @@ public static class HypatiaFightModel
     /// the brain's procedural hover carries her.</summary>
     public const string IdleClipPath = "Assets/_Project/Animation/Newton/Idle.fbx";
 
+    /// <summary>Newton's hit reaction (Humanoid), read only: the PLACEHOLDER for her
+    /// topple's stagger until real Mixamo "Kneeling Down"/"Stunned" and
+    /// "Standing Up" clips are imported for her.</summary>
+    public const string ToppleClipPath = "Assets/_Project/Animation/Newton/Hit.fbx";
+
+    /// <summary>The animator bool ToppleView sets while she is toppled.</summary>
+    public const string ToppledParameter = "Toppled";
+
     /// <summary>Her height in metres: human scale, deliberately smaller than
     /// Newton's 2.2 m. She hovers, which reads as presence without bulk.</summary>
     public const float TargetHeight = 1.7f;
@@ -172,8 +180,9 @@ public static class HypatiaFightModel
     }
 
     /// <summary>
-    /// Her controller: one Idle state on Newton's Humanoid idle, retargeted.
-    /// Created once; a later run only re-points the state if its clip changed.
+    /// Her controller: an Idle state on Newton's Humanoid idle, retargeted, plus
+    /// the topple (<see cref="EnsureTopple"/>). Created once; a later run only
+    /// re-points the idle if its clip changed and adds what is missing.
     /// Null (and a warning) when no Humanoid idle clip is available: the
     /// procedural hover still runs without one.
     /// </summary>
@@ -197,6 +206,7 @@ public static class HypatiaFightModel
             var idle = sm.AddState("Idle");
             idle.motion = clip;
             sm.defaultState = idle;
+            EnsureTopple(controller, idle, clip);
             EditorUtility.SetDirty(controller);
             return controller;
         }
@@ -213,6 +223,64 @@ public static class HypatiaFightModel
             state.motion = clip;
             EditorUtility.SetDirty(controller);
         }
+        EnsureTopple(controller, state, clip);
         return controller;
+    }
+
+    /// <summary>
+    /// The topple, added once: a <c>Toppled</c> bool, a ToppleHit state on
+    /// Newton's Hit clip (the placeholder stagger) and a ToppledHold state on the
+    /// idle, with Idle → ToppleHit when it turns on, ToppleHit → ToppledHold when
+    /// the clip ends, and either back to Idle when it turns off. The procedural
+    /// sink and pitch (HypatiaBoss, ToppleView) carry the topple on their own;
+    /// this only adds a reaction. Skipped (procedural only) when the Hit clip is
+    /// missing or not Humanoid; never touches states that already exist, so a
+    /// hand-tuned transition survives a rebuild.
+    /// </summary>
+    static void EnsureTopple(AnimatorController controller, AnimatorState idle, AnimationClip idleClip)
+    {
+        var hit = AssetDatabase.LoadAllAssetsAtPath(ToppleClipPath).OfType<AnimationClip>()
+            .FirstOrDefault(c => !c.name.StartsWith("__preview__") && c.isHumanMotion);
+        if (hit == null)
+        {
+            Debug.LogWarning($"[HypatiaFight] No Humanoid clip at {ToppleClipPath}; her topple is procedural only.");
+            return;
+        }
+
+        bool changed = false;
+        if (controller.parameters.All(p => p.name != ToppledParameter))
+        {
+            controller.AddParameter(ToppledParameter, AnimatorControllerParameterType.Bool);
+            changed = true;
+        }
+
+        var sm = controller.layers[0].stateMachine;
+        if (sm.states.All(s => s.state.name != "ToppleHit"))
+        {
+            var stagger = sm.AddState("ToppleHit", new Vector3(300f, 120f, 0f));
+            stagger.motion = hit;
+            var hold = sm.AddState("ToppledHold", new Vector3(300f, 240f, 0f));
+            hold.motion = idleClip;
+
+            var down = idle.AddTransition(stagger);
+            down.hasExitTime = false;
+            down.duration = 0.1f;
+            down.AddCondition(AnimatorConditionMode.If, 0f, ToppledParameter);
+
+            var settle = stagger.AddTransition(hold);
+            settle.hasExitTime = true;
+            settle.exitTime = 0.9f;
+            settle.duration = 0.25f;
+
+            foreach (var from in new[] { stagger, hold })
+            {
+                var up = from.AddTransition(idle);
+                up.hasExitTime = false;
+                up.duration = 0.3f;
+                up.AddCondition(AnimatorConditionMode.IfNot, 0f, ToppledParameter);
+            }
+            changed = true;
+        }
+        if (changed) EditorUtility.SetDirty(controller);
     }
 }
