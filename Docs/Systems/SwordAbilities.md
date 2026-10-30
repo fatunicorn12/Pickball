@@ -31,6 +31,10 @@ How the chains behave:
   chain, and landing starts the ground chain fresh.
 - **One jump buys one air combo.** The air chain refills only when you land, which is what makes
   Air Combo Plus worth learning.
+- **An air combo holds you up (KH hang time).** While an air swing plays, gravity is off and your
+  vertical speed eases to rest. When the chain ends you fall. A late press inside the chain grace
+  continues the chain and catches you again. The hang lasts as long as the air chain, so every air
+  hit you learn lengthens it. A dash or tether ends it at once.
 - **The ground chain resets whenever a swing ends without a follow-up press.**
 - **Mashing never cuts a hit short.** A buffered press chains at the step's `comboOpen`, but never
   before its blade window has closed or its finisher ring has gone out.
@@ -138,6 +142,14 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
   - That one answer picks the chain for a press and drops the ground chain, so a one-frame flicker
     on a slope does neither.
   - Landing counts at once.
+- **`AirHang`** (in `CombatFeel.cs`): how long to hold gravity off this frame.
+  - It holds while a swing started on the air track is playing (hitstop included) and its step has
+    `hangInAir`. It doesn't hold while grounded or while an exclusive move owns the body.
+  - `MeleeCombat` refreshes `ICombatImpulses.SuspendGravity` with the answer every frame. The adapter
+    forwards it to `MovementMotor.SuspendGravity`, which eases vertical speed to rest at
+    `MovementConfig.anchorHaltRate` and clears the hang on landing.
+  - The hold is at least two frames, because the motor may tick its countdown before the refresh
+    lands.
 - **`XpLedger`:** what a hit is worth.
   - Only damage actually applied pays (health before minus after).
   - The defeat bonus is paid only for the blow that takes a target from above zero to zero.
@@ -218,6 +230,13 @@ Tune everything live in Play mode on the assets.
       that stay planted: Newton ignores knockback, and the training dummy only rocks.
     - For enemies that really slide, keep mid-chain hits at or under about 1.5 m/s, as + C does, or
       a long chain shoves them out of reach before the finisher.
+- **Air hang:**
+  - Untick `hangInAir` on a step that should drop instead, such as a plunge finisher. The flag is
+    ignored on the ground chain.
+  - `MeleeCombat.airHangReleaseSeconds` (s) is how long you stay up after the chain ends. 0 drops you
+    the frame the last swing finishes; longer gives the fall a beat.
+  - How quickly a rising or falling jump is stopped is `MovementConfig.anchorHaltRate` (m/s²),
+    shared with the Gravity Anchor.
 - **Finisher rings:** the `burst` block.
   - `radius` (m) and `expandSeconds` (s): together these set how readable and jumpable the ring is.
   - `triggerAt`: line it up with the clip's impact frame.
@@ -395,17 +414,16 @@ A boss drop can grant an ability early; its level is the fallback.
   without it Air Combo Plus is meaningless.
 - **Gamepad:** the sword attack (`SwordInput`) is Gamepad `buttonWest` and nothing else uses it.
   The skateboard Mount moved to D-pad Right in the movement rework.
-- **No hang time or plunge yet:**
-  - The adapter can only add *horizontal* momentum, because ChibiLocomotion drops the y of
-    `AddMomentum` and gravity outgrows any field acceleration.
-  - KH's air-combo hang time ("Stationary Point") and plunges ("Vertical Asymptote") need a vertical
-    hook. Since the merge, `ChibiLocomotion` has one, `SetVerticalVelocity(m/s)` and
-    `SuspendGravity(seconds)`, but combat can't reach it yet.
-  - Next step:
-    - add both to `ICombatImpulses` and `ChibiMovementAdapter`;
-    - add a per-step "hang" / "vertical speed" field;
-    - wrap `Movement.IMovementState` (MoveKind Dive, SpinJump…) in `ICombatMovement` for dive- and
-      spin-slashes.
+- **Hang time is in; plunges are not yet:**
+  - Air swings hold you up through `ICombatImpulses.SuspendGravity` (see `AirHang`). This makes
+    every air step hang, so "Stationary Point" (Lv 8) needs a new identity: a longer hang, or a
+    hop up.
+  - The hang reuses the Gravity Anchor's halt rate. If combat wants its own, it is a new
+    `MovementConfig` field or a rate argument on `SuspendGravity`.
+  - Plunges ("Vertical Asymptote") still need `SetVerticalVelocity` on `ICombatImpulses` and the
+    adapter, plus a per-step vertical speed. They should untick `hangInAir`.
+  - Dive- and spin-slashes still need `Movement.IMovementState` (MoveKind Dive, SpinJump…) wrapped
+    in `ICombatMovement`.
 - **Lock-on attack facing:** `ChibiLocomotion` still falls back to reading `MeleeCombat.IsAttacking`.
   - Since the merge it offers `SetCombatFacingSource(IFacingSource)`: a source's
     `TryGetFacingTarget(out point, out urgent)` beats the lock-on square-up, and urgent uses the fast

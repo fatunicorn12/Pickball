@@ -66,6 +66,38 @@ namespace Pickleball.Sandbox.Combat
         }
     }
 
+    /// <summary>
+    /// Air-combo hang time (KH): while an air swing plays the player stays up,
+    /// and when the chain ends he falls. MeleeCombat asks this every frame and
+    /// refreshes movement's gravity suspension with the answer, so the hang
+    /// lasts exactly as long as the chain plus a short release, and stops the
+    /// frame a dash or tether takes the body.
+    ///
+    /// Bounded by the air chain itself: one airtime buys one air combo, so the
+    /// hang grows only as the chain does (Air Combo Plus, air finishers).
+    /// </summary>
+    public static class AirHang
+    {
+        /// <summary>
+        /// Seconds to hold gravity off from now, or 0 for no hang. Refreshed per
+        /// frame, so a hold always covers at least the next couple of frames:
+        /// the motor may tick its countdown before this frame's refresh lands.
+        /// </summary>
+        /// <param name="swingOnAirTrack">A swing is playing (hitstop included) and it
+        /// was started on the air track.</param>
+        /// <param name="stepHangs">The playing step's <c>HangInAir</c>. Off for a
+        /// step that wants to fall, such as a plunge.</param>
+        /// <param name="grounded">Raw grounded flag: nothing to hold up.</param>
+        /// <param name="busy">An exclusive move (dash, tether) owns the body.</param>
+        /// <param name="releaseSeconds">How long the hang outlasts the chain.</param>
+        public static float HoldSeconds(bool swingOnAirTrack, bool stepHangs, bool grounded,
+                                        bool busy, float releaseSeconds, float dt)
+        {
+            if (!swingOnAirTrack || !stepHangs || grounded || busy) return 0f;
+            return Mathf.Max(releaseSeconds, 2f * dt);
+        }
+    }
+
     /// <summary>Countdown for the white hit flash on a struck target.</summary>
     public struct FlashTimer
     {

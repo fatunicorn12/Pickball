@@ -69,6 +69,12 @@ namespace Pickleball.Sandbox.Combat
                  "stops you; a few m/s makes a finisher or gap-closer step in.")]
         [Min(0f)] [SerializeField] private float lungeSpeed;
 
+        [Tooltip("Air track only: while this swing plays the player hangs in the air " +
+                 "(gravity off, vertical speed eased to rest), and falls once the chain " +
+                 "ends. Turn off for a step that should drop, such as a plunge finisher. " +
+                 "Ignored on the ground chain.")]
+        [SerializeField] private bool hangInAir = true;
+
         [Header("Area burst")]
         [SerializeField] private AreaBurst burst;
 
@@ -87,6 +93,10 @@ namespace Pickleball.Sandbox.Combat
         public SwingWindows Windows => windows;
         public HitSettings Hit => hit;
         public float LungeSpeed => lungeSpeed;
+
+        /// <summary>Holds the player up while this step plays on the air track;
+        /// see <see cref="AirHang"/>.</summary>
+        public bool HangInAir => hangInAir;
         public AreaBurst Burst => burst;
         public SwingPresentation Presentation => presentation;
 

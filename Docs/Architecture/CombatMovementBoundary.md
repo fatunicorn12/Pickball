@@ -18,7 +18,7 @@ LockOnTargeting ◀──reads── ChibiLocomotion (facade + glue, IFacingSour
 ## Decisions
 
 **Combat sees movement only through two small interfaces.** `ICombatMovement` (`IsGrounded`,
-`IsBusy`, `Velocity`, `IsMovementLocked`) and `ICombatImpulses` (`AddImpulse`, `LockMovement`).
+`IsBusy`, `Velocity`, `IsMovementLocked`) and `ICombatImpulses` (`AddImpulse`, `LockMovement`, `SuspendGravity`).
 `ChibiMovementAdapter` is the one file that changes when movement changes; the combo code never
 names a movement class. `MeleeCombat` takes the source as a serialized `MonoBehaviour` cast to
 the interface, falling back to `GetComponent`.
@@ -69,10 +69,11 @@ time, so the ring is gone inside a talk's 0.25 s settle, and Tab locks again onc
 track and decides when the ground chain is dropped. A one-frame flicker can no longer start an
 air step.
 
-**Vertical levers exist but are not wired.** `ChibiLocomotion.SetVerticalVelocity` and
-`SuspendGravity` (commit `657117d`) forward to the motor, but nothing calls them, and neither the
-adapter nor the interfaces expose them. They have not been play-tested in combat. Since
-`f876b63`, `SuspendGravity`'s hang ends on landing.
+**Air swings hang through `SuspendGravity`.** `ICombatImpulses.SuspendGravity` goes through the
+adapter to `ChibiLocomotion.SuspendGravity`, then to the motor. `MeleeCombat` refreshes it every
+frame an air-track swing plays (see `AirHang`), so the hang ends with the chain, on landing (since
+`f876b63`), or when a dash or tether takes the body. `SetVerticalVelocity` is still unwired. A
+plunge would add it to the interface the same way.
 
 ## Pad and key layout contract
 

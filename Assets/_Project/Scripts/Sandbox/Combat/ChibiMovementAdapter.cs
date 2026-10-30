@@ -37,5 +37,10 @@ namespace Pickleball.Sandbox.Combat
         {
             if (locomotion != null && seconds > 0f) locomotion.LockMovement(seconds);
         }
+
+        public void SuspendGravity(float seconds)
+        {
+            if (locomotion != null && seconds > 0f) locomotion.SuspendGravity(seconds);
+        }
     }
 }

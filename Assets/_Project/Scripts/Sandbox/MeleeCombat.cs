@@ -29,7 +29,8 @@ namespace Pickleball.Sandbox
     ///    Animator, which is unreliable on the frame a transition happens.
     ///  - Swinging neither moves nor stops the character. Steps may add a
     ///    one-off lunge impulse, never a per-frame push: a per-frame lunge once
-    ///    slid the player metres per swing.
+    ///    slid the player metres per swing. The one per-frame request is the
+    ///    air hang (<see cref="AirHang"/>), which only holds gravity off.
     /// </summary>
     public class MeleeCombat : MonoBehaviour
     {
@@ -79,6 +80,11 @@ namespace Pickleball.Sandbox
         [Tooltip("Seconds after a swing ends during which a press still continues " +
                  "the chain instead of restarting it. R1: 0.9 s-apart clicks always reset.")]
         [Range(0f, 1f)] [SerializeField] private float chainGraceSeconds = 0.45f;
+
+        [Tooltip("Seconds an air combo keeps holding the player up after its last swing " +
+                 "ends, before he falls. 0 drops him the frame the chain ends; a little " +
+                 "gives the fall a beat.")]
+        [Range(0f, 0.5f)] [SerializeField] private float airHangReleaseSeconds = 0.08f;
 
         [Header("Lunge homing")]
         [Tooltip("A locked target within this many metres bends the lunge toward it. 0 = off.")]
@@ -246,6 +252,7 @@ namespace Pickleball.Sandbox
         {
             float dt = Time.deltaTime;
             TrackGround(dt);
+            HoldInAir(dt);
 
             // Hitstop: hold the clock (and so the blade, the chain windows and
             // any rings in flight) so a connecting hit reads as impact rather
@@ -309,6 +316,18 @@ namespace Pickleball.Sandbox
             bool justLeft = _contact.Tick(IsGroundedRaw, dt, airborneGraceSeconds);
             if (_contact.IsGrounded && _progress.AirHits > 0) _progress.Land();
             if (justLeft) _progress.LeaveGround();
+        }
+
+        /// <summary>Air-combo hang time: keep the player up while an air swing
+        /// plays; see <see cref="AirHang"/>. Runs ahead of the hitstop return so a
+        /// connecting air hit doesn't drop him mid-freeze.</summary>
+        void HoldInAir(float dt)
+        {
+            if (_impulses == null) return;
+            bool airSwing = IsAttacking && _current.Track == ComboTrack.Air;
+            float hold = AirHang.HoldSeconds(airSwing, airSwing && _current.Step.HangInAir,
+                                             IsGroundedRaw, !CanSwing, airHangReleaseSeconds, dt);
+            if (hold > 0f) _impulses.SuspendGravity(hold);
         }
 
         bool IsGroundedRaw => _movement == null || _movement.IsGrounded;
