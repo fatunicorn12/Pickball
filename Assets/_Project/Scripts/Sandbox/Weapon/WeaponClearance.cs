@@ -62,6 +62,21 @@ namespace Pickleball.Sandbox.Weapon
         /// clears by itself; useful for debugging which clips need help.</summary>
         public float LastCorrection { get; private set; }
 
+        /// <summary>The profile in use. A weapon swap may change it.</summary>
+        public WeaponClearanceProfile Profile => profile;
+
+        /// <summary>
+        /// Swaps the clearance profile, for a weapon with a different blade
+        /// (width, length). Null is ignored so a weapon without its own profile
+        /// keeps the current one. Re-resolves the volume bones at once.
+        /// </summary>
+        public void SetProfile(WeaponClearanceProfile newProfile)
+        {
+            if (newProfile == null || newProfile == profile) return;
+            profile = newProfile;
+            Resolve();
+        }
+
         void OnEnable() => Resolve();
 
         void OnValidate()
