@@ -53,9 +53,9 @@ HypatiaBoss (root, plate centre, turns to face the player)
 ├─ HypatiaBoss              the brain: WHEN; attacks own HOW
 ├─ Body                     hover/bob (brain moves local Y); CapsuleCollider hurtbox
 │  ├─ HypatiaModel          Humanoid, Hypatia.controller (idle)
-│  ├─ Glow (Light), Halo
-├─ Astrolabe                mater, limb, ticks e=0..2, NeedlePivot, Readout (faces player)
-└─ WindowRing               recalibration drain ring
+│  ├─ Glow (Light), Halo     Halo carries LockOnIgnore
+├─ Astrolabe                mater, limb, ticks e=0..2, NeedlePivot, Readout (faces player); LockOnIgnore
+└─ WindowRing               recalibration drain ring; LockOnIgnore
 TheRete (arena centre)      plate (MeshCollider), lip, band rings, spokes, ticks, pointers,
                             PerimeterWall (invisible, Ignore Raycast), Stars
 HypatiaFightViews           one child per presentation component (below)
@@ -91,6 +91,13 @@ rings (they keep expanding), the fire's damage, barks. On each projectile's own 
 (`HypatiaProjectile.ScaledDeltaTime`, its own `SlowLedger`): lobs, orbiters, the shot, scrolls.
 Projectiles carry a trigger `SphereCollider` on the Ignore Raycast layer (every spell's
 `HitMask` is `~0`), which is how the Freeze Zone (it queries triggers) finds them.
+
+**Lock-on.** `LockOnTargeting` measures a target's aim point and size from every renderer under
+its `Health`. The astrolabe, halo and window ring ride on her root so they turn and hover with
+her, so each carries a `LockOnIgnore` marker that lock-on skips (`LockOnTargeting.MeasureAim`).
+Without it the aim sat on the dial 3 m above her head with a 2 m radius, and the reticle and
+camera framed the dial instead of her. Anything new parented to her root that is not her body
+needs the marker too.
 
 **Data assets.** One `HypatiaConfig` holds every gameplay number; the setup creates it once and
 never overwrites it. Presentation colours and sizes are serialized on the view components with
@@ -176,7 +183,6 @@ has the lines, `minGap`, `attackChance` and `lineDuration`.
   Gravity Anchor higher, so a tall ring hits at any height and only the gap gets through.
 - **Heads-up for the 4D Stationary Point:** `FreezeZone` now queries trigger colliders (for her
   projectiles), which also reaches any trigger-only targets the Stationary Point uses.
-- **Health on her grants no XP** (`grantsXp` off), unlike Newton, whose Health still grants XP.
 - **Placeholder look.** Primitives and procedural rings; her only animation is Newton's idle,
   retargeted (no cast, hit or death clips). The perimeter is an invisible 40 m wall at the rim;
   the decorative lip sits outside it.

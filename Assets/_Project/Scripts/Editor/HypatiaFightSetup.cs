@@ -402,15 +402,17 @@ public static class HypatiaFightSetup
         glow.range = 7f;
         glow.intensity = 3f;
         glow.shadows = LightShadows.None;
-        HypatiaFightArt.Halo("Halo", body, 2.6f, new Color(0.62f, 0.68f, 1f, 0.3f), new Vector3(0f, 0.95f, -0.3f));
+        // Scenery that hovers with her: kept out of lock-on's aim and size.
+        HypatiaFightArt.Halo("Halo", body, 2.6f, new Color(0.62f, 0.68f, 1f, 0.3f), new Vector3(0f, 0.95f, -0.3f))
+            .AddComponent<LockOnIgnore>();
 
-        // Health as Newton's (NewtonFightSetup): no grey regain pool on the boss.
-        // Unlike Newton, no XP either (the brief: she is not a grinding target).
+        // Health as Newton's (NewtonFightSetup): no grey regain pool on the boss,
+        // and she grants sword XP like him (per damage dealt plus the defeat bonus).
         var health = root.AddComponent<Health>();
         var hso = new SerializedObject(health);
         hso.FindProperty("maxHealth").floatValue = config.MaxHealth;
         hso.FindProperty("regainShare").floatValue = 0f;
-        hso.FindProperty("grantsXp").boolValue = false;
+        hso.FindProperty("grantsXp").boolValue = true;
         hso.ApplyModifiedPropertiesWithoutUndo();
 
         // Slowable by the Freeze Zone; the brain sets the animator speed itself,
@@ -450,6 +452,7 @@ public static class HypatiaFightSetup
         // The window ring under her (RecalibrationView shows it).
         var windowRing = HypatiaFightArt.Primitive(PrimitiveType.Quad, "WindowRing", root.transform,
             new Vector3(0f, 0.04f, 0f), Quaternion.Euler(90f, 0f, 0f), Vector3.one, HypatiaFightArt.MarkerRingMat());
+        windowRing.AddComponent<LockOnIgnore>();
         windowRing.SetActive(false);
 
         if (player.GetComponent<Health>() == null)
@@ -470,6 +473,8 @@ public static class HypatiaFightSetup
         var astrolabe = new GameObject("Astrolabe").transform;
         astrolabe.SetParent(bossRoot, false);
         astrolabe.localPosition = new Vector3(0f, 6.4f, -1.8f);
+        // Measured with her, the dial put lock-on's aim 3 m above her head.
+        astrolabe.gameObject.AddComponent<LockOnIgnore>();
 
         var faceDisc = HypatiaFightArt.Part("Mater", astrolabe, HypatiaFightArt.MeshAsset("AstrolabeMater",
             m => ArcMesh.SolidRing(m, 0f, 1.75f, -0.06f, 0.06f, 96)), face);
