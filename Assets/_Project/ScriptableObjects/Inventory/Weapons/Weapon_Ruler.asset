@@ -17,7 +17,7 @@ MonoBehaviour:
   description: A ruler forged into a buster blade, steel edge leading. Big, slow
     arcs that hit hard.
   icon: {fileID: 0}
-  heldPrefab: {fileID: 0}
-  moveset: {fileID: 0}
+  heldPrefab: {fileID: 1543436219625872467, guid: e1458083719245c4684b3140ccf6dd47, type: 3}
+  moveset: {fileID: 11400000, guid: 42f9fecc916de8f49906f6f08bbf0cc0, type: 2}
   bladeRadius: 0.25
-  clearanceProfile: {fileID: 0}
+  clearanceProfile: {fileID: 11400000, guid: 97058c06eb0b07642ae04c6a9501a54f, type: 2}

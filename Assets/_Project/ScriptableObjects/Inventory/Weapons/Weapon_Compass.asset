@@ -17,7 +17,7 @@ MonoBehaviour:
   description: 'A geometer''s compass, its point honed to an edge. Light and quick:
     fast swings that chain into long combos.'
   icon: {fileID: 0}
-  heldPrefab: {fileID: 0}
+  heldPrefab: {fileID: 4333296927996969582, guid: a2340115ea138894ca27d2a2c65652f4, type: 3}
   moveset: {fileID: 11400000, guid: bca4baacbc4cc4945a358233f9ec7254, type: 2}
   bladeRadius: 0.18
   clearanceProfile: {fileID: 11400000, guid: e5fd179c4a14a5048930985a7713a291, type: 2}
