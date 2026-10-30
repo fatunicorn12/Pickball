@@ -66,8 +66,9 @@ MonoBehaviour:
   orbiterCountMin: 3
   orbiterCountMax: 5
   maxLiveOrbiters: 5
-  ellipseEccentricityMin: 0.35
-  ellipseEccentricityMax: 0.75
+  ellipseEccentricityMin: 0
+  ellipseEccentricityMax: 0
+  orbitEccentricityJitter: 0
   orbitPeriapsisMin: 2.5
   orbitApoapsisMax: 11.5
   orbitPeriodMin: 6
@@ -88,6 +89,24 @@ MonoBehaviour:
   hyperbolaHeight: 1
   hyperbolaShotRadius: 0.5
   hyperbolaDamage: 18
+  spellsBatOrbiters: 0
+  battingConeDegrees: 60
+  battedSpeed: 16
+  battedTurnRate: 540
+  battedMissLifetime: 1.2
+  battedHomingTimeout: 2.5
+  battedOrbiterDamage: 20
+  toppleDuration: 7
+  toppleHoverHeight: 0
+  toppleDamageMultiplier: 2
+  firstPulseDelay: 6
+  pulseInterval: 10
+  pulseChargeTime: 0.8
+  pulseReach: 10
+  pulseDamage: 5
+  pulseTargetRadius: 10.5
+  pulseExtraSpeed: 0
+  pulseAssumedGroundDrag: 11
   recalibrationDuration: 2.5
   recalibrationDamageMultiplier: 2
   normalDamageMultiplier: 1

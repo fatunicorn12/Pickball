@@ -195,11 +195,21 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         [Tooltip("Most orbiters alive at once; the oldest retire first.")]
         [SerializeField, Min(1)] private int maxLiveOrbiters = 5;
 
-        [Tooltip("Lowest orbit eccentricity (0 = circle).")]
-        [SerializeField, Range(0f, 0.95f)] private float ellipseEccentricityMin = 0.35f;
+        [Tooltip("Lowest orbit eccentricity the needle shows for an ellipse volley. " +
+                 "0 = circles (current design): every orbiter moves at one steady speed " +
+                 "round her, so it is easy to read and to bat back. Above 0 they whip " +
+                 "past her at periapsis.")]
+        [SerializeField, Range(0f, 0.95f)] private float ellipseEccentricityMin;
 
-        [Tooltip("Highest orbit eccentricity. Higher = a sharper whip at periapsis.")]
-        [SerializeField, Range(0f, 0.95f)] private float ellipseEccentricityMax = 0.75f;
+        [Tooltip("Highest orbit eccentricity. 0 = circles (current design). Higher = " +
+                 "a sharper whip at periapsis.")]
+        [SerializeField, Range(0f, 0.95f)] private float ellipseEccentricityMax;
+
+        [Tooltip("Each orbiter's e is the needle's ± up to this (then clamped to the " +
+                 "range above), so a volley reads as one family of orbits without every " +
+                 "orbit being identical. 0 = circles (current design): every orbit has " +
+                 "exactly the needle's e. The elliptical design used 0.1.")]
+        [SerializeField, Range(0f, 0.5f)] private float orbitEccentricityJitter;
 
         [Tooltip("Closest an orbit may pass to her, m.")]
         [SerializeField, Min(0.5f)] private float orbitPeriapsisMin = 2.5f;
@@ -262,6 +272,90 @@ namespace Pickleball.Sandbox.Boss.Hypatia
 
         [Tooltip("Damage of the shot, HP.")]
         [SerializeField, Min(0f)] private float hyperbolaDamage = 18f;
+
+        // ─── Batting ────────────────────────────────────────────────────────
+        [Header("Batting orbiters back")]
+        [Tooltip("Spells (orbs, lightning) also bat orbiters. Off = only the sword " +
+                 "and other physical hits do: the topple is a blade skill.")]
+        [SerializeField] private bool spellsBatOrbiters;
+
+        [Tooltip("Half-angle of the cone round 'straight at her' that counts as batted " +
+                 "toward her, °. The swing's horizontal direction is compared with the " +
+                 "line from the ball to her body. Wider = easier to topple her.")]
+        [SerializeField, Range(0f, 180f)] private float battingConeDegrees = 60f;
+
+        [Tooltip("Speed of a batted orbiter, m/s, either way. Faster = it reaches her " +
+                 "before the player loses sight of it.")]
+        [SerializeField, Min(0.1f)] private float battedSpeed = 16f;
+
+        [Tooltip("How fast a ball batted toward her steers onto her body, °/s. Generous " +
+                 "on purpose: a swing inside the cone should always land. At 16 m/s, " +
+                 "540 °/s turns in a ~1.7 m radius.")]
+        [SerializeField, Min(0f)] private float battedTurnRate = 540f;
+
+        [Tooltip("Seconds a ball batted AWAY from her flies along the swing before it " +
+                 "vanishes (its own clock). It hurts nobody.")]
+        [SerializeField, Min(0.05f)] private float battedMissLifetime = 1.2f;
+
+        [Tooltip("Seconds a ball batted toward her may fly without reaching her before " +
+                 "it gives up and vanishes (its own clock). A safety net; at 16 m/s it " +
+                 "reaches her from the rim in under a second.")]
+        [SerializeField, Min(0.1f)] private float battedHomingTimeout = 2.5f;
+
+        [Tooltip("Damage a batted orbiter deals when it reaches her, HP, before her " +
+                 "damage multiplier (the one in force at impact). Then she topples.")]
+        [SerializeField, Min(0f)] private float battedOrbiterDamage = 20f;
+
+        // ─── Topple ─────────────────────────────────────────────────────────
+        [Header("Topple")]
+        [Tooltip("Seconds she stays toppled after a batted orbiter strikes her, on her " +
+                 "clock (a Freeze Zone holds her down longer). Every attack timer is " +
+                 "paused for it; what she already threw keeps going.")]
+        [SerializeField, Min(0f)] private float toppleDuration = 7f;
+
+        [Tooltip("Height of her feet while toppled, m. 0 = down on the plate, where " +
+                 "every ground combo reaches her.")]
+        [SerializeField, Min(0f)] private float toppleHoverHeight;
+
+        [Tooltip("Damage multiplier on her while toppled. Replaces the recalibration " +
+                 "multiplier rather than stacking with it (a topple closes the window).")]
+        [SerializeField, Min(0f)] private float toppleDamageMultiplier = 2f;
+
+        // ─── Knockback pulse ────────────────────────────────────────────────
+        [Header("Knockback Pulse")]
+        [Tooltip("Seconds into the fight before the first pulse starts charging, on her clock.")]
+        [SerializeField, Min(0f)] private float firstPulseDelay = 6f;
+
+        [Tooltip("Seconds from one pulse starting to charge to the next, on her clock. " +
+                 "The timer does not run while she recalibrates or is toppled; a pulse " +
+                 "due then waits until it ends.")]
+        [SerializeField, Min(0.5f)] private float pulseInterval = 10f;
+
+        [Tooltip("Seconds she glows before the pulse fires, on her clock: the player's " +
+                 "warning to back off.")]
+        [SerializeField, Min(0f)] private float pulseChargeTime = 0.8f;
+
+        [Tooltip("Horizontal distance from her within which the pulse hits, m, at any " +
+                 "height (it cannot be jumped). Keep below Arena Radius.")]
+        [SerializeField, Min(0.1f)] private float pulseReach = 10f;
+
+        [Tooltip("Damage of the pulse, HP. Recoverable (grey).")]
+        [SerializeField, Min(0f)] private float pulseDamage = 5f;
+
+        [Tooltip("Where a grounded player should come to rest, m from her. The push " +
+                 "speed is solved from it: v = sqrt(2 × Assumed Ground Drag × " +
+                 "(Target Radius − distance)). Just past Pulse Reach, so they land " +
+                 "outside it.")]
+        [SerializeField, Min(0f)] private float pulseTargetRadius = 10.5f;
+
+        [Tooltip("Extra push speed on top of the solved one, m/s. 0 = a grounded player " +
+                 "stops exactly on Target Radius on flat ground.")]
+        [SerializeField, Min(0f)] private float pulseExtraSpeed;
+
+        [Tooltip("COPY of MovementConfig ▸ Momentum Ground Drag, m/s². The push is " +
+                 "solved against it. An EditMode test fails if the two drift apart: " +
+                 "change both together.")]
+        [SerializeField, Min(0.01f)] private float pulseAssumedGroundDrag = 11f;
 
         // ─── Recalibration ──────────────────────────────────────────────────
         [Header("Recalibration window")]
@@ -379,6 +473,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         public int MaxLiveOrbiters => maxLiveOrbiters;
         public float EllipseEccentricityMin => ellipseEccentricityMin;
         public float EllipseEccentricityMax => Mathf.Max(ellipseEccentricityMin, ellipseEccentricityMax);
+        public float OrbitEccentricityJitter => orbitEccentricityJitter;
         public float OrbitPeriapsisMin => orbitPeriapsisMin;
         public float OrbitApoapsisMax => orbitApoapsisMax;
         public float OrbitPeriodMin => orbitPeriodMin;
@@ -400,6 +495,27 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         public float HyperbolaHeight => hyperbolaHeight;
         public float HyperbolaShotRadius => hyperbolaShotRadius;
         public float HyperbolaDamage => hyperbolaDamage;
+
+        public bool SpellsBatOrbiters => spellsBatOrbiters;
+        public float BattingConeDegrees => battingConeDegrees;
+        public float BattedSpeed => battedSpeed;
+        public float BattedTurnRate => battedTurnRate;
+        public float BattedMissLifetime => battedMissLifetime;
+        public float BattedHomingTimeout => battedHomingTimeout;
+        public float BattedOrbiterDamage => battedOrbiterDamage;
+
+        public float ToppleDuration => toppleDuration;
+        public float ToppleHoverHeight => toppleHoverHeight;
+        public float ToppleDamageMultiplier => toppleDamageMultiplier;
+
+        public float FirstPulseDelay => firstPulseDelay;
+        public float PulseInterval => pulseInterval;
+        public float PulseChargeTime => pulseChargeTime;
+        public float PulseReach => pulseReach;
+        public float PulseDamage => pulseDamage;
+        public float PulseTargetRadius => pulseTargetRadius;
+        public float PulseExtraSpeed => pulseExtraSpeed;
+        public float PulseAssumedGroundDrag => pulseAssumedGroundDrag;
 
         public float RecalibrationDuration => recalibrationDuration;
         public float RecalibrationDamageMultiplier => recalibrationDamageMultiplier;

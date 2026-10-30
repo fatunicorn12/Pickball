@@ -73,6 +73,11 @@ public static class HypatiaFightArt
     public static Material MarkerFillMat() =>
         Particle("HypatiaMarkerFill", SharedTexture("Disc.png"), new Color(0.35f, 0.25f, 1f, 0.45f), additive: false);
 
+    /// <summary>The knockback pulse's shockwave ring (its own asset, so tuning its
+    /// tint never touches the lob markers or the window ring).</summary>
+    public static Material PulseRingMat() =>
+        Particle("HypatiaPulseRing", SharedTexture("TargetRing.png"), new Color(0.8f, 0.9f, 1f, 1f), additive: true);
+
     public static Material MarkerRingMat() =>
         Particle("HypatiaMarkerRing", SharedTexture("TargetRing.png"), new Color(0.8f, 0.85f, 1f, 1f), additive: true);
 
@@ -269,12 +274,29 @@ public static class HypatiaFightArt
         return Save(root, LobPrefabPath).GetComponent<ConicLob>();
     }
 
-    /// <summary>An elliptical orbiter: a silver moon with a cold halo and trail.</summary>
+    /// <summary>
+    /// An orbiter: a silver moon with a cold halo and trail. Besides the slow
+    /// trigger on the root it has a SOLID sphere on a child ("Hitbox"), because
+    /// the sword's overlap ignores triggers and the orbiter must be swingable
+    /// (ConicOrbiter is an IDamageable). A child, not a second collider on the
+    /// root: HypatiaProjectile reads "the" SphereCollider on its root and forces
+    /// it to a trigger. Same layer (Ignore Raycast), so the orbit camera and the
+    /// lock-on stay blind to it; the orbiter tells the player's controller to
+    /// ignore it at launch, so it never blocks or shoves them.
+    /// </summary>
     public static ConicOrbiter BuildOrbiterPrefab()
     {
         var root = ProjectileRoot("HypatiaOrbiter");
-        root.AddComponent<ConicOrbiter>();
+        var orbiter = root.AddComponent<ConicOrbiter>();
         TriggerOf(root);
+        var hitboxGo = new GameObject("Hitbox") { layer = ProjectileLayer };
+        hitboxGo.transform.SetParent(root.transform, false);
+        var hitbox = hitboxGo.AddComponent<SphereCollider>();
+        hitbox.isTrigger = false;
+        hitbox.radius = 0.45f;   // sized at launch to Orbiter Radius
+        var so = new SerializedObject(orbiter);
+        so.FindProperty("hitbox").objectReferenceValue = hitbox;
+        so.ApplyModifiedPropertiesWithoutUndo();
         var core = Primitive(PrimitiveType.Sphere, "Core", root.transform, Vector3.zero, Quaternion.identity,
                              Vector3.one * 0.9f, Lit("OrbiterCore", Silver, 0.9f, 0.85f, Starlight * 0.6f));
         NoShadows(core);

@@ -17,7 +17,17 @@ namespace Pickleball.Sandbox.Boss.Hypatia
     /// needle shows its e for <see cref="HypatiaConfig.NeedleLead"/>, the volley
     /// fires, and when it finishes she drops into the recalibration window and
     /// takes extra damage. The next conic's interval only starts counting when the
-    /// window closes, so the fight breathes: dodge, read, punish.
+    /// window closes, so the fight breathes: dodge, read, punish. Every Pulse
+    /// Interval she charges a knockback pulse that clears the space around her
+    /// (never during the window or a topple: a pulse due then waits).
+    ///
+    /// <b>The topple.</b> Bat one of her orbiters back into her and she topples
+    /// (<see cref="ToppleState"/>): down on the plate for Topple Duration on her
+    /// clock, taking Topple Damage Multiplier (which replaces the window's, never
+    /// stacks with it), with every attack timer paused, any open window closed,
+    /// a conic waiting on its needle cancelled, a charging pulse dropped and every
+    /// other orbiter shattered, so one volley cannot chain a second topple. What
+    /// she has already thrown keeps flying, and the fire keeps burning.
     ///
     /// <b>Her clock.</b> Every timer and her body motion advance by
     /// <see cref="HypatiaContext.BossDelta"/>: dt times her slow multiplier from
@@ -61,10 +71,13 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         [SerializeField] private MonoBehaviour conics;
         [Tooltip("An IArenaBurn.")]
         [SerializeField] private MonoBehaviour burn;
+        [Tooltip("An IPulseAttack (the knockback pulse).")]
+        [SerializeField] private MonoBehaviour pulse;
 
         [Header("Body")]
         [Tooltip("The visual model, moved for hover and bob. A child of this root; " +
-                 "its local Y is her feet's height above the plate.")]
+                 "its local Y is her feet's height above the plate. Its CapsuleCollider " +
+                 "is her hurtbox, which batted orbiters home on.")]
         [SerializeField] private Transform body;
         [Tooltip("Her animator; its speed follows her slow in code.")]
         [SerializeField] private Animator animator;
@@ -89,6 +102,13 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         /// <summary>She died; every attack has been stopped. Raised once.</summary>
         public event Action Defeated;
 
+        /// <summary>A batted orbiter toppled her for this many seconds (her clock).</summary>
+        public event Action<float> Toppled;
+
+        /// <summary>The topple ended: she rises (also raised when her death or the
+        /// player's ends a topple early).</summary>
+        public event Action Recovered;
+
         /// <summary>The fight's tunables, for presentation that needs the same numbers.</summary>
         public HypatiaConfig Config => config;
 
@@ -105,6 +125,12 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         /// closed. For a HUD that drains with the window.</summary>
         public float RecalibrationRemaining => _window != null ? _window.Remaining : 0f;
 
+        /// <summary>True while she is toppled.</summary>
+        public bool IsToppled => _topple != null && _topple.IsToppled;
+
+        /// <summary>Seconds left in the topple, on her clock; 0 when not toppled.</summary>
+        public float ToppleRemaining => _topple != null ? _topple.Remaining : 0f;
+
         /// <summary>True once she has started and until she or the player dies.</summary>
         public bool IsFighting => _started && !_stopped;
 
@@ -117,15 +143,19 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         IRingAttack _rings;
         IConicAttack _conics;
         IArenaBurn _burn;
+        IPulseAttack _pulse;
         Health _subscribedPlayerHealth;
         IConicAttack _subscribedConics;
         RecalibrationWindow _subscribedWindow;
+        ToppleState _subscribedTopple;
         ConicPicker _picker;
         bool _bodyMovable;
 
         // ── Fight state: private and serializable, so a script reload keeps it ──
         RecalibrationWindow _window = new();
-        BossTimer _ringTimer, _conicTimer, _needleTimer, _burnTimer;
+        ToppleState _topple = new();
+        BossTimer _ringTimer, _conicTimer, _needleTimer, _burnTimer, _pulseTimer;
+        bool _pulseDue;
         float _barkTimer;
         int _phase = 1;
         bool _started, _stopped, _defeated;
@@ -135,6 +165,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         bool _hoverInitialised;
         Vector3 _bodyBase;
         float _hoverHeight, _bobCycle;
+        float _bobWeight = 1f;
 
         void OnEnable()
         {
@@ -143,11 +174,13 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             if (barks == null) barks = GetComponent<HypatiaBarks>();
             _picker ??= new ConicPicker(new System.Random());
             _window ??= new RecalibrationWindow();
+            _topple ??= new ToppleState();
 
             CharacterController playerController =
                 player != null ? player.GetComponent<CharacterController>() : null;
+            CapsuleCollider hurtbox = body != null ? body.GetComponent<CapsuleCollider>() : null;
             Context = new HypatiaContext(config, transform, arenaCentre, player, playerHealth,
-                                         playerController, ReadTimeScale);
+                                         playerController, ReadTimeScale, _health, hurtbox);
             // A reload (or a disable/enable) mid phase 2 must not drop the attacks
             // back to phase 1 behaviour.
             if (_phase >= 2) Context.EnterPhaseTwo();
@@ -155,6 +188,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             _rings = AsAttack<IRingAttack>(rings, nameof(rings));
             _conics = AsAttack<IConicAttack>(conics, nameof(conics));
             _burn = AsAttack<IArenaBurn>(burn, nameof(burn));
+            _pulse = AsAttack<IPulseAttack>(pulse, nameof(pulse));
 
             if (config == null)
             {
@@ -166,6 +200,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia
                 _rings?.Bind(Context);
                 _conics?.Bind(Context);
                 _burn?.Bind(Context);
+                _pulse?.Bind(Context);
             }
 
             _health.Hurt += OnHurt;
@@ -176,11 +211,19 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             if (_subscribedPlayerHealth != null) _subscribedPlayerHealth.Died += OnPlayerDied;
 
             _subscribedConics = _conics;
-            if (_subscribedConics != null) _subscribedConics.VolleyFinished += OnVolleyFinished;
+            if (_subscribedConics != null)
+            {
+                _subscribedConics.VolleyFinished += OnVolleyFinished;
+                _subscribedConics.OrbiterStruckBoss += OnOrbiterStruckBoss;
+            }
 
             _subscribedWindow = _window;
             _subscribedWindow.Opened += OnWindowOpened;
             _subscribedWindow.Closed += OnWindowClosed;
+
+            _subscribedTopple = _topple;
+            _subscribedTopple.Started += OnToppleStarted;
+            _subscribedTopple.Ended += OnToppleEnded;
 
             if (animator != null) animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             InitialiseBody();
@@ -196,7 +239,11 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             }
             if (_subscribedPlayerHealth != null) _subscribedPlayerHealth.Died -= OnPlayerDied;
             _subscribedPlayerHealth = null;
-            if (_subscribedConics != null) _subscribedConics.VolleyFinished -= OnVolleyFinished;
+            if (_subscribedConics != null)
+            {
+                _subscribedConics.VolleyFinished -= OnVolleyFinished;
+                _subscribedConics.OrbiterStruckBoss -= OnOrbiterStruckBoss;
+            }
             _subscribedConics = null;
             if (_subscribedWindow != null)
             {
@@ -204,6 +251,12 @@ namespace Pickleball.Sandbox.Boss.Hypatia
                 _subscribedWindow.Closed -= OnWindowClosed;
             }
             _subscribedWindow = null;
+            if (_subscribedTopple != null)
+            {
+                _subscribedTopple.Started -= OnToppleStarted;
+                _subscribedTopple.Ended -= OnToppleEnded;
+            }
+            _subscribedTopple = null;
         }
 
         void Start()
@@ -212,15 +265,22 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             _started = true;
             _ringTimer.Start(config.FirstRingDelay);
             _conicTimer.Start(config.FirstConicDelay);
+            _pulseTimer.Start(config.FirstPulseDelay);
             _barkTimer = config.UnpromptedBarkInterval;
             Say(HypatiaBarks.Occasion.Intro);
         }
 
-        void Update()
+        void Update() => Tick(Time.deltaTime);
+
+        /// <summary>
+        /// One frame of the brain, <paramref name="dt"/> real seconds (her clock
+        /// scales it). Called from Update; public as the EditMode test seam, the
+        /// way <see cref="Conics.ConicCaster.Tick"/> is.
+        /// </summary>
+        public void Tick(float dt)
         {
             if (config == null || Context == null) return;
 
-            float dt = Time.deltaTime;
             float bossDt = Context.BossDelta(dt);
             if (animator != null) animator.speed = Context.BossTimeScale;
             if (_defeated) return;
@@ -231,10 +291,21 @@ namespace Pickleball.Sandbox.Boss.Hypatia
 
             if (!IsFighting) return;
             CheckPhase();
+            _topple.Tick(bossDt);
             _window.Tick(bossDt);
-            UpdateRings(bossDt);
-            UpdateConics(bossDt);
-            UpdateBurn(bossDt);
+            if (IsToppled)
+            {
+                // Every attack timer holds. Only a volley already in progress is
+                // watched, so one that ends during the topple is still closed out.
+                if (_awaitingVolley && _conics != null && !_conics.IsBusy) FinishVolley();
+            }
+            else
+            {
+                UpdateRings(bossDt);
+                UpdateConics(bossDt);
+                UpdateBurn(bossDt);
+            }
+            UpdatePulse(bossDt);
             UpdateUnpromptedBark(dt);
         }
 
@@ -339,11 +410,19 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             _awaitingVolley = false;
             _conicDue = false;
             _conicTimer.Stop();
+            if (IsToppled)
+            {
+                // The topple already is her punish beat: no window on top of it.
+                // The next conic's interval starts now and holds until she rises.
+                if (!_stopped && config != null) _conicTimer.Start(config.ConicInterval(PhaseTwo));
+                return;
+            }
             _window.Open(config != null ? config.RecalibrationDuration : 0f);
         }
 
         void OnWindowOpened(float duration)
         {
+            DeferChargingPulse();
             RecalibrationStarted?.Invoke(duration);
             Say(HypatiaBarks.Occasion.Recalibration);
         }
@@ -369,6 +448,74 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             if (_burn.CanIgnite) _burn.IgniteNext();
             if (_burn.CanIgnite) _burnTimer.Start(config.BurnInterval);
         }
+
+        /// <summary>
+        /// The pulse cycle: first after First Pulse Delay, then every Pulse Interval,
+        /// counted from each charge's start. The timer does not run while she is
+        /// recalibrating or toppled, and a pulse that comes due then waits for the
+        /// window or topple to end before it starts charging.
+        /// </summary>
+        void UpdatePulse(float bossDt)
+        {
+            if (_pulse == null) return;
+            if (IsRecalibrating || IsToppled) return;
+
+            if (!_pulseDue)
+            {
+                // Liveness: a timer left idle by a reload restarts on the interval.
+                if (!_pulseTimer.IsRunning) _pulseTimer.Start(config.PulseInterval);
+                if (!_pulseTimer.Tick(bossDt)) return;
+                _pulseDue = true;
+            }
+
+            // Still charging the last one (an interval shorter than the charge): go
+            // as soon as it has fired.
+            if (_pulse.IsCharging) return;
+            _pulseDue = false;
+            _pulseTimer.Start(config.PulseInterval);
+            _pulse.BeginPulse();
+        }
+
+        /// <summary>A charge in progress when the window opens or she topples is
+        /// dropped, and the pulse is due again as soon as she is back up: it never
+        /// fires into her own punish beat.</summary>
+        void DeferChargingPulse()
+        {
+            if (_pulse == null || !_pulse.IsCharging) return;
+            _pulse.CancelPulse();
+            _pulseTimer.Stop();
+            _pulseDue = !_stopped;
+        }
+
+        // ─── Topple ──────────────────────────────────────────────────────────
+
+        /// <summary>A batted orbiter reached her (its damage is already dealt).</summary>
+        void OnOrbiterStruckBoss(Vector3 at)
+        {
+            if (!IsFighting || _defeated || config == null) return;
+            if (_health != null && _health.IsDead) return;
+            _topple.Begin(config.ToppleDuration);   // refused while already toppled
+        }
+
+        void OnToppleStarted(float duration)
+        {
+            // Topple wins over recalibration: close the window (its Closed edge
+            // restarts the conic interval, which then holds until she rises).
+            _window.Close();
+            if (_needleTimer.IsRunning)
+            {
+                // The conic the needle was announcing never fires.
+                _needleTimer.Stop();
+                _conicDue = false;
+                _conicTimer.Start(config.ConicInterval(PhaseTwo));
+            }
+            DeferChargingPulse();
+            _conics?.ShatterOrbiters();
+            Toppled?.Invoke(duration);
+            Say(HypatiaBarks.Occasion.Toppled);
+        }
+
+        void OnToppleEnded() => Recovered?.Invoke();
 
         void UpdateUnpromptedBark(float realDt)
         {
@@ -413,9 +560,24 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         float FilterDamage(float amount, Vector3 at, DamageKind kind)
         {
             if (config == null) return ScaleIncomingDamage(amount, false, 1f, 1f);
-            return ScaleIncomingDamage(amount, IsRecalibrating,
+            return ScaleIncomingDamage(amount, IsToppled, IsRecalibrating,
+                                       config.ToppleDamageMultiplier,
                                        config.RecalibrationDamageMultiplier,
                                        config.NormalDamageMultiplier);
+        }
+
+        /// <summary>
+        /// Her damage rule with the topple: the topple multiplier while toppled
+        /// (it REPLACES the recalibration one; the two never multiply), else the
+        /// recalibration rule below. Same sanitising: NaN, infinite or non-positive
+        /// in, or a NaN multiplier, yields 0.
+        /// </summary>
+        public static float ScaleIncomingDamage(float amount, bool toppled, bool recalibrating,
+                                                float toppleMultiplier, float recalibrationMultiplier,
+                                                float normalMultiplier)
+        {
+            if (!toppled) return ScaleIncomingDamage(amount, recalibrating, recalibrationMultiplier, normalMultiplier);
+            return ScaleIncomingDamage(amount, true, toppleMultiplier, normalMultiplier);
         }
 
         /// <summary>
@@ -461,12 +623,16 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             _conicTimer.Stop();
             _needleTimer.Stop();
             _burnTimer.Stop();
+            _pulseTimer.Stop();
+            _pulseDue = false;
             _conicDue = false;
             _awaitingVolley = false;
             _window?.Close();
+            _topple?.End();
             _rings?.StopAll();
             _conics?.StopAll();
             _burn?.StopAll();
+            _pulse?.StopAll();
         }
 
         // ─── Body ────────────────────────────────────────────────────────────
@@ -487,21 +653,27 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             _hoverInitialised = true;
         }
 
-        /// <summary>Hover toward the window-dependent height with exponential
-        /// smoothing, bob on top, and turn the root to face the player, all on her
-        /// clock. The root never translates: she does not walk.</summary>
+        /// <summary>Hover toward the state's height (toppled, recalibrating or
+        /// normal) with exponential smoothing, bob on top (not while toppled: she
+        /// is down on the plate), and turn the root to face the player (not while
+        /// toppled), all on her clock. The root never translates: she does not walk.</summary>
         void UpdateBody(float bossDt)
         {
+            bool toppled = IsToppled;
             if (_bodyMovable)
             {
-                float target = IsRecalibrating ? config.RecalibrationHoverHeight : config.HoverHeight;
-                _hoverHeight += (target - _hoverHeight) * (1f - Mathf.Exp(-config.HoverSettleRate * bossDt));
+                float target = toppled ? config.ToppleHoverHeight
+                             : IsRecalibrating ? config.RecalibrationHoverHeight
+                             : config.HoverHeight;
+                float settle = 1f - Mathf.Exp(-config.HoverSettleRate * bossDt);
+                _hoverHeight += (target - _hoverHeight) * settle;
+                _bobWeight += ((toppled ? 0f : 1f) - _bobWeight) * settle;
                 _bobCycle = Mathf.Repeat(_bobCycle + bossDt / Mathf.Max(0.1f, config.HoverBobPeriod), 1f);
-                float y = _hoverHeight + config.HoverBobAmplitude * Mathf.Sin(_bobCycle * 2f * Mathf.PI);
-                body.localPosition = new Vector3(_bodyBase.x, y, _bodyBase.z);
+                float y = _hoverHeight + _bobWeight * config.HoverBobAmplitude * Mathf.Sin(_bobCycle * 2f * Mathf.PI);
+                body.localPosition = new Vector3(_bodyBase.x, Mathf.Max(0f, y), _bodyBase.z);
             }
 
-            if (player == null || !(bossDt > 0f)) return;
+            if (toppled || player == null || !(bossDt > 0f)) return;
             Vector3 look = player.position - transform.position;
             look.y = 0f;
             if (look.sqrMagnitude < 0.01f) return;

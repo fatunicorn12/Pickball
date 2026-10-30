@@ -10,7 +10,8 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Presentation
     /// instead of only the ball. Drawn once from the orbiter's
     /// <see cref="ConicOrbiter.Orbit"/> and <see cref="ConicOrbiter.Plane"/> on
     /// <see cref="ConicCaster.OrbiterSpawned"/>, faded out over the orbiter's last
-    /// seconds, released on <see cref="ConicCaster.OrbiterRetired"/> or
+    /// seconds, released on <see cref="ConicCaster.OrbiterBatted"/> (the ball has
+    /// left its orbit), <see cref="ConicCaster.OrbiterRetired"/> or
     /// <see cref="ConicCaster.Stopped"/>.
     ///
     /// The ellipse is the orbit's true shape, r = a(1 − e²)/(1 + e cos θ) about
@@ -61,12 +62,13 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Presentation
             if (_subscribed == null) return;
             _subscribed.OrbiterSpawned += OnSpawned;
             _subscribed.OrbiterRetired += OnRetired;
+            _subscribed.OrbiterBatted += OnBatted;
             _subscribed.Stopped += ClearAll;
 
             var registry = _subscribed.Registry;
             if (registry == null) return;
             for (int i = 0; i < registry.Count; i++)
-                if (registry.At(i) != null) OnSpawned(registry.At(i));
+                if (registry.At(i) != null && !registry.At(i).IsBatted) OnSpawned(registry.At(i));
         }
 
         void OnDisable()
@@ -75,6 +77,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Presentation
             {
                 _subscribed.OrbiterSpawned -= OnSpawned;
                 _subscribed.OrbiterRetired -= OnRetired;
+                _subscribed.OrbiterBatted -= OnBatted;
                 _subscribed.Stopped -= ClearAll;
             }
             _subscribed = null;
@@ -105,6 +108,8 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Presentation
             line.startColor = line.endColor = colour;
             _paths.Add(new Path { Orbiter = orbiter, Line = line });
         }
+
+        void OnBatted(ConicOrbiter orbiter, bool towardHer) => OnRetired(orbiter);
 
         void OnRetired(ConicOrbiter orbiter)
         {

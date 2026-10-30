@@ -12,8 +12,12 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
     /// every Lob Stagger, each with a landing marker for its whole flight. Finished
     /// when the last lob lands.</item>
     /// <item><b>Ellipse</b> (e &lt; 1): orbiters on Kepler orbits with her at a focus,
-    /// one every Orbiter Spawn Stagger, eccentricity near the needle's. They outlive
-    /// the volley (Orbiter Lifetime); finished when the last has spawned.</item>
+    /// one every Orbiter Spawn Stagger, eccentricity the needle's ± the config's
+    /// jitter. Current tuning is e = 0: circles at a steady speed. They outlive
+    /// the volley (Orbiter Lifetime); finished when the last has spawned. The
+    /// player can bat one back (<see cref="ConicOrbiter.TakeHit"/>): it leaves the
+    /// registry, and if it reaches her this deals Batted Orbiter Damage through her
+    /// Health and raises <see cref="OrbiterStruckBoss"/> for the brain.</item>
     /// <item><b>Hyperbola</b> (e &gt; 1): the asymptotes are telegraphed for Asymptote
     /// Lead, then one fast shot flies the curve. Finished when it leaves.</item>
     /// </list>
@@ -30,11 +34,6 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
     [RequireComponent(typeof(OrbiterRegistry))]
     public class ConicCaster : MonoBehaviour, IConicAttack
     {
-        /// <summary>Each orbiter's e is the needle's ± up to this (then clamped to the
-        /// config's ellipse range), so a volley reads as one family of orbits without
-        /// every orbit being identical. From the design brief.</summary>
-        public const float OrbiterEccentricityJitter = 0.1f;
-
         [Header("Projectile prefabs (null = a bare object with the component)")]
         [Tooltip("The parabola lob. Needs ConicLob; visuals are the prefab's.")]
         [SerializeField] private ConicLob lobPrefab;
@@ -61,9 +60,20 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
         /// <summary>A new orbiter is live. Its Orbit and Plane describe the whole ellipse.</summary>
         public event Action<ConicOrbiter> OrbiterSpawned;
 
-        /// <summary>An orbiter is leaving (lifetime, live cap or StopAll) and is about
-        /// to be despawned. Drop any reference to it.</summary>
+        /// <summary>An orbiter is leaving (lifetime, live cap, shatter, a batted flight
+        /// ending or StopAll) and is about to be despawned. Drop any reference to it.</summary>
         public event Action<ConicOrbiter> OrbiterRetired;
+
+        /// <summary>The player batted an orbiter off its orbit: toward her (true) or
+        /// away (false). It has left the registry; its orbit line should go now.</summary>
+        public event Action<ConicOrbiter, bool> OrbiterBatted;
+
+        /// <summary>An orbiter shattered because she toppled (raised just before its
+        /// <see cref="OrbiterRetired"/>). For a shatter flash.</summary>
+        public event Action<ConicOrbiter> OrbiterShattered;
+
+        /// <inheritdoc/>
+        public event Action<Vector3> OrbiterStruckBoss;
 
         /// <summary>The flyby is coming: draw the asymptotes, periapsis and path.</summary>
         public event Action<HyperbolaTelegraph> AsymptotesTelegraphed;
@@ -113,8 +123,12 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
         float _releaseIn;
         HyperbolicShot _liveShot;
 
+        // Batted orbiters in flight (out of the registry, still owned here).
+        List<ConicOrbiter> _battedLive;
+
         List<PendingLob> PendingLobs => _pendingLobs ??= new List<PendingLob>(4);
         List<ConicLob> LiveLobs => _liveLobs ??= new List<ConicLob>(4);
+        List<ConicOrbiter> BattedLive => _battedLive ??= new List<ConicOrbiter>(4);
         ConicPolyline Path => _path ??= new ConicPolyline();
         System.Random Rng => _random ??= new System.Random();
 
@@ -143,6 +157,9 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
 
         /// <summary>The flyby shot in flight, or null.</summary>
         public HyperbolicShot LiveShot => _liveShot;
+
+        /// <summary>Batted orbiters still in flight.</summary>
+        public int BattedCount => BattedLive.Count;
 
         /// <inheritdoc/>
         public void Bind(HypatiaContext context) => _context = context;
@@ -205,13 +222,39 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
             }
             _liveShot = null;
 
+            RetireAllOrbiters(shatter: false);
+            Stopped?.Invoke();
+        }
+
+        /// <inheritdoc/>
+        public void ShatterOrbiters()
+        {
+            // No more from the volley in progress: it finishes on its next step.
+            if (_kind == ConicKind.Ellipse) _orbitersToSpawn = 0;
+            RetireAllOrbiters(shatter: true);
+        }
+
+        void RetireAllOrbiters(bool shatter)
+        {
             if (Registry != null)
             {
                 Registry.PruneDestroyed();
-                while (Registry.Count > 0) Retire(Registry.Oldest);
+                while (Registry.Count > 0)
+                {
+                    ConicOrbiter oldest = Registry.Oldest;
+                    if (shatter && oldest != null) OrbiterShattered?.Invoke(oldest);
+                    Retire(oldest);
+                }
             }
-
-            Stopped?.Invoke();
+            while (BattedLive.Count > 0)
+            {
+                int last = BattedLive.Count - 1;
+                ConicOrbiter batted = BattedLive[last];
+                BattedLive.RemoveAt(last);
+                if (batted == null) continue;
+                if (shatter) OrbiterShattered?.Invoke(batted);
+                Retire(batted);
+            }
         }
 
         void Update() => Tick(Time.deltaTime);
@@ -369,7 +412,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
             registry.PruneDestroyed();
             while (registry.Count >= Mathf.Max(1, cfg.MaxLiveOrbiters)) Retire(registry.Oldest);
 
-            float jitter = ((float)Rng.NextDouble() * 2f - 1f) * OrbiterEccentricityJitter;
+            float jitter = ((float)Rng.NextDouble() * 2f - 1f) * Mathf.Max(0f, cfg.OrbitEccentricityJitter);
             float e = Mathf.Clamp(_volleyEccentricity + jitter, cfg.EllipseEccentricityMin, cfg.EllipseEccentricityMax);
             OrbitShape shape = OrbitFit.Fit(e, cfg.OrbitPeriapsisMin, cfg.OrbitApoapsisMax, (float)Rng.NextDouble());
             float period = Mathf.Lerp(cfg.OrbitPeriodMin, cfg.OrbitPeriodMax, (float)Rng.NextDouble());
@@ -384,21 +427,57 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Conics
             orbiter.Launch(_context, orbit, plane, cfg.OrbiterLifetime, cfg.OrbiterRadius,
                            cfg.OrbiterDamage, cfg.OrbiterRehitDelay);
             orbiter.Expired += OnOrbiterExpired;
+            orbiter.Batted += OnOrbiterBatted;
+            orbiter.StruckBoss += OnOrbiterStruckBoss;
             registry.Register(orbiter);
             OrbiterSpawned?.Invoke(orbiter);
         }
 
         void OnOrbiterExpired(ConicOrbiter orbiter) => Retire(orbiter);
 
+        /// <summary>Off its orbit for good: out of the registry at once (the live cap,
+        /// the tether and the volley count only orbiting ones), but still owned here
+        /// until its flight ends.</summary>
+        void OnOrbiterBatted(ConicOrbiter orbiter, bool towardHer)
+        {
+            Registry.Unregister(orbiter);
+            if (!BattedLive.Contains(orbiter)) BattedLive.Add(orbiter);
+            OrbiterBatted?.Invoke(orbiter, towardHer);
+        }
+
+        /// <summary>
+        /// A batted ball reached her: damage her through her Health (so her
+        /// multiplier and the player's regain apply), then tell the brain, then
+        /// despawn. Damage first, so the hit that topples her is priced at the
+        /// multiplier in force when it lands, not the topple's own.
+        /// </summary>
+        void OnOrbiterStruckBoss(ConicOrbiter orbiter, Vector3 at)
+        {
+            HypatiaConfig cfg = _context != null ? _context.Config : null;
+            Health her = _context?.BossHealth;
+            if (cfg != null && her != null) her.Damage(cfg.BattedOrbiterDamage, at, recoverable: true);
+            // Her death inside Damage runs StopAll, which has already retired this one.
+            if (!BattedLive.Remove(orbiter)) return;
+            // Out of the batted list first: the topple this raises shatters every
+            // OTHER orbiter, and must not count this one as shattered.
+            OrbiterStruckBoss?.Invoke(at);
+            Retire(orbiter);
+        }
+
         void Retire(ConicOrbiter orbiter)
         {
             if (orbiter == null)
             {
                 Registry.PruneDestroyed();
+                for (int i = BattedLive.Count - 1; i >= 0; i--)
+                    if (BattedLive[i] == null) BattedLive.RemoveAt(i);
                 return;
             }
             orbiter.Expired -= OnOrbiterExpired;
+            orbiter.Batted -= OnOrbiterBatted;
+            orbiter.StruckBoss -= OnOrbiterStruckBoss;
             Registry.Unregister(orbiter);
+            BattedLive.Remove(orbiter);
             orbiter.Retire();
             OrbiterRetired?.Invoke(orbiter);
             ConicObjects.Despawn(orbiter);

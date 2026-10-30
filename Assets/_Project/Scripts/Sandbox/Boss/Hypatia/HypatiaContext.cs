@@ -16,10 +16,16 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         readonly Func<float> _bossTimeScale;
 
         /// <param name="bossTimeScale">Her slow multiplier (0-1), read live; null = 1.</param>
+        /// <param name="bossHealth">Her Health: a batted orbiter damages her through it,
+        /// so her damage filter and the player's regain credit apply. Null = batted
+        /// orbiters deal no damage.</param>
+        /// <param name="bossHurtbox">Her body's capsule (it hovers and sinks with her):
+        /// what a batted orbiter homes on and strikes. Null = a default capsule on her root.</param>
         public HypatiaContext(HypatiaConfig config, Transform boss, Transform arenaCentre,
                               Transform player, Health playerHealth,
                               CharacterController playerController,
-                              Func<float> bossTimeScale)
+                              Func<float> bossTimeScale,
+                              Health bossHealth = null, CapsuleCollider bossHurtbox = null)
         {
             Config = config;
             Boss = boss;
@@ -28,8 +34,16 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             PlayerHealth = playerHealth;
             PlayerController = playerController;
             _bossTimeScale = bossTimeScale;
+            BossHealth = bossHealth;
+            BossHurtbox = bossHurtbox;
             PlayerVelocity = new VelocityTracker();
         }
+
+        /// <summary>Her Health; may be null (tests, a half-wired scene).</summary>
+        public Health BossHealth { get; }
+
+        /// <summary>Her body's capsule; may be null (a default capsule is used).</summary>
+        public CapsuleCollider BossHurtbox { get; }
 
         public HypatiaConfig Config { get; }
 
@@ -103,5 +117,45 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             top = basePos + Vector3.up * (centreY + half);
             return true;
         }
+
+        /// <summary>Default body when no hurtbox is wired: a 1.7 m capsule standing on
+        /// her root (her height, Setup Hypatia Fight's capsule radius).</summary>
+        const float DefaultBossHeight = 1.7f, DefaultBossRadius = 0.34f;
+
+        /// <summary>
+        /// Her body capsule's axis (sphere centres) and radius in world space, read
+        /// from the hurtbox transform every call, so it follows her hover, the drop
+        /// into the recalibration window and the topple. Assumes the capsule's Y
+        /// axis (Setup's) and a unit scale. False when there is no boss at all.
+        /// </summary>
+        public bool TryGetBossCapsule(out Vector3 bottom, out Vector3 top, out float radius)
+        {
+            if (BossHurtbox != null)
+            {
+                Transform t = BossHurtbox.transform;
+                radius = BossHurtbox.radius;
+                float half = Mathf.Max(0f, BossHurtbox.height * 0.5f - radius);
+                Vector3 centre = t.TransformPoint(BossHurtbox.center);
+                bottom = centre - t.up * half;
+                top = centre + t.up * half;
+                return true;
+            }
+            if (Boss == null)
+            {
+                bottom = top = Vector3.zero;
+                radius = 0f;
+                return false;
+            }
+            radius = DefaultBossRadius;
+            Vector3 feet = Boss.position;
+            bottom = feet + Vector3.up * radius;
+            top = feet + Vector3.up * (DefaultBossHeight - radius);
+            return true;
+        }
+
+        /// <summary>The middle of her body capsule (what a batted orbiter steers to);
+        /// the arena centre when there is no boss.</summary>
+        public Vector3 BossCentre =>
+            TryGetBossCapsule(out Vector3 bottom, out Vector3 top, out _) ? (bottom + top) * 0.5f : Centre;
     }
 }
