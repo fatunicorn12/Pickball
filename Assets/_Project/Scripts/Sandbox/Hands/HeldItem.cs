@@ -24,11 +24,36 @@ namespace Pickleball.Sandbox.Hands
                  "weapon setup, which measures the handle from the mesh.")]
         [SerializeField] private Transform gripAnchor;
 
+        [Tooltip("Where the cutting part starts, near the hand. Optional: only " +
+                 "weapons need it. Whoever equips the item moves the hand's " +
+                 "BladeBase marker here, so hit sweeps, the trail and weapon " +
+                 "clearance follow whichever weapon is held.")]
+        [SerializeField] private Transform bladeBase;
+
+        [Tooltip("The far end of the cutting part. Optional, paired with Blade Base.")]
+        [SerializeField] private Transform bladeTip;
+
         /// <summary>The grip anchor, or this transform when none is set.</summary>
         public Transform GripAnchor => gripAnchor != null ? gripAnchor : transform;
 
+        /// <summary>The item's own blade-start marker, or null for a non-weapon.</summary>
+        public Transform BladeBase => bladeBase;
+
+        /// <summary>The item's own blade-end marker, or null for a non-weapon.</summary>
+        public Transform BladeTip => bladeTip;
+
+        /// <summary>True when both blade markers are set, so the item can be swung.</summary>
+        public bool HasBlade => bladeBase != null && bladeTip != null;
+
         /// <summary>Points the item at a new grip anchor. For setup scripts.</summary>
         public void SetGripAnchor(Transform anchor) => gripAnchor = anchor;
+
+        /// <summary>Points the item at its blade markers. For setup scripts.</summary>
+        public void SetBladeMarkers(Transform baseMarker, Transform tipMarker)
+        {
+            bladeBase = baseMarker;
+            bladeTip = tipMarker;
+        }
 
         /// <summary>
         /// The anchor's pose relative to this item's root, in the form
