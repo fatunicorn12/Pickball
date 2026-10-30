@@ -22,7 +22,7 @@ All menus are under **Tools ▸ Pickleball**. The verb tells you what a menu tou
 
 | Verb | Meaning | Examples |
 |---|---|---|
-| **Setup** | Wires components into the **open** scene. Usually marks it dirty and never saves. | Setup Weapon, Setup Sword Abilities, Setup Lock-On, Setup Newton Fight, Spacetime ▸ Add To Sandbox |
+| **Setup** | Wires components into the **open** scene. Usually marks it dirty and never saves. | Setup Weapon, Setup Sword Abilities, Setup Lock-On, Setup Newton Fight, Setup Inventory, Spacetime ▸ Add To Sandbox |
 | **Rebuild** | Rewrites an asset in place and keeps its GUID. | Rebuild Chibi Animator, Rebuild Newton Animator, Setup Full-Body Swings (it only touches `ChibiLocomotion.controller`'s AttackBody layer and the flagged clips' import, never a scene or prefab) |
 | **Build / Create** | Makes a new scene and **saves** it. | Setup Chibi Sandbox (despite its name), Build Training Stage, Spacetime ▸ Create Spacetime Lab Scene, Create Assets |
 | **Bake / Clean / Organize** | One-off asset processing. | Bake Swing Twist, Clean World, Organize Project (moves and **deletes** assets) |
@@ -46,11 +46,19 @@ scripts:
    scene.
    - **Setup Birdy NPC** right after it, with ChibiSandbox open (places Birdy under `AcademyNpcs`, which Build Training Stage strips; works before Setup Dialogue too), then save.
    - **Setup Birdy UAL Trial** only to re-make Birdy's death clip (`Animation/Birdy/Death.anim`, copied from the Quaternius UAL FBX) or the all-UAL trial controller. Both are committed, so normally skip it. If it does run, run **Setup Birdy NPC** after it.
-9. **Build Training Stage**. It copies ChibiSandbox.
-10. **Spacetime ▸ Create Spacetime Lab Scene**
-11. **Build Academy Greybox**. It copies ChibiSandbox too, and keeps Birdy (see
+9. **Setup Inventory**. Setup Chibi Sandbox already runs it as its last step, so run it by hand
+   only after a menu that changes what it points at: **Setup Weapon** (rebuilds `WeaponSocket`,
+   `BladeBase`, `BladeTip` and `WeaponVisual`), **Setup Magic** (new spell assets get `Magic_*`
+   entries; the Magic tab itself finds the selector at runtime), and whenever `Held_Compass`,
+   `Held_Ruler`, `Moveset_Ruler` or `RulerWeaponClearance` land (it fills blank weapon references by
+   path). It must come after Setup Chibi Sandbox, which wipes it like every later menu, and before
+   Build Training Stage. Save the scene afterwards. Details: `Docs/Systems/Inventory.md`.
+10. **Build Training Stage**. It copies ChibiSandbox, then runs `InventorySetup.AttachToPlayer` on the
+    copied player.
+11. **Spacetime ▸ Create Spacetime Lab Scene**
+12. **Build Academy Greybox**. It copies ChibiSandbox too, and keeps Birdy (see
     `Docs/World/TheAcademy.md` §8).
-12. **Setup Hypatia Fight**. Needs nothing else; it generates its own scene,
+13. **Setup Hypatia Fight**. Needs nothing else; it generates its own scene,
     `HypatiaFight.unity`, as a copy of ChibiSandbox, so re-run it after ChibiSandbox changes
     (it rebuilds only when its inputs changed; see `Docs/Systems/HypatiaBoss.md`).
 
@@ -61,6 +69,8 @@ Setup Chibi Sandbox already runs the player-level setups as part of its build:
   `WireAttackStatesFromAssets` also runs `FullBodySwingSetup.Wire`, so every Attack-layer rebuild
   (Setup Weapon, Setup Sword Abilities, Rebuild Chibi Animator) keeps the AttackBody layer.
 - `ClothSetup.Apply`
+- `InventorySetup.AttachToPlayer`, last, after the prefab is saved, so its components are scene
+  overrides and `Chibi.prefab` doesn't change.
 
 Each of those menus can also be run on its own against the open scene.
 
@@ -107,14 +117,16 @@ Three are in use:
 - **Setup World Look writes a GPU-captured panorama** to a tracked LFS PNG on every run. That is
   non-deterministic, and it can't run with `-nographics`.
 - **`Chibi.prefab` lags the scene.** `SwordAbilities`, `WeaponClearance`, `LockOnTargeting` and
-  `Health` exist only as ChibiSandbox overrides. Scenes that instantiate the prefab, such as
+  `Health` exist only as ChibiSandbox overrides, and so do the inventory's four components
+  (`Inventory`, `WeaponEquipper`, `InventoryInput`, `InventoryMenu`). Scenes that instantiate the prefab, such as
   SpacetimeLab, don't get them.
 - **The `GetComponent<T>() ?? AddComponent<T>()` pattern** (still in `ChibiSandboxSetup` and
   `NewtonBossSetup`) is unsafe on Unity's "fake null" objects, and `WeaponClearanceSetup` warns
   against it. Use `TryGetComponent` or an explicit `if (c == null)`, as `WeaponSetup` and
   `SwingTwistSetup` now do.
 - **Lookups are by GameObject name** (`GameObject.Find("Chibi")`, "NewtonBoss", "AcademyWorld",
-  "FightHUD"), mixed with lookups by type. Renaming a scene object breaks the menus.
+  "FightHUD"; Setup Inventory finds "BladeBase", "BladeTip" and "WeaponVisual" under the `HandGrip`,
+  and its own "InventoryHUD" and "StowedWeapons"), mixed with lookups by type. Renaming a scene object breaks the menus.
 - **Several menus have no Play-mode guard:** Chibi Sandbox, World Look, Clean World, Lock-On,
   Weapon, Cloth and Newton.
 
