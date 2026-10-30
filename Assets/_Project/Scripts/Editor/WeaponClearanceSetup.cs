@@ -22,6 +22,33 @@ public static class WeaponClearanceSetup
     const string ProfileDir = "Assets/_Project/ScriptableObjects/Weapon";
     const string ProfilePath = ProfileDir + "/ChibiWeaponClearance.asset";
 
+    /// <summary>The ruler sword's profile (see <see cref="LoadOrCreateRulerProfile"/>).</summary>
+    public const string RulerProfilePath = ProfileDir + "/RulerWeaponClearance.asset";
+
+    /// <summary>The ruler's blade is 22 cm wide and 7 cm thick, with a 23 cm
+    /// guard disc. Seen edge-on from the head it is thin, but a swing turns its
+    /// flat to the head too, so the radius covers most of the half-width
+    /// rather than the half-thickness the compass needs.</summary>
+    const float RulerBladeRadius = 0.08f;
+    const float RulerMargin = 0.05f;
+    /// <summary>More of the push on the shoulder: a heavy blade is carried by
+    /// the arm, and a wrist bent far under it looks broken.</summary>
+    const float RulerShoulderShare = 0.6f;
+
+    /// <summary>
+    /// Torso spheres, for the ruler only: its wide blade comes across the body
+    /// in the backhand sweeps (Attack2's middle runs the blade through the
+    /// waist; the compass does the same, but thin, it barely shows). Centres in
+    /// each bone's space, m; radii sized to the chibi's torso under the cloak
+    /// (shoulder joints 0.27 m apart), not the cloak's flare, so the arm isn't
+    /// pushed for cloth.
+    /// </summary>
+    static readonly WeaponClearanceProfile.Volume[] RulerTorso =
+    {
+        new() { bone = HumanBodyBones.UpperChest, centre = new Vector3(0f, 0.02f, 0f), radius = 0.15f },
+        new() { bone = HumanBodyBones.Hips, centre = new Vector3(0f, 0.08f, 0f), radius = 0.16f },
+    };
+
     /// <summary>
     /// Share of the head's vertices the fitted sphere must contain. What reads
     /// as "through the head" is the blade threading the hair spikes, so the
@@ -98,6 +125,46 @@ public static class WeaponClearanceSetup
             EditorSceneManager.MarkSceneDirty(socket.gameObject.scene);
         Debug.Log($"Weapon clearance on {socket.parent.name}/{socket.name}, profile {ProfilePath}.");
         return true;
+    }
+
+    /// <summary>
+    /// The ruler sword's clearance profile, created when missing from the
+    /// chibi's (same head sphere, same arm settings) with a blade radius for a
+    /// 22 cm-wide blade and two torso spheres. Like the chibi's, it belongs to
+    /// whoever tunes it once it exists. A <see cref="Pickleball.Sandbox.Inventory.WeaponDefinition"/>
+    /// hands it to <see cref="WeaponClearance.SetProfile"/> on equip.
+    /// </summary>
+    /// <returns>Null if the chibi's profile doesn't exist yet (run Setup
+    /// Weapon Clearance first).</returns>
+    public static WeaponClearanceProfile LoadOrCreateRulerProfile()
+    {
+        var ruler = AssetDatabase.LoadAssetAtPath<WeaponClearanceProfile>(RulerProfilePath);
+        if (ruler != null) return ruler;
+        var chibi = AssetDatabase.LoadAssetAtPath<WeaponClearanceProfile>(ProfilePath);
+        if (chibi == null)
+        {
+            Debug.LogError($"No {ProfilePath} to base the ruler's clearance on: run Tools ▸ Pickleball ▸ " +
+                           "Setup Weapon Clearance first.");
+            return null;
+        }
+
+        ruler = Object.Instantiate(chibi);
+        var volumes = new List<WeaponClearanceProfile.Volume>(chibi.Volumes);
+        foreach (var torso in RulerTorso)
+            if (volumes.TrueForAll(v => v.bone != torso.bone))
+                volumes.Add(torso);
+        ruler.SetVolumes(volumes);
+        var so = new SerializedObject(ruler);
+        so.FindProperty("bladeRadius").floatValue = RulerBladeRadius;
+        so.FindProperty("margin").floatValue = RulerMargin;
+        so.FindProperty("shoulderShare").floatValue = RulerShoulderShare;
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        Directory.CreateDirectory(ProfileDir);
+        AssetDatabase.CreateAsset(ruler, RulerProfilePath);
+        Debug.Log($"Created {RulerProfilePath} from {ProfilePath}: blade radius {RulerBladeRadius} m, " +
+                  $"margin {RulerMargin} m, {volumes.Count} volumes.");
+        return ruler;
     }
 
     static Transform FindSocket(Animator animator, HumanBodyBones hand)
