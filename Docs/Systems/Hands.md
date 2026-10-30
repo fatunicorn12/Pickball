@@ -5,8 +5,10 @@ it, and how the fingers close round it.
 
 Code: `Assets/_Project/Scripts/Sandbox/Hands/` (`HandGrip`, `HeldItem`, `FingerCurl`,
 `HandGripProfile`, and the pure maths in `GripFrameSolver`, `GripSeat`, `FingerCurlMath`,
-`GripFrame`, `HandAxes`). Setup: `Editor/HandGripSetup.cs`, called from `Editor/WeaponSetup.cs`.
-Tests: `Tests/EditMode/Hands/`.
+`BladeEdge`, `GripFrame`, `HandAxes`). Setup: `Editor/HandGripSetup.cs`, called from
+`Editor/WeaponSetup.cs`; `Editor/HeldWeaponBuilder.cs` measures weapons and builds the held-weapon
+prefabs (`Prefabs/Weapons/Held_Compass.prefab`, `Held_Ruler.prefab`). Tests: `Tests/EditMode/Hands/`,
+plus `Tests/EditMode/Weapon/HeldWeaponPrefabTests.cs` for the shipped prefabs.
 
 ## 1. Purpose and feel
 
@@ -46,11 +48,16 @@ hand's volume, and the hand mesh itself encloses the handle.
 ```
 Editor time (Setup Weapon / Setup Weapon Grip)
   HandGripSetup.TrySolve   bind-pose skin + bones ──▶ GripFrameSolver ──▶ WeaponSocket local pose
-  WeaponSetup.PrepareHeldItem  compass mesh ──▶ GripSeat.HandleLength ──▶ GripAnchor on the compass
+  HeldWeaponBuilder.PrepareInPlace  compass mesh ──▶ GripSeat.HandleLength ──▶ GripAnchor on the compass
   HandGrip.Hold(compass)   seats the GripAnchor on the WeaponSocket; BladeBase/BladeTip follow
+
+Editor time (Tools ▸ Pickleball ▸ Build Held Weapons)
+  HeldWeaponBuilder  model ──▶ Measure (handle, axis, edge, grip radius) ──▶ Prefabs/Weapons/Held_*.prefab
 
 Runtime
   HandGrip      OnEnable: re-seats the held item. Hold / Release raise HoldChanged.
+                Seating offsets a fat handle (HeldItem.gripRadius); MatchBladeMarkers
+                moves the hand's BladeBase/BladeTip onto the held item's.
   LateUpdate -75  FingerCurl  (rigs with finger bones only) reads HandGrip.IsHolding,
                                poses the finger bones from rest + curl, blends by weight
 ```
@@ -121,7 +128,8 @@ head fit).
 parents the item to the grab point and sets its local pose so the anchor coincides with the
 grab point (`GripSeat.ItemPose`). Scale is never touched.
 
-For the compass, `WeaponSetup.PrepareHeldItem` builds the anchor from the mesh:
+For the compass, `HeldWeaponBuilder.PrepareInPlace` (called by Setup Weapon and Setup Weapon
+Grip) builds the anchor from the mesh, with the `HeldWeaponBuilder.Compass` spec:
 
 - the long axis and the held end (`GripFarEnd`), as before;
 - **the handle** (`GripSeat.HandleLength`): the mesh is cut into slices of 2% of its length
@@ -130,6 +138,75 @@ For the compass, `WeaponSetup.PrepareHeldItem` builds the anchor from the mesh:
   0.068 m in from the end;
 - **the roll:** the wider of the two girth axes is the edge (+Z). On the compass that is the
   plane its legs splay in, the same roll as before.
+
+### Held-weapon prefabs (`HeldWeaponBuilder`)
+
+A held-weapon prefab's root is the grip frame itself, so a seated weapon sits at identity on the
+grab point and its markers have the local poses the hand's own markers always had:
+
+```
+Held_Ruler      HeldItem (grip anchor, blade markers, grip radius)
+  Model         the FBX, scaled to length and posed so its measured handle is at the origin
+  GripAnchor    identity: the centre of the fist
+  BladeBase     identity: where WeaponClearance pivots and the hit sweep starts (as before)
+  BladeTip      (0, length past the fist, 0): the far end, on the handle's axis
+```
+
+The builder measures everything from the model (`Measure`), per weapon spec:
+
+| | Compass | Ruler sword |
+|---|---|---|
+| Length | 0.85 m (×0.8517) | **1.05 m** (×1.0679) |
+| Held end | model's high end (knob) | model's low end (pommel) |
+| Handle (measured) | 0.136 m | 0.189 m (pommel to guard) |
+| Fist centre | middle of the handle, 0.068 m in | 0.045 m below the guard (0.144 m in) |
+| Axis | bounds centre line | the handle's own axis (5 mm off the bounds centre) |
+| Edge (+Z) | +wide axis, as always | steel side, found from the texture |
+| Grip radius | 0 (the hand's 0.015) | 0.0196 m, measured round the fist |
+| Blade tip past the fist | 0.782 m | 0.906 m |
+
+`Held_Compass` reproduces the compass exactly: seated in place of `WeaponVisual`, the model's
+world matrix differs by 1e-6 and the markers by 1.4e-6 m (checked in ChibiSandbox).
+
+**Why 1.05 m for the ruler.** About 1.25 times the compass and three fifths of the chibi's 1.7 m:
+with a 22 cm-wide blade it reads as a buster sword next to the compass. The Mixamo swings were
+authored round a blade of about 0.8 m. At 1.05 m their follow-throughs already bring the tip to the
+ground (Attack1 and Attack2 end at 0-2 cm) and the wind-ups past the hair, so a longer blade would
+bury the tip and need much more clearance. The extra weight is shown by width, not length.
+
+**Edge orientation (`BladeEdge`).** The wider girth axis gives the blade's plane but not which side
+is sharp. The ruler's steel edge is grey where the rest is painted yellow, so the builder samples
+the texture at the blade's vertices (past the guard, short of the tip) and compares the mean
+"steeliness" (1 − saturation, ignoring the black tick marks) of the outer 15% on each side. On the
+ruler: 0.05 on one side, 0.55 on the other. If the two sides can't be told apart, it logs a warning
+and falls back to +wide. `HeldWeaponPrefabTests` checks the result against the texture itself.
+
+**The ruler's handle.** The Tripo model's wrapped handle is 5.4 cm across, a 2.9 cm radius at game
+scale: twice what the chibi's short fingers can wrap. Two fixes, together:
+
+1. The FBX in the repo has its handle slimmed in Blender
+   (`Art/Props/ruler-sword/Source~/slim_ruler_handle.py`; Unity ignores folders ending in `~`).
+   Every vertex below the guard disc is scaled toward the handle's axis: ×0.66 for the grip and
+   ferrule, ×0.74 for the pommel so it stays a knob. Guard and blade are untouched; UVs and
+   topology are unchanged.
+2. The rest of the difference is handled by a per-item grip radius (below), so the fist closes on
+   the handle's real size: 1.96 cm, against the 1.5 cm the grab point was solved for.
+
+### Handles fatter than the solved one (`HeldItem.gripRadius`)
+
+The grab point is solved once per hand, for `HandGripProfile.gripRadius`. A held item may say its
+handle is another size:
+
+- **Seating** (`GripSeat.HandleOffset`): the handle's centre moves out of the palm (−X on a right
+  hand, +X on a left one) and back from the knuckles (−Z) by the difference in radius. Its surface
+  then touches the palm and the curled first finger segments exactly where the solved handle's did.
+  `HandGrip` needs the profile and the hand for this; `HandGripSetup.Attach` sets both.
+- **Curl** (`FingerCurlMath.CurlScale`): a finger wrapped round a handle follows a circle of the
+  handle's radius plus half the finger's thickness, so each bend scales by
+  `(solved + t) / (held + t)`, clamped to 0.5-1.5. The ruler gets 0.83 of the profile's curl.
+
+0 means "the size the hand was solved for", so the compass and anything built before this are
+unchanged.
 
 ### How the fingers close (`FingerCurl`)
 
@@ -156,6 +233,8 @@ The thumb is different, because rigs disagree on where it points at rest:
   normal, toward the little finger's knuckle, by the profile's `thumbSwing`. That lays it across
   the curled fingers, under the handle, instead of hanging beside the index finger.
 - The thumb's direction comes from the avatar's rest positions (first joint to second).
+
+The bend angles (not the thumb's swing) are scaled for the held handle's size (see above).
 
 It runs at `DefaultExecutionOrder(-75)`, after SwingTwist (-100) and before WeaponClearance (-50).
 It only turns finger bones, which neither reads, and the grab point hangs off the hand bone,
@@ -220,8 +299,15 @@ when it's missing and never overwrites it.
 - **Without Unity:** `chibi_add_fingers.py --preview DIR` renders both hands closed round a
   handle with the same maths and any `--curl`, `--thumb-curl`, `--thumb-swing`, as a contact
   sheet per hand. That is how the values above were found.
+- **`fingerHalfThickness`** (m, default 0.009): only sets how much the curl changes with a held
+  handle's radius. Larger makes it change less.
 - **`curlWeight`** (0-1): how fully the fist replaces the clips' finger poses.
 - **`closeRate`** (1/s): how fast the fist closes on a grab.
+
+**A held weapon** (the `HeldWeaponBuilder.Compass` / `.Ruler` specs): `Length`, `GripBelowGuard`
+(where the fist sits under the guard), `Edge`, `CentreOnHandle`, `MeasureGripRadius`. Run **Tools ▸
+Pickleball ▸ Build Held Weapons** after a change; it updates the prefabs in place. To try a grip
+radius by hand, set `HeldItem.gripRadius` on the instance and use **HandGrip ▸ ⋮ ▸ Re-seat Held Item**.
 
 To nudge the compass in the hand, move its `GripAnchor` (Scene view), then use **HandGrip ▸ ⋮ ▸
 Re-seat Held Item**. A re-run of Setup Weapon or Setup Weapon Grip re-measures and overwrites
@@ -238,6 +324,33 @@ the anchor.
 
 `FingerCurl` closes the hand by itself. The blade markers (`BladeBase` / `BladeTip`) are the
 sword's, not the hand's: a prop that needs them must bring its own.
+
+**Add a weapon:**
+
+1. Put the model under `Art/Props/<name>/` with a URP Lit material. Keep its handle under about
+   2 cm radius at game scale (slim it like the ruler's if needed).
+2. Add a `HeldWeaponBuilder.Spec` (length, held end, edge rule, grip position) and a `BuildPrefab`
+   call in `BuildAll`, then run **Build Held Weapons**. Read its log line: length, handle, fist
+   position, edge side and grip radius.
+3. Check it in the hand and give it a `WeaponDefinition` (Inventory) with the prefab, its moveset,
+   hit radius and clearance profile.
+
+**Swap weapons at runtime.** This is what an equipper does. The socket is never re-solved: the grab
+point belongs to the hand, and per-item differences are applied when seating.
+
+1. `var old = grip.Held; grip.Release(grip.transform); old.gameObject.SetActive(false);` (or destroy
+   it). Releasing to the socket keeps it parented and posed, and `HandGrip` ignores an inactive child
+   when it adopts one on enable. Don't just `Hold` the new item over the old one: the implicit
+   `Release()` drops the old one at the scene root at its world pose.
+2. `var item = Instantiate(def.HeldPrefab, grip.transform); grip.Hold(item);`
+3. `grip.MatchBladeMarkers(bladeBase, bladeTip)` with the hand's markers (children of
+   `WeaponSocket`): moves them onto the item's, so `MeleeCombat`, `BladeTrail` and `WeaponClearance`
+   follow without rewiring.
+4. `weaponClearance.SetProfile(def.ClearanceProfile)`, and the hit radius from `def.BladeRadius`.
+
+The `WeaponVisual` compass in `Chibi.prefab` can stay as the default weapon (stow it as in step 1 on
+the first swap, `Hold` it again to switch back), or be replaced by a `Held_Compass` instance, which
+seats identically.
 
 **Another character:**
 
@@ -280,7 +393,23 @@ joints and the preview before trusting it. The bone names are the ones `FingerBo
   from the knuckles.
 - **The handle measurement is a heuristic:**
   - A weapon that never widens near its held end is gripped at the end.
-  - A heavy pommel counts as handle, which moves the grip toward the pommel.
+  - A heavy pommel counts as handle, which moves the grip toward the pommel. `GripBelowGuard`
+    works round it for a long handle (the ruler).
+- **Edge from colour** only works for a blade whose edge is a different colour from its flat. A
+  plain steel sword needs an explicit `WideAxisPositive` / `WideAxisNegative` rule.
+- **The ruler with the compass's clips** (until it has its own moveset), checked in ChibiSandbox by
+  sampling Attack1-4 and AirAttack at 20, 40, 55 and 75%:
+  - The fist stays closed round the handle, the guard just above it and the blade out of the thumb
+    side, in every sample.
+  - The steel edge leads in the fast part of Attack1-4 (0.7-0.97 along the blade's motion), but
+    AirAttack's main cut at 55% leads with the tick edge (−0.9). The compass's clip does the same;
+    a clip authored for the ruler should roll the wrist.
+  - Attack2's backhand runs the blade behind the waist, through the cloak. It does the same with
+    the compass, which is thin enough not to show. The ruler's torso spheres (WeaponClearance.md)
+    don't fire there, because the blade clears the body, just not the cloak.
+  - Attack1's and Attack2's follow-throughs bring the tip down to the ground.
+- **The ruler FBX is modified** (slimmed handle). Re-importing Tripo's original means re-running
+  `Source~/slim_ruler_handle.py` on it first.
 - **Baked, not live:** the grab point's tilt and grip radius need Setup Weapon Grip after a
   change.
 - **The grab point is named `WeaponSocket`** for the two name lookups above. A neutral name

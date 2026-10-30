@@ -71,10 +71,45 @@ physics step the sweep would test the raw clip instead.
 - **`WeaponClearanceProfile`** (ScriptableObject,
   `ScriptableObjects/Weapon/ChibiWeaponClearance.asset`): the spheres to avoid, the blade's
   half-thickness and margin, the shoulder/wrist split, the per-frame cap and the pass count.
+  A weapon can bring its own: `ScriptableObjects/Weapon/RulerWeaponClearance.asset` for the ruler
+  sword. A `WeaponDefinition` names it and the equipper calls `WeaponClearance.SetProfile` on swap.
 
 Wiring: `WeaponSetup.AttachToPlayer` rebuilds the socket and then calls
 `WeaponClearanceSetup.Attach`. You can also run it alone with
 **Tools ▸ Pickleball ▸ Setup Weapon Clearance**.
+
+### Per-weapon profiles
+
+| | Compass (`ChibiWeaponClearance`) | Ruler sword (`RulerWeaponClearance`) |
+|---|---|---|
+| Blade | 0.85 m, legs about 4 cm across | 1.05 m, 22 cm wide, 7 cm thick, 23 cm guard disc |
+| Volumes | head | head (same sphere), upper chest r 0.15, hips r 0.16 |
+| `bladeRadius` | 0.02 | **0.08** |
+| `margin` | 0.06 | **0.05** |
+| `shoulderShare` | 0.5 | **0.6** |
+
+- **Blade radius 0.08:** edge-on the ruler is thin, but the swings turn its flat to the head too.
+  0.08 covers most of its 0.11 m half-width without pushing the arm through the whole wind-up of
+  every swing. The full half-width would mean +3 cm of push on every head pass.
+- **Shoulder share 0.6:** a heavy blade is carried by the arm; a wrist bent far under it reads as
+  broken.
+- **Torso spheres:** the wide blade comes round the body in the backhand swings. Sized to the torso
+  under the cloak (shoulder joints 0.27 m apart), not to the cloak's flare, so the arm isn't pushed
+  for cloth. With the current clips they never needed to act (largest torso correction 2°).
+
+`WeaponClearanceSetup.LoadOrCreateRulerProfile` (run by **Tools ▸ Pickleball ▸ Build Held Weapons**)
+creates it from the chibi's profile when missing and never overwrites it.
+
+Measured with the ruler on the current (compass) clips, 4 samples each of Attack1-4 and AirAttack
+(gap = blade centre line to the head sphere's surface):
+
+| | Off: worst head gap | On: worst head gap, largest correction |
+|---|---|---|
+| Attack1 | −5 cm (40%) | +14 cm, 29° |
+| Attack3 | −13 cm (20%) | +4 cm, 54° (hand in the hair, see below) |
+| Attack4 | −14 cm (20%) | +13 cm, 34° |
+| AirAttack | −17 cm (55%) | +9 cm, 60° |
+| Attack2 | −4 cm (20%) | −4 cm: the hand itself is in the hair (the compass too) |
 
 ## 3. How to tune
 
@@ -96,8 +131,10 @@ Shipped values: head sphere centre (−0.008, 0.262, 0.028) in head space, radiu
 
 - **Keep the blade out of another body part:** add a volume (bone + local centre + radius).
   To fit a radius, select the bone in Play mode and size the sphere gizmo to the silhouette.
-- **New weapon:** nothing to do as long as it has `BladeBase` / `BladeTip` children on the
-  socket.
+- **New weapon:** the socket's `BladeBase` / `BladeTip` must follow it: after `HandGrip.Hold`, call
+  `HandGrip.MatchBladeMarkers` with them (see Hands.md, "Swap weapons at runtime"). A blade much
+  wider or longer than the compass also wants its own profile: copy the ruler's, set `bladeRadius`
+  to most of the blade's half-width, and name it on the weapon's `WeaponDefinition`.
 - **Refit the chibi after a mesh change:** delete
   `ScriptableObjects/Weapon/ChibiWeaponClearance.asset` and run Setup Weapon Clearance. The
   setup fits the head sphere only when that asset doesn't exist.
@@ -125,5 +162,7 @@ Shipped values: head sphere centre (−0.008, 0.262, 0.028) in head space, radiu
   can't clear the blade. The push stays finite and capped, so those frames improve but may still
   overlap by up to 2 cm. A fix would be a shoulder-only step that moves the hand out radially
   before the blade is turned.
-- Correcting the arm can, in principle, push the blade into the torso or cloak. No volume
-  guards the body yet, because the measured clips didn't need one.
+- Correcting the arm can, in principle, push the blade into the torso or cloak. Only the ruler's
+  profile guards the torso. The cloak isn't covered: Attack2's backhand runs a blade through it
+  behind the waist with either weapon.
+- The blade's own guard (the ruler's 23 cm disc) is covered only by `bladeRadius`.

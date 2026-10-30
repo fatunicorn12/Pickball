@@ -136,6 +136,9 @@ namespace Pickleball.Sandbox
 
         public SwordMoveset Moveset => moveset;
 
+        /// <summary>Radius of the hit capsule swept along the blade (m).</summary>
+        public float BladeRadius => bladeRadius;
+
         // Room for level geometry as well as targets: the overlap queries run on
         // the hittable mask, and a 3 m ring on a busy map can return a dozen
         // floor and wall colliders. With 16 slots those could crowd the actual
@@ -243,6 +246,34 @@ namespace Pickleball.Sandbox
             if (!isActiveAndEnabled) return;
             if (IsAttacking) _queued = true;
             else _startBufferedUntil = Time.time + pressBufferSeconds;
+        }
+
+        /// <summary>
+        /// Switches weapon: swings <paramref name="newMoveset"/> from now on and
+        /// sweeps a capsule of <paramref name="newBladeRadius"/> metres. Called by
+        /// the WeaponEquipper, which waits until no swing or hitstop is running;
+        /// if one is anyway, the chain is finished first (ChainEnded is raised),
+        /// so a step of the old combo never plays on with the new blade.
+        ///
+        /// Combo progress starts afresh: both chain counters, the chain grace,
+        /// and any buffered or queued press are dropped, because a count earned
+        /// with one weapon means nothing in the other's chain. Rings already in
+        /// flight keep expanding; they belong to the swing that released them.
+        /// The blade markers are not touched here: the equipper moves them.
+        /// A null moveset keeps the current one.
+        /// </summary>
+        public void Equip(SwordMoveset newMoveset, float newBladeRadius)
+        {
+            if (IsAttacking) FinishChain();
+            if (newMoveset != null) moveset = newMoveset;
+            bladeRadius = Mathf.Max(0.01f, newBladeRadius);
+
+            _progress?.Reset();
+            _grace?.Cancel();
+            _sweep?.Reset();
+            _alreadyHit?.Clear();
+            _queued = false;
+            _startBufferedUntil = -1f;
         }
 
         /// <summary>The whole chain the next fresh press on <paramref name="track"/>

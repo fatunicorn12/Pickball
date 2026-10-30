@@ -29,6 +29,17 @@ namespace Pickleball.Sandbox.Hands
                  "already parented here is adopted.")]
         [SerializeField] private HeldItem held;
 
+        [Tooltip("The profile this grab point was solved with. Its grip radius is " +
+                 "the handle size the fist closes on here; an item with a fatter " +
+                 "handle (HeldItem.gripRadius) is seated out of the palm by the " +
+                 "difference. Empty assumes the default 0.015 m. Set by the setup.")]
+        [SerializeField] private HandGripProfile profile;
+
+        [Tooltip("Which hand this grab point is on. The palm is on opposite sides " +
+                 "of the grab point's frame on the two hands, so a fat handle moves " +
+                 "the other way on a left hand. Set by the setup.")]
+        [SerializeField] private bool rightHand = true;
+
         /// <summary>The item in the hand, or null.</summary>
         public HeldItem Held => held;
 
@@ -44,10 +55,12 @@ namespace Pickleball.Sandbox.Hands
             if (held == null)
             {
                 // Explicit loop rather than GetComponentInChildren: only an item
-                // parented straight onto the grab point counts as held.
+                // parented straight onto the grab point counts as held. An
+                // inactive one is a weapon stowed there by a swap, not in hand.
                 for (int i = 0; i < transform.childCount; i++)
                 {
-                    if (transform.GetChild(i).TryGetComponent(out HeldItem child))
+                    var c = transform.GetChild(i);
+                    if (c.gameObject.activeSelf && c.TryGetComponent(out HeldItem child))
                     {
                         held = child;
                         break;
@@ -103,11 +116,34 @@ namespace Pickleball.Sandbox.Hands
             if (held != null) Seat(held);
         }
 
+        /// <summary>
+        /// Moves a pair of blade markers onto the held item's own
+        /// (<see cref="HeldItem.BladeBase"/> / <see cref="HeldItem.BladeTip"/>),
+        /// so whatever already reads them (the hit sweep, the trail, weapon
+        /// clearance) follows the blade now in the hand without being rewired.
+        /// Call it after <see cref="Hold"/> when the markers live on the grab
+        /// point, as on the chibi.
+        /// </summary>
+        /// <returns>False, and nothing moved, if the hand holds nothing or the
+        /// item has no blade.</returns>
+        public bool MatchBladeMarkers(Transform bladeBase, Transform bladeTip)
+        {
+            if (held == null || !held.HasBlade) return false;
+            if (bladeBase != null) bladeBase.SetPositionAndRotation(held.BladeBase.position, held.BladeBase.rotation);
+            if (bladeTip != null) bladeTip.SetPositionAndRotation(held.BladeTip.position, held.BladeTip.rotation);
+            return true;
+        }
+
         void Seat(HeldItem item)
         {
             if (item.transform.parent != transform) return;
             item.AnchorInItem(out Vector3 offset, out Quaternion rotation);
-            GripSeat.ItemPose(offset, rotation, out Vector3 localPosition, out Quaternion localRotation);
+            // A handle fatter than the one this grab point was solved for sits
+            // further out of the palm, so its surface, not its centre, is where
+            // the solved handle's was.
+            float solved = profile != null ? profile.GripRadius : HandGripProfile.DefaultGripRadius;
+            Vector3 seat = GripSeat.HandleOffset(item.GripRadius, solved, rightHand);
+            GripSeat.ItemPose(offset, rotation, seat, out Vector3 localPosition, out Quaternion localRotation);
             item.transform.SetLocalPositionAndRotation(localPosition, localRotation);
         }
 

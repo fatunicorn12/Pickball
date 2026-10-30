@@ -217,8 +217,15 @@ namespace Pickleball.Sandbox.Hands
             _weight += (Target() - _weight) * k;
             if (_weight < 1e-3f) return;
 
-            Vector3 fingerAngles = profile.FingerCurl;
-            Vector3 thumbAngles = profile.ThumbCurl;
+            // A handle fatter than the one the curl was tuned on gets less bend
+            // (and a thinner one more), so the fingers wrap it rather than
+            // passing through it. The thumb's swing across the palm doesn't
+            // depend on the handle, only its bend.
+            HeldItem held = grip != null ? grip.Held : null;
+            float scale = FingerCurlMath.CurlScale(profile.GripRadius, held != null ? held.GripRadius : 0f,
+                                                   profile.FingerHalfThickness);
+            Vector3 fingerAngles = profile.FingerCurl * scale;
+            Vector3 thumbAngles = profile.ThumbCurl * scale;
             float thumbSwing = profile.ThumbSwing;
             for (int c = 0; c < _chains.Length; c++)
             {

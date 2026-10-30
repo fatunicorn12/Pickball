@@ -165,6 +165,7 @@ public static class TrainingStageSetup
         so.ApplyModifiedPropertiesWithoutUndo();
 
         ApplyLighting();
+        InventorySetup.AttachToPlayer(player.gameObject);   // re-wire the copied inventory to this scene
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, ScenePath);

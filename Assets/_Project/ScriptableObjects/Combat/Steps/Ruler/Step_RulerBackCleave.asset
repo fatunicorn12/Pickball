@@ -1,0 +1,52 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87c60d1db83e442cb02323c572fdf585, type: 3}
+  m_Name: Step_RulerBackCleave
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Combat.ComboStepDefinition
+  displayName: Reflex Angle
+  animatorState: Ruler_BackCleave
+  clip: {fileID: -203655887218126122, guid: d261bd8af0ef4ad45be36f9dde962be9, type: 3}
+  playbackSpeed: 1.05
+  fallbackDuration: 0.6
+  blendIn: 0.12
+  fullBodyWhenStanding: 1
+  windows:
+    activeStart: 0.42
+    activeEnd: 0.81
+    comboOpen: 0.84
+    comboClose: 1
+  hit:
+    damage: 27
+    knockback: 2
+    launchSpeed: 0
+    hitstop: 0.09
+  lungeSpeed: 1.5
+  hangInAir: 1
+  burst:
+    enabled: 0
+    triggerAt: 0
+    radius: 0
+    expandSeconds: 0
+    forwardOffset: 0
+    heightTolerance: 0.05
+    hit:
+      damage: 0
+      knockback: 0
+      launchSpeed: 0
+      hitstop: 0
+  presentation:
+    trailColor: {r: 1, g: 0.86, b: 0.35, a: 0.95}
+    shakeAmount: 0.26
+    shakeSeconds: 0.24
+    fovPunch: 2.5
+    hitEffect: {fileID: 0}
+    burstEffect: {fileID: 0}

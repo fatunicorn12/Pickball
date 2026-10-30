@@ -57,15 +57,24 @@ namespace Pickleball.Tests.Validation
         [Test]
         public void EveryShippedStep_IsPlayedByTheMovesetOrAnAbility()
         {
-            var moveset = Load<SwordMoveset>(MovesetPath);
-            var reachable = new HashSet<ComboStepDefinition>(moveset.AllBaseSteps());
+            Load<SwordMoveset>(MovesetPath);
+            // Every weapon's moveset: its own hits, and the swings its ability rows give
+            // learned abilities (the ruler plays its own + C, for instance).
+            var reachable = new HashSet<ComboStepDefinition>();
+            foreach (var moveset in LoadAll<SwordMoveset>())
+            {
+                reachable.UnionWith(moveset.AllBaseSteps());
+                foreach (var row in moveset.AbilitySteps)
+                    if (row.Step != null) reachable.Add(row.Step);
+            }
             foreach (var ability in LoadAll<SwordAbilityDefinition>())
                 if (ability.Step != null) reachable.Add(ability.Step);
 
             var orphans = LoadAll<ComboStepDefinition>().Where(s => !reachable.Contains(s)).Select(s => s.name);
 
             Assert.That(orphans, Is.Empty,
-                        "Steps nothing can play. Add them to Moveset_Compass or an ability, or delete them.");
+                        "Steps nothing can play. Add them to a moveset, a moveset's ability rows or an " +
+                        "ability, or delete them.");
         }
 
         [Test]

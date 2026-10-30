@@ -30,7 +30,7 @@ namespace Pickleball.Sandbox.Hands
                  "with finger bones: it sets how far in front of the palm the grab " +
                  "point sits. Larger opens the fist around a fatter grip. Baked by " +
                  "Setup Weapon Grip.")]
-        [Min(0f)] [SerializeField] private float gripRadius = 0.015f;
+        [Min(0f)] [SerializeField] private float gripRadius = DefaultGripRadius;
 
         [Header("Finger curl (rigs with finger bones only)")]
         [Tooltip("How far each finger joint bends around the handle, °: proximal " +
@@ -63,6 +63,17 @@ namespace Pickleball.Sandbox.Hands
                  "slow, deliberate grip.")]
         [Min(0f)] [SerializeField] private float closeRate = 18f;
 
+        [Tooltip("Half a finger's thickness, m. Only used to scale the curl for a " +
+                 "handle fatter or thinner than gripRadius: the finger's centre line " +
+                 "wraps a circle of handle radius plus this, so each joint bends by " +
+                 "(gripRadius + this) / (handle radius + this) of the curl above. " +
+                 "Larger makes the curl change less with handle size.")]
+        [Min(0.001f)] [SerializeField] private float fingerHalfThickness = 0.009f;
+
+        /// <summary>The grip radius a new profile starts with, m; also what a
+        /// hand without a profile assumes it was solved for.</summary>
+        public const float DefaultGripRadius = 0.015f;
+
         /// <summary>Handle lean toward the knuckles, °.</summary>
         public float HandleTilt => handleTilt;
         /// <summary>Radius of the handle a closing fist wraps, m.</summary>
@@ -77,5 +88,7 @@ namespace Pickleball.Sandbox.Hands
         public float CurlWeight => curlWeight;
         /// <summary>Close/open rate, 1/s.</summary>
         public float CloseRate => closeRate;
+        /// <summary>Half a finger's thickness, m, for scaling the curl to a handle's size.</summary>
+        public float FingerHalfThickness => fingerHalfThickness;
     }
 }

@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6d4f9740b1a243ec99a1737310fe40e7, type: 3}
+  m_Name: Weapon_Ruler
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Inventory.WeaponDefinition
+  id: ruler
+  displayName: Ruler Sword
+  description: A ruler forged into a buster blade, steel edge leading. Big, slow
+    arcs that hit hard.
+  icon: {fileID: 0}
+  heldPrefab: {fileID: 1543436219625872467, guid: e1458083719245c4684b3140ccf6dd47, type: 3}
+  moveset: {fileID: 11400000, guid: 42f9fecc916de8f49906f6f08bbf0cc0, type: 2}
+  bladeRadius: 0.25
+  clearanceProfile: {fileID: 11400000, guid: 97058c06eb0b07642ae04c6a9501a54f, type: 2}
