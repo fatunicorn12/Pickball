@@ -206,6 +206,12 @@ public static class HandGripSetup
         // Unity's fake-null object in the Editor.
         if (!grabPoint.TryGetComponent(out HandGrip grip))
             grip = grabPoint.gameObject.AddComponent<HandGrip>();
+        // The grab point was solved for this profile's grip radius on this
+        // hand; HandGrip needs both to seat a fatter or thinner handle.
+        var gso = new SerializedObject(grip);
+        gso.FindProperty("profile").objectReferenceValue = profile;
+        gso.FindProperty("rightHand").boolValue = rightHand;
+        gso.ApplyModifiedPropertiesWithoutUndo();
 
         bool hasFingers = Knuckles(animator, rightHand).Count > 0
                           || animator.GetBoneTransform(rightHand ? HumanBodyBones.RightThumbProximal
