@@ -33,6 +33,13 @@ namespace Pickleball.Sandbox.Hands
         [Tooltip("The far end of the cutting part. Optional, paired with Blade Base.")]
         [SerializeField] private Transform bladeTip;
 
+        [Tooltip("Radius of the handle where the fist closes, m. 0 means the size " +
+                 "the hand was solved for (HandGripProfile.gripRadius, 0.015). A " +
+                 "fatter handle is seated further out of the palm and the fingers " +
+                 "curl less round it, so they wrap it instead of passing through. " +
+                 "Measured by the held-weapon builder.")]
+        [Min(0f)] [SerializeField] private float gripRadius;
+
         /// <summary>The grip anchor, or this transform when none is set.</summary>
         public Transform GripAnchor => gripAnchor != null ? gripAnchor : transform;
 
@@ -45,8 +52,16 @@ namespace Pickleball.Sandbox.Hands
         /// <summary>True when both blade markers are set, so the item can be swung.</summary>
         public bool HasBlade => bladeBase != null && bladeTip != null;
 
+        /// <summary>The handle's radius where the fist closes, m; 0 for "the
+        /// size the hand was solved for".</summary>
+        public float GripRadius => gripRadius;
+
         /// <summary>Points the item at a new grip anchor. For setup scripts.</summary>
         public void SetGripAnchor(Transform anchor) => gripAnchor = anchor;
+
+        /// <summary>Sets the handle radius the fist closes on, m (0 = the
+        /// hand's own). For setup scripts.</summary>
+        public void SetGripRadius(float radius) => gripRadius = Mathf.Max(0f, radius);
 
         /// <summary>Points the item at its blade markers. For setup scripts.</summary>
         public void SetBladeMarkers(Transform baseMarker, Transform tipMarker)

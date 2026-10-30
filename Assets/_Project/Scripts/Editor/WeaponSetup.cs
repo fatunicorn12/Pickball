@@ -76,40 +76,15 @@ public static class WeaponSetup
         ("airAttack", "sword and shield attack (4).fbx", "AirAttack", 2.2f),
     };
 
-    /// <summary>
-    /// Which end of the weapon is the handle. The compass model runs 1.0
-    /// units along its own +Y with the origin at the low end, so the old code —
-    /// which just parented it at the socket origin — always gripped that low
-    /// end. True flips it, so the far end (the compass's knob and hinge) is
-    /// held and the model points the other way out of the hand.
-    /// </summary>
-    const bool GripFarEnd = true;
-
-    /// <summary>Weapon length after normalising, whatever the authored scale.</summary>
-    const float WeaponLength = 0.85f;
+    /// <summary>Which end of the compass is held, its length and how its edge
+    /// is found all live on <see cref="HeldWeaponBuilder.Compass"/>, shared with
+    /// the Held_Compass prefab so the two can't drift apart.</summary>
+    static HeldWeaponBuilder.Spec CompassSpec => HeldWeaponBuilder.Compass;
 
     /// <summary>The socket is the hand's grab point; Setup Weapon Clearance and
     /// the Tripo contact sheet find it, and the visual under it, by these names.</summary>
     const string SocketName = "WeaponSocket";
     const string VisualName = "WeaponVisual";
-    const string GripAnchorName = "GripAnchor";
-
-    /// <summary>
-    /// Handle measurement (see <see cref="GripSeat.HandleLength"/>): the weapon
-    /// is cut into slices of this fraction of its length, starting at the held
-    /// end. 2% of 0.85 m is 1.7 cm, finer than any guard or knob.
-    /// </summary>
-    const float HandleSliceFraction = 0.02f;
-
-    /// <summary>How far along the weapon a handle may run, as a fraction of its
-    /// length. Past this a widening is part of the weapon, not the end of its
-    /// handle.</summary>
-    const float HandleSearchFraction = 0.4f;
-
-    /// <summary>How much wider than the handle a slice must be to end it. The
-    /// compass's hinge disc is about 1.9 times its knob; a sword's crossguard is
-    /// several times its grip.</summary>
-    const float HandleWidenRatio = 1.5f;
 
     /// <summary>The old hand-tuned socket pose, kept only as the fallback for
     /// a rig whose hand has no skinned mesh to measure.</summary>
@@ -189,7 +164,7 @@ public static class WeaponSetup
         // The compass is a model prefab instance; the stand-in is a bare
         // primitive, which has no far end to prefer.
         bool isModel = PrefabUtility.IsPartOfPrefabInstance(visual.gameObject);
-        FitGrip(animator, socket, visual, isModel && GripFarEnd);
+        FitGrip(animator, socket, visual, isModel ? CompassSpec : HeldWeaponBuilder.StandIn);
 
         EditorUtility.SetDirty(player);
         EditorSceneManager.MarkSceneDirty(player.scene);
@@ -367,13 +342,13 @@ public static class WeaponSetup
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
             visual = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             visual.transform.SetParent(socketGo.transform, false);
-            Debug.Log($"Weapon model: {modelPath} (scaled to {WeaponLength:0.00}m, " +
-                      $"handle at its {(GripFarEnd ? "far" : "near")} end)");
+            Debug.Log($"Weapon model: {modelPath} (scaled to {CompassSpec.Length:0.00}m, " +
+                      $"handle at its {(CompassSpec.GripFarEnd ? "far" : "near")} end)");
         }
         else
         {
             // An empty root around a thin cylinder, so the uniform rescale in
-            // PrepareHeldItem keeps it thin (the cylinder mesh is 2 x 1 units).
+            // PrepareInPlace keeps it thin (the cylinder mesh is 2 x 1 units).
             visual = new GameObject(VisualName);
             visual.transform.SetParent(socketGo.transform, false);
             var standIn = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -392,7 +367,8 @@ public static class WeaponSetup
         var tipGo = new GameObject("BladeTip");
         tipGo.transform.SetParent(socketGo.transform, false);
 
-        FitGrip(animator, socketGo.transform, visual.transform, modelPath != null && GripFarEnd);
+        FitGrip(animator, socketGo.transform, visual.transform,
+                modelPath != null ? CompassSpec : HeldWeaponBuilder.StandIn);
 
         bladeBase = baseGo.transform;
         bladeTip = tipGo.transform;
@@ -411,10 +387,10 @@ public static class WeaponSetup
     /// the blade came out of the wrist rather than the fist. Now the hand side
     /// is measured from the rig and the weapon side from the mesh.
     /// </summary>
-    static void FitGrip(Animator animator, Transform socket, Transform visual, bool gripFarEnd)
+    static void FitGrip(Animator animator, Transform socket, Transform visual, HeldWeaponBuilder.Spec spec)
     {
         var profile = HandGripSetup.LoadOrCreateProfile();
-        var item = PrepareHeldItem(visual.gameObject, WeaponLength, gripFarEnd, out Vector3 tipInModel);
+        var item = HeldWeaponBuilder.PrepareInPlace(visual.gameObject, spec, out Vector3 tipInModel);
 
         if (HandGripSetup.TrySolve(animator, rightHand: true, profile, out GripFrame frame, out string how))
         {
@@ -440,168 +416,7 @@ public static class WeaponSetup
             bladeTip.SetLocalPositionAndRotation(socket.InverseTransformPoint(visual.TransformPoint(tipInModel)),
                                                  Quaternion.identity);
 
-        RecordInstanceChanges(socket, visual, grip, item, bladeBase, bladeTip);
-    }
-
-    /// <summary>
-    /// Marks objects changed through their C# API as dirty and, when they
-    /// belong to a prefab instance (the Chibi in every saved scene), records
-    /// the change as an instance override. Without the record, an edit to a
-    /// prefab-owned object made outside a SerializedObject can be dropped on
-    /// the next save or reload. Harmless on objects outside a prefab.
-    /// </summary>
-    static void RecordInstanceChanges(params Object[] objects)
-    {
-        foreach (var o in objects)
-        {
-            if (o == null) continue;
-            PrefabUtility.RecordPrefabInstancePropertyModifications(o);
-            EditorUtility.SetDirty(o);
-        }
-    }
-
-    /// <summary>
-    /// Readies a weapon model to be held: scales it to
-    /// <paramref name="wanted"/> metres, measures where its handle is, and
-    /// gives it a <see cref="HeldItem"/> with a grip anchor at the middle of
-    /// that handle (+Y toward the tip, +Z along the weapon's wider side, so the
-    /// flat faces the palm and the edge leads with the knuckles).
-    ///
-    /// The old code assumed the model's own origin WAS the handle and just
-    /// parented it at zero. That happens to be half-right for the compass
-    /// (measured: it runs 0.998 along its +Y with the origin exactly at the low
-    /// end), but it gave no way to hold the other end, and it would be wrong for
-    /// any model whose origin sits at its centre. Then the grip went to the very
-    /// end of the model, so the compass's 8 cm knob stuck out of the hand
-    /// instead of sitting in it. Measuring the handle puts the fist round the
-    /// knob and neck, up to the hinge disc.
-    /// </summary>
-    /// <param name="tipInModel">The far end of the weapon, in the model's own
-    /// (unscaled) space, for the BladeTip marker.</param>
-    static HeldItem PrepareHeldItem(GameObject visual, float wanted, bool gripFarEnd, out Vector3 tipInModel)
-    {
-        var tr = visual.transform;
-
-        // Measured in place, in the model's own space. The visual is never
-        // moved out to the world origin to read Renderer.bounds (the old trick):
-        // in every saved scene it sits inside the Chibi prefab instance, where
-        // it can't be reparented, and Setup Weapon Grip threw on exactly that.
-        var local = MeasureModelBounds(visual);
-
-        // Longest dimension is the weapon's length; the other two are its girth.
-        int axis = 0;
-        if (local.size.y > local.size[axis]) axis = 1;
-        if (local.size.z > local.size[axis]) axis = 2;
-        float span = local.size[axis];
-        float scale = span > 0.0001f ? wanted / span : 1f;
-
-        // The held end, the far end, and the direction from one to the other.
-        var gripEnd = local.center;
-        gripEnd[axis] = gripFarEnd ? local.max[axis] : local.min[axis];
-        tipInModel = local.center;
-        tipInModel[axis] = gripFarEnd ? local.min[axis] : local.max[axis];
-        var along = Vector3.zero;
-        along[axis] = gripFarEnd ? -1f : 1f;
-
-        // The wider girth axis is the edge: it leads with the knuckles. On the
-        // compass that is the plane its legs splay in, the same roll it was
-        // held at before.
-        int g1 = (axis + 1) % 3, g2 = (axis + 2) % 3;
-        var edge = Vector3.zero;
-        edge[local.size[g1] >= local.size[g2] ? g1 : g2] = 1f;
-
-        float handle = MeasureHandle(visual, local, axis, gripEnd, along, span);
-        Vector3 anchorInModel = gripEnd + along * (handle * 0.5f);
-
-        tr.localScale = Vector3.one * scale;
-
-        // A new child and a new component are allowed on a prefab instance
-        // (they become added-object overrides); only reparenting or destroying
-        // what the prefab owns is not.
-        var anchor = tr.Find(GripAnchorName);
-        if (anchor == null)
-        {
-            anchor = new GameObject(GripAnchorName).transform;
-            anchor.SetParent(tr, false);
-        }
-        anchor.SetLocalPositionAndRotation(anchorInModel, Quaternion.LookRotation(edge, along));
-        anchor.localScale = Vector3.one;
-
-        if (!visual.TryGetComponent(out HeldItem item))
-            item = visual.AddComponent<HeldItem>();
-        item.SetGripAnchor(anchor);
-        RecordInstanceChanges(tr, anchor, item);
-
-        Debug.Log(handle > 0f
-            ? $"Weapon handle: {handle * scale:0.000} m from the held end; the fist closes on its middle."
-            : "Weapon has no distinct handle (it never widens near the held end); the fist closes on the end.");
-        return item;
-    }
-
-    /// <summary>
-    /// Axis-aligned bounds of everything a model renders, in the model root's
-    /// own space (its local axes, unscaled), wherever the root sits and however
-    /// it is scaled. Each mesh's bounds box is carried into root space through
-    /// the transform matrices, which is exactly what Renderer.bounds gives for
-    /// a root at the world origin, without having to move the root there.
-    /// </summary>
-    static Bounds MeasureModelBounds(GameObject root)
-    {
-        var toRoot = root.transform.worldToLocalMatrix;
-        var bounds = new Bounds();
-        bool any = false;
-        foreach (var r in root.GetComponentsInChildren<Renderer>())
-        {
-            Mesh mesh = r is SkinnedMeshRenderer skinned ? skinned.sharedMesh
-                : r.TryGetComponent(out MeshFilter mf) ? mf.sharedMesh : null;
-            if (mesh == null) continue;
-            var meshToRoot = toRoot * r.transform.localToWorldMatrix;
-            var mb = mesh.bounds;
-            for (int i = 0; i < 8; i++)
-            {
-                var corner = mb.center + Vector3.Scale(mb.extents,
-                    new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
-                var p = meshToRoot.MultiplyPoint3x4(corner);
-                if (any) bounds.Encapsulate(p);
-                else { bounds = new Bounds(p, Vector3.zero); any = true; }
-            }
-        }
-        return bounds;
-    }
-
-    /// <summary>
-    /// Length of the weapon's handle from its held end, in model units: slices
-    /// the mesh along its length and finds where it first widens sharply (see
-    /// <see cref="GripSeat.HandleLength"/>). Vertices only, which is enough:
-    /// a knob, guard or disc is where a mesh puts its vertices. Like
-    /// <see cref="MeasureModelBounds"/>, it reads the model in place.
-    /// </summary>
-    static float MeasureHandle(GameObject visual, Bounds local, int axis, Vector3 gripEnd, Vector3 along, float span)
-    {
-        float slice = span * HandleSliceFraction;
-        if (slice <= 0f) return 0f;
-        int count = Mathf.CeilToInt(HandleSearchFraction / HandleSliceFraction);
-        var radii = new float[count];
-        for (int i = 0; i < count; i++) radii[i] = -1f;
-
-        int g1 = (axis + 1) % 3, g2 = (axis + 2) % 3;
-        var toModel = visual.transform.worldToLocalMatrix;
-        foreach (var mf in visual.GetComponentsInChildren<MeshFilter>())
-        {
-            if (mf.sharedMesh == null) continue;
-            var meshToModel = toModel * mf.transform.localToWorldMatrix;
-            foreach (var v in mf.sharedMesh.vertices)
-            {
-                Vector3 p = meshToModel.MultiplyPoint3x4(v);
-                int bin = Mathf.FloorToInt(Vector3.Dot(p - gripEnd, along) / slice);
-                if (bin < 0 || bin >= count) continue;
-                float du = p[g1] - local.center[g1];
-                float dv = p[g2] - local.center[g2];
-                float r = Mathf.Sqrt(du * du + dv * dv);
-                if (r > radii[bin]) radii[bin] = r;
-            }
-        }
-        return GripSeat.HandleLength(radii, slice, HandleWidenRatio);
+        HeldWeaponBuilder.RecordInstanceChanges(socket, visual, grip, item, bladeBase, bladeTip);
     }
 
     // ------------------------------------------------------------- controller

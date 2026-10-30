@@ -105,6 +105,33 @@ namespace Pickleball.Sandbox.Hands
             return q;
         }
 
+        /// <summary>
+        /// How much of the profile's curl a handle of another size needs.
+        ///
+        /// A finger wrapped round a handle follows a circle whose radius is
+        /// the handle's plus half the finger's thickness, and a segment of
+        /// fixed length turns through an angle inversely proportional to that
+        /// radius. So a handle fatter than the one the curl was tuned on gets
+        /// proportionally less bend at every joint, and the fingers lie on it
+        /// instead of passing through it; a thinner one gets more.
+        /// </summary>
+        /// <param name="tunedRadius">Handle radius the curl angles were tuned
+        /// for, m (<see cref="HandGripProfile.GripRadius"/>).</param>
+        /// <param name="handleRadius">The held handle's radius, m; zero or less
+        /// means the tuned size (scale 1).</param>
+        /// <param name="fingerHalfThickness">Half a finger's thickness, m.</param>
+        /// <returns>The factor for every bend angle, clamped to 0.5-1.5 so an
+        /// odd measurement can't fold the fingers flat or through the palm.</returns>
+        public static float CurlScale(float tunedRadius, float handleRadius, float fingerHalfThickness)
+        {
+            if (handleRadius <= 0f) return 1f;
+            float t = Mathf.Max(0f, fingerHalfThickness);
+            float tuned = Mathf.Max(0f, tunedRadius) + t;
+            float held = handleRadius + t;
+            if (held <= 1e-6f) return 1f;
+            return Mathf.Clamp(tuned / held, 0.5f, 1.5f);
+        }
+
         /// <summary>A joint's rest rotation turned by <paramref name="degrees"/>
         /// about its local curl axis.</summary>
         public static Quaternion Curled(Quaternion restLocal, Vector3 localAxis, float degrees)
