@@ -222,6 +222,7 @@ public static class InventorySetup
 
         // ---- HUD -------------------------------------------------------------
         InventoryHudBuilder.Build(go.scene, menu, equipper, assets.Config);
+        WeaponCarrySetup.AttachToPlayer(go);   // the equipped weapon's carry pose
 
         EditorUtility.SetDirty(go);
         EditorSceneManager.MarkSceneDirty(go.scene);

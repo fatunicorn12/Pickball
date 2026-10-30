@@ -442,6 +442,7 @@ public static class SwordAbilitySetup
         // Steps flagged Full Body When Standing also need their full-body layer
         // state. Done here so every path that rebuilds the Attack layer keeps it.
         FullBodySwingSetup.Wire(controller);
+        WeaponCarrySetup.Wire(controller);   // the Carry layer, under Gesture and Attack
     }
 
     static void WarnIfNotHumanoid(ComboStepDefinition step)

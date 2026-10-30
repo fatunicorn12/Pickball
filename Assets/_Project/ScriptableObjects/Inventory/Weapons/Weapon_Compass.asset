@@ -21,3 +21,7 @@ MonoBehaviour:
   moveset: {fileID: 11400000, guid: bca4baacbc4cc4945a358233f9ec7254, type: 2}
   bladeRadius: 0.18
   clearanceProfile: {fileID: 11400000, guid: e5fd179c4a14a5048930985a7713a291, type: 2}
+  carryPose: {fileID: 0}
+  carryPoseMoving: {fileID: 0}
+  carryWeight: 1
+  carryBlendSeconds: 0.25

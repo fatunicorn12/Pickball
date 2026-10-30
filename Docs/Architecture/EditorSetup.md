@@ -23,7 +23,7 @@ All menus are under **Tools ▸ Pickleball**. The verb tells you what a menu tou
 | Verb | Meaning | Examples |
 |---|---|---|
 | **Setup** | Wires components into the **open** scene. Usually marks it dirty and never saves. | Setup Weapon, Setup Sword Abilities, Setup Lock-On, Setup Newton Fight, Setup Inventory, Spacetime ▸ Add To Sandbox |
-| **Rebuild** | Rewrites an asset in place and keeps its GUID. | Rebuild Chibi Animator, Rebuild Newton Animator, Setup Full-Body Swings (it only touches `ChibiLocomotion.controller`'s AttackBody layer and the flagged clips' import, never a scene or prefab) |
+| **Rebuild** | Rewrites an asset in place and keeps its GUID. | Rebuild Chibi Animator, Rebuild Newton Animator, Rebuild Carry Poses, Setup Full-Body Swings (it only touches `ChibiLocomotion.controller`'s AttackBody layer and the flagged clips' import, never a scene or prefab) |
 | **Build / Create** | Makes a new scene and **saves** it. | Setup Chibi Sandbox (despite its name), Build Training Stage, Spacetime ▸ Create Spacetime Lab Scene, Create Assets |
 | **Bake / Clean / Organize** | One-off asset processing. | Bake Swing Twist, Clean World, Organize Project (moves and **deletes** assets) |
 
@@ -53,6 +53,13 @@ scripts:
    `Held_Ruler`, `Moveset_Ruler` or `RulerWeaponClearance` land (it fills blank weapon references by
    path). It must come after Setup Chibi Sandbox, which wipes it like every later menu, and before
    Build Training Stage. Save the scene afterwards. Details: `Docs/Systems/Inventory.md`.
+   - **Setup Weapon Carry** (the ruler's carry pose, `Docs/Systems/SwordAbilities.md` §2) runs
+     inside Setup Inventory: `InventorySetup.AttachToPlayer` calls
+     `WeaponCarrySetup.AttachToPlayer` last, so it needs no step of its own. Every Attack-layer
+     rebuild keeps its Carry layer (see below).
+   - Run it by hand only after changing a weapon's carry fields. Run **Rebuild Carry Poses**
+     after changing a pose spec in `WeaponCarryPoseBuilder`. Both are idempotent (a re-run is
+     byte-identical) and mark the scene dirty without saving it.
 10. **Build Training Stage**. It copies ChibiSandbox, then runs `InventorySetup.AttachToPlayer` on the
     copied player.
 11. **Spacetime ▸ Create Spacetime Lab Scene**
@@ -67,7 +74,8 @@ Setup Chibi Sandbox already runs the player-level setups as part of its build:
 - `WeaponSetup.PrepareAssets` and `AttachToPlayer`, which in turn call `SwingTwistSetup.Bake`,
   `WeaponClearanceSetup.Attach` and `SwordAbilitySetup.AttachToPlayer`. The last one's
   `WireAttackStatesFromAssets` also runs `FullBodySwingSetup.Wire`, so every Attack-layer rebuild
-  (Setup Weapon, Setup Sword Abilities, Rebuild Chibi Animator) keeps the AttackBody layer.
+  (Setup Weapon, Setup Sword Abilities, Rebuild Chibi Animator) keeps the AttackBody layer. It
+  then runs `WeaponCarrySetup.Wire`, which keeps the Carry layer (under Gesture) the same way.
 - `ClothSetup.Apply`
 - `InventorySetup.AttachToPlayer`, last, after the prefab is saved, so its components are scene
   overrides and `Chibi.prefab` doesn't change.

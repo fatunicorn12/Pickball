@@ -157,9 +157,22 @@ mechanism the dialogue director uses, so everything in the project already copes
 |---|---|---|
 | `InventoryConfig` | Slots per tab (8 weapons, 10 magic, 10 key items), grid columns (5), menu repeat delay / interval and stick threshold. | Seeded once. |
 | `Weapons/Weapon_Compass` | `Held_Compass` prefab, `Moveset_Compass`, radius **0.18**, `ChibiWeaponClearance`. | Seeded once; blank references filled by path every run. |
-| `Weapons/Weapon_Ruler` | `Held_Ruler` prefab, `Moveset_Ruler`, radius **0.25**, `RulerWeaponClearance`. | Same. |
+| `Weapons/Weapon_Ruler` | `Held_Ruler` prefab, `Moveset_Ruler`, radius **0.25**, `RulerWeaponClearance`; carry pose `Carry_Ruler_Stand` + `Carry_Ruler_Move`, weight 1, blend 0.3 s. | Same. Setup Weapon Carry fills the carry fields while they are blank. |
 | `KeyItems/Key_<AbilityKind>` | One per ability, named from `KeyItemNames`. | Seeded once. |
 | `Magic/Magic_<SpellAsset>` | One per `SpellDefinition` in `ScriptableObjects/Magic/`; icon copied from the spell while blank. | Seeded once. |
+
+**Carry pose fields** (`WeaponDefinition`, "Carry pose"). All are optional. Empty means the
+locomotion clips' own arm, as for the compass.
+
+| Field | What |
+|---|---|
+| `carryPose` | One-frame Humanoid clip of the weapon arm at rest, standing. Names the Carry-layer state. |
+| `carryPoseMoving` | The same carry authored over the walk, blended with `carryPose` on the Animator's Speed. Empty means `carryPose` at every speed. |
+| `carryWeight` | Carry layer weight while it shows (0-1, default 1). |
+| `carryBlendSeconds` | Fade in on equip and out on unequip, s (default 0.25). |
+
+`WeaponCarryPose` (presentation, on the player) listens to `WeaponEquipped` and plays them. See
+SwordAbilities.md §2, "Carry pose".
 
 Why the radii: 0.18 is what `MeleeCombat` has always used for the compass. The ruler blade is 20 cm
 wide and 6–8 cm thick, so half its width plus a little forgiveness gives 0.25. That is wider than the
@@ -181,6 +194,8 @@ other chains:
    type.
 3. Rebuild the `InventoryHUD` canvas (`InventoryHudBuilder`). It is its own overlay canvas at sort
    order 40, above FightHUD.
+4. Run `WeaponCarrySetup.AttachToPlayer`. It builds the carry poses and fills `Weapon_Ruler`'s carry
+   fields (only when missing), wires the Carry layer, and adds `WeaponCarryPose` to the player.
 
 Starting items, the starting weapon and `InventoryConfig` are filled only when blank. The catalogs and
 the component references are rewritten every run. The setup marks the scene dirty and never saves. The

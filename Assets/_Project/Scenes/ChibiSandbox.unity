@@ -996,6 +996,17 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 51600079}
   m_Mesh: {fileID: -236350752038763692, guid: a2f7b0d43c437ef40b0427f54136addd, type: 3}
+--- !u!114 &52601924 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 1973772463791280042, guid: cbcbcf9b829536745a0def211ea4e083, type: 3}
+  m_PrefabInstance: {fileID: 1195753252314885892}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1291333408}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22ae8e8fa72e420ea5587dcd515ab3cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Movement.MovementMotor
 --- !u!1 &52722681
 GameObject:
   m_ObjectHideFlags: 0
@@ -54069,6 +54080,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 3883458126653099587, guid: cbcbcf9b829536745a0def211ea4e083, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1195753252314885932}
+    - targetCorrespondingSourceObject: {fileID: 3883458126653099587, guid: cbcbcf9b829536745a0def211ea4e083, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1195753252314885933}
     - targetCorrespondingSourceObject: {fileID: 1093931610088010614, guid: cbcbcf9b829536745a0def211ea4e083, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2085243038}
@@ -54569,6 +54583,25 @@ MonoBehaviour:
   input: {fileID: 1195753252314885930}
   inputGate: {fileID: 1195753252314885912}
   orbitCamera: {fileID: 235624873}
+--- !u!114 &1195753252314885933
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1291333408}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10ff4371a44285d40ab34a3689d5928b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Combat.Presentation.WeaponCarryPose
+  equipper: {fileID: 1195753252314885929}
+  combat: {fileID: 1195753252314885896}
+  animator: {fileID: 2029835906}
+  movementSource: {fileID: 52601924}
+  carryLayer: Carry
+  fadeOutDuring: 0c0000000d000000080000000900000003000000
+  suppressSeconds: 0.1
 --- !u!1001 &2685157860003053257
 PrefabInstance:
   m_ObjectHideFlags: 0
