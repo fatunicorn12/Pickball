@@ -37,6 +37,28 @@ namespace Pickleball.Sandbox.Inventory
                  "keeps whatever profile the player already has.")]
         [SerializeField] private WeaponClearanceProfile clearanceProfile;
 
+        [Header("Carry pose")]
+        [Tooltip("How the weapon arm holds this blade at rest, standing: a one-frame Humanoid " +
+                 "clip played on the Carry layer (right arm only) under the swings. Empty = " +
+                 "no carry pose: the locomotion clips' own arm, as for the compass. The Carry " +
+                 "layer's state is named after this clip; run Tools ▸ Pickleball ▸ Setup " +
+                 "Weapon Carry after changing it.")]
+        [SerializeField] private AnimationClip carryPose;
+
+        [Tooltip("The same carry authored over the walk, whose chest faces ahead where the " +
+                 "idle's is turned. Blended with the standing pose on the Animator's Speed, " +
+                 "as idle and walk are. Empty = the standing pose at every speed.")]
+        [SerializeField] private AnimationClip carryPoseMoving;
+
+        [Tooltip("Carry layer weight while the pose shows (0-1). 1 holds the arm exactly in " +
+                 "the pose; lower lets the locomotion clips' arm swing show through.")]
+        [Range(0f, 1f)] [SerializeField] private float carryWeight = 1f;
+
+        [Tooltip("Seconds the carry takes to fade in when the weapon is equipped or a move " +
+                 "that needed the arm ends, and to fade out when it is unequipped (s). " +
+                 "Shorter snaps the blade into place; longer drifts.")]
+        [Range(0.02f, 1f)] [SerializeField] private float carryBlendSeconds = 0.25f;
+
         /// <inheritdoc/>
         public override InventoryCategory Category => InventoryCategory.Weapon;
 
@@ -51,6 +73,30 @@ namespace Pickleball.Sandbox.Inventory
 
         /// <summary>Clearance profile for this blade, or null to keep the current one.</summary>
         public WeaponClearanceProfile ClearanceProfile => clearanceProfile;
+
+        /// <summary>The standing carry pose, or null for none.</summary>
+        public AnimationClip CarryPose => carryPose;
+
+        /// <summary>The moving carry pose, or null to use <see cref="CarryPose"/> at every speed.</summary>
+        public AnimationClip CarryPoseMoving => carryPoseMoving;
+
+        /// <summary>True if this weapon has a carry pose that shows (a clip and a weight above 0).</summary>
+        public bool HasCarryPose => carryPose != null && carryWeight > 0f;
+
+        /// <summary>Carry layer weight while the pose shows, 0-1.</summary>
+        public float CarryWeight => carryWeight;
+
+        /// <summary>Carry fade time in seconds.</summary>
+        public float CarryBlendSeconds => carryBlendSeconds;
+
+        /// <summary>Wires the carry pose. For setup scripts and tests.</summary>
+        public void ConfigureCarry(AnimationClip standing, AnimationClip moving, float weight, float blendSeconds)
+        {
+            carryPose = standing;
+            carryPoseMoving = moving;
+            carryWeight = Mathf.Clamp01(weight);
+            carryBlendSeconds = Mathf.Clamp(blendSeconds, 0.02f, 1f);
+        }
 
         /// <summary>Wires the weapon's parts. For setup scripts and tests.</summary>
         public void Configure(HeldItem prefab, SwordMoveset weaponMoveset, float radius,

@@ -71,6 +71,10 @@ more hitstop, shake and FOV punch. A mashed chain takes about 1.5× as long. Dam
 almost the compass's (1.04× on the blade), so the trade is **commitment**: fewer, later, longer
 swings that are harder to cancel, not more damage. The numbers are in §3, "Ruler tuning".
 
+At rest he carries it in a **low trail**: arm relaxed, fist by the hip, the blade running back
+and a little out, edge down, clear of the head, hair, cloak and floor (§2, "Carry pose"). The
+compass keeps the locomotion clips' own arm.
+
 Learned abilities follow the weapon (§2, "Abilities per weapon"). With the ruler, + C is a third
 cleave at ruler pace, Phase Shift is an overhead chop, and Area Under the Curve is a slower slam
 with a 3.6 m Riemann ring. The ruler declines Unit Circle: its air spin is already the circle.
@@ -118,6 +122,7 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
 | `LevelUnlocks` | Grants the abilities listed in the level table as levels are reached. | progression |
 | `SwordAnimatorDriver` | Crossfades the step's Attack-layer state, fades the layer weight, freezes `animator.speed` during hitstop. | presentation |
 | `SwordEffects` | Blade trail tint and emit, impact sparks, pooled hit and burst effects, camera shake and FOV kick. | presentation |
+| `WeaponCarryPose` | Plays the equipped weapon's carry pose on the masked Carry layer and fades its weight (`WeaponCarryBlend`). | presentation |
 | `ProgressionToast` | Shows the Q.E.D. / New-technique banner queue and the `LV n · x / y Lemmas` readout (on the `SwordHUD` canvas). | presentation |
 
 ### Hit detection (`MeleeCombat`)
@@ -285,6 +290,96 @@ The ruler sets `acceptOtherAbilities` off and lists its rows:
     cannot pin the feet against the clip's footwork. Root motion stays off: the step's scripted
     lunge moves him, and with the clip's XZ extracted the planted feet stay put while it does.
 
+### Carry pose
+
+The locomotion clips hold the sword for the 0.85 m compass. With the 1.05 m, 22 cm-wide ruler
+their rest arm laid the blade sideways behind the head, the idle's flourish swung it through
+the head, and the run carried it through the hair (measured over the clips: the blade 16-34 cm
+inside the head's clearance padding). A weapon can now bring its own rest pose for the weapon arm.
+
+**The pose: a low trail, not a shoulder rest.** Both were solved and rendered from the game
+camera, the side and the front:
+- *Shoulder rest* (flat of the blade on the right shoulder, edge up, tip behind and up): on the
+  chibi the shoulder joint (0.94 m) sits right under the hair, whose clearance sphere reaches
+  down to 0.91 m. The best pose the solver found still touched the head's clearance padding
+  (gap 0 cm standing, -0.2 cm at a walk) with the fist 15 cm off target. From the game camera the
+  head hides the blade, and at a walk the chest turns it out sideways at head height.
+- *Low trail* (chosen): the arm hangs relaxed with the fist beside the hip; the blade runs back
+  and a little out, dropping about 12°, edge down and out so the flat tilts up toward the camera.
+  From behind and above it reads as a long yellow diagonal off his right hip; from the side, as a
+  blade dragged behind him. It suits a heavy buster blade, and nothing about it is near the head.
+
+**Two poses, blended on Speed.** The arm's muscles are relative to the chest, and the locomotion
+clips turn the chest anywhere from -3° to 67° (the sword-and-shield idle stands side-on at 58°;
+the walk faces ahead at 5-16°). One pose authored over the idle swung the blade straight out to
+his side at a walk. So the ruler has two: `Carry_Ruler_Stand`, authored over the idle's first
+frame with the blade 15° out, and `Carry_Ruler_Move`, over the walk with the blade 35° out. The
+Carry state is a 1D blend tree on the Animator's damped `Speed`: standing at 0, moving at the
+base layer's walk threshold (0.97 m/s), the same blend the legs use for idle and walk.
+
+**How the clips are made** (`WeaponCarryPoseBuilder`, run by Setup Weapon Carry):
+- A spec gives the pose as geometry in his frame: fist position, blade direction, edge direction.
+- The builder poses Chibi.prefab over the base clip in a preview scene and seats `Held_Ruler` on
+  the solved grab point.
+- It searches the nine right-arm muscles (deterministic coordinate descent) for the pose that
+  meets the spec. The cost includes the ruler's clearance volumes plus 4 cm, a 25 cm floor margin
+  for the blade, and a soft limit on the wrist muscles.
+- Result: blade 0° off, fist 3-4 cm off, 6 cm outside every clearance volume.
+- The clip is written in place, so re-running gives byte-identical files.
+
+**The layer.** `Carry`, built by `WeaponCarrySetup.Wire`. `WireAttackStatesFromAssets` calls it
+right after `FullBodySwingSetup.Wire`, so every Attack-layer rebuild keeps it.
+
+| Index | Layer | Mask | Who weights it |
+|---|---|---|---|
+| 0 | Base Layer | none | always 1 |
+| 1 | AttackBody | none (full body) | `SwordAnimatorDriver` / `FullBodySwing` |
+| **2** | **Carry** | **`Carry/RightArm.mask`: the right arm only, shoulder to hand** | **`WeaponCarryPose` / `WeaponCarryBlend`** |
+| 3 | Gesture | `UpperBody` | `MovementAnimatorDriver` (hook throw) |
+| 4 | Attack | `UpperBody` | `SwordAnimatorDriver` |
+
+The layer is Override, default weight 0, with no IK pass and Foot IK off on its states. It holds
+one state per weapon with a carry pose (named after its standing clip) and an empty None default.
+The fingers aren't in the mask: FingerCurl closes the fist after the Animator at curl weight 1,
+so the fist stays shut round the ruler's handle (checked in a Play-mode close-up).
+
+**How it combines with the rest:**
+- *Swings:* Attack (and AttackBody under it) override the whole arm at full weight. The carry is
+  **held at full weight under every swing**. A swing then blends in from the carry, and the
+  Attack layer's 0.08 s fade at the end of the chain reveals the carry. Dropping it would show the
+  clips' own arm in both blends, flashing the blade through the head.
+- *Gesture:* the hook throw sits above Carry, so it wins while it plays.
+- *SwingTwist* reads only the Attack layer's weight, so the carry doesn't change it.
+- *Foot IK* is the base layer's IK pass. The Carry layer has none and masks no leg.
+- *WeaponClearance* still runs after the Animator. In Play mode it applied 0° of correction
+  through idle, walk, run, jumps, landing and the dash, because the pose already clears every
+  volume.
+
+**Weight rules** (`WeaponCarryBlend`, plain C#, `WeaponCarryBlendTests`):
+- Equipping a weapon with a carry fades it in to `carryWeight` over `carryBlendSeconds`. Equipping
+  one without fades it out over that weapon's blend time (the compass: 0.25 s).
+- A swing or its hitstop never moves it (see above). A move that would fade it out during a swing
+  waits for the swing to end.
+- The moves in `WeaponCarryPose.fadeOutDuring` fade it out over `suppressSeconds` (0.1 s). It
+  comes back over the weapon's blend time.
+- Fades are linear and scaled by dt, so they take the same seconds at any frame rate.
+- The component rebuilds the rules on enable and seeds them from the layer's current weight, so a
+  script reload doesn't pop the arm.
+
+**Which states fade it out.** They are read through `IMovementState.Current` (the MovementMotor).
+
+| State | Carry | Why |
+|---|---|---|
+| Ground, Sprint, RunStop, SkidTurn | on | the point of it |
+| Jump (all kinds), Fall, AirJump, SpinJump, landing | on | the blade stays clear in the air, and the trail reads |
+| Dash | on | it lasts 0.22 s, and the blade trails cleanly in the dash pose |
+| **Crouch** | **off** | the crouch drops the fist 0.3 m, and the trail went 16 cm into the ground. The crouch clip's own arm holds the blade forward and low |
+| **Tether** (Pendulum) | **off** | the hang holds the rope overhead with both hands; the throw is on Gesture anyway |
+| **Skate** | **off** | the skate clips balance with the arms out, and a trailing blade would hit the board |
+| **Dive, BellySlide** | **off** | both hands reach ahead |
+| Spell aiming and casting | on | magic has no arm animation. The over-the-shoulder camera sees less of the low trail than of the clips' arm, which held the blade behind the head |
+| Dialogue | on | the player has no dialogue gestures; emotes drive NPCs only |
+
 ## 3. How to tune
 
 Tune everything live in Play mode on the assets.
@@ -317,6 +412,13 @@ Tune everything live in Play mode on the assets.
   - On `SwordAnimatorDriver`: `standingMaxSpeed` (m/s) decides what counts as standing, and
     `bodyReleaseSeconds` (s) how fast the legs hand back to locomotion. A shorter release pops; a
     longer one drags the lunge into the first stride.
+- **Carry pose:**
+  - On the `Weapon_*` asset: `carryWeight` (0-1) and `carryBlendSeconds` (s; the ruler 0.3).
+  - On the player's `WeaponCarryPose`: `fadeOutDuring` (the moves that drop it) and
+    `suppressSeconds` (0.1 s).
+  - The pose itself is a spec in `WeaponCarryPoseBuilder` (`RulerCarryStanding`,
+    `RulerCarryMoving`): fist position, blade and edge directions, floor margin. After
+    changing one, run **Tools ▸ Pickleball ▸ Rebuild Carry Poses**.
 - **Look:** the `presentation` block.
   - `trailColor`, `shakeAmount` and `shakeSeconds`, `fovPunch`.
   - `SwordEffects.lastHitShakeScale` boosts every chain's last hit.
@@ -443,6 +545,16 @@ That needs no code. New *behaviour* is small and contained:
    with the weapon's own step, or an empty step to decline it.
 5. Run the menu, then **Setup Sword Abilities** on each scene with a player, to bake swing twist.
 
+**Give a weapon a carry pose** (as the ruler did):
+1. Add a `Spec` to `WeaponCarryPoseBuilder` with the weapon's held prefab and clearance
+   profile, or two: standing over the idle and moving over the walk. Add a `BuildPose` line for
+   each in `WeaponCarrySetup.EnsureAssets` and `RebuildPoses`.
+2. Render it before you commit to it: `WeaponCarryPoseBuilder.Solve(spec, write: false, out r)`,
+   then `RenderSheet` over any base clips (game camera, side, front three-quarter). The log
+   gives the blade, edge and fist errors, the worst clearance gap and the lowest blade point.
+3. Set the weapon's `carryPose` and `carryPoseMoving` (or seed them in `EnsureAssets`), then run
+   **Setup Weapon Carry**. It adds the Carry state; the component needs no change.
+
 **Using a clip from the pack that isn't wired yet:** 44 of the 49 Mixamo sword clips are still
 Generic and must be re-imported as Humanoid with `WeaponSetup.ImportAttackClips`' settings first.
 The setup menu warns about this. Candidates from the clip audit (2026-10-26, measured from the
@@ -530,15 +642,20 @@ A boss drop can grant an ability early; its level is the fallback.
   moving it plays masked, and the legs keep running under the chop.
 - **Ruler: masked when moving.** Straightedge turns the hips 178° (as the compass's Attack2
   does), so swung while moving, that turn goes into the waist. Full body covers standing only.
-- **Ruler: idle and run carry.** The locomotion clips hold the sword for a short blade. With a
-  1 m ruler, `idle (3)`'s rest pose lays the blade diagonally across the face, the flourish
-  swings it through the head, and `run` carries it up behind the head, through the hair.
-  Recommendation, not implemented (it needs a pose clip, a masked right-arm layer and the equip
-  hook, mostly outside this work's files): an Attack-style masked **Carry** layer for the right
-  arm, weighted by the equipped weapon and faded out by `SwordAnimatorDriver` while a swing plays.
-  Use one pose of the blade resting on the right shoulder, edge up, or held low and trailing
-  behind, which a heavy buster blade suits better. The `sheath sword` clips are worth measuring
-  for a held-low frame.
+- **Ruler carry (2026-10-30): fixed by the Carry layer** (§2, "Carry pose").
+  - Verified in Play mode in ChibiSandbox: equip, idle, walk, run, stop, standing and running
+    jumps, landing, crouch, dash, skate, tether, the whole ground chain, a switch to the compass
+    mid-swing, and back. 0 errors, 0 warnings, and WeaponClearance at 0° while the carry showed.
+  - Still open: the ruler's swings snap back to the carry in the Attack layer's 0.08 s fade
+    (`SwordAnimatorDriver.layerFadeSpeed`, shared with the compass). A per-weapon release time
+    would let a heavy blade settle more slowly.
+  - Still open: the arm is chest-relative, so it still turns with the idle's flourish (chest
+    13-67°). The trail points 15-60° out over the idle cycle, and straight back at its most
+    turned frame, where it reads foreshortened from directly behind.
+  - Still open: in a hard landing the blade comes within about 9 cm of a flat floor, so on a
+    steep down-slope it may touch. Nothing lifts it for terrain.
+  - Crouch, skate, tether, dive and belly slide keep the clips' arm, which WeaponClearance
+    corrects as before (up to 36° in the tether hang).
 - **Ruler: Phase Shift's hang gap.** A Full Rotation hit can land as early as 0.2 s in, and
   Phase Shift's chop connects about 0.25 s after it starts. If the spin connects early, the gap
   can reach about 0.8 s, longer than `airHangPerHitSeconds` (0.6), so he may dip between them.
