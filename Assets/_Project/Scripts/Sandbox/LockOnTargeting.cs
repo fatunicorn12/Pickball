@@ -220,6 +220,26 @@ namespace Pickleball.Sandbox
         /// </summary>
         void MeasureTarget(Health target)
         {
+            if (!MeasureAim(target, out _aimOffset, out float radius, out float halfHeight))
+            {
+                TargetRadius = 0.6f;
+                Reticle.SetSize(0.6f);
+                return;
+            }
+            TargetRadius = radius;
+            Reticle.SetSize(Mathf.Max(0.5f, Mathf.Min(radius, halfHeight) * 0.9f));
+        }
+
+        /// <summary>
+        /// The aim point (as an offset from the target's root) and horizontal
+        /// radius, from the bounds of the target's visible body: every enabled
+        /// mesh renderer under its Health, except particles, lines, trails and
+        /// anything under a <see cref="LockOnIgnore"/>. False (and a default chest
+        /// offset of 1.2 m) when nothing is left to measure.
+        /// </summary>
+        public static bool MeasureAim(Health target, out Vector3 aimOffset, out float radius,
+                                      out float halfHeight)
+        {
             Vector3 root = target.transform.position;
             bool any = false;
             var b = new Bounds(root, Vector3.zero);
@@ -227,22 +247,24 @@ namespace Pickleball.Sandbox
             {
                 if (r is ParticleSystemRenderer || r is LineRenderer || r is TrailRenderer) continue;
                 if (!r.enabled || !r.gameObject.activeInHierarchy) continue;
+                if (r.GetComponentInParent<LockOnIgnore>() != null) continue;
                 if (any) b.Encapsulate(r.bounds);
                 else { b = r.bounds; any = true; }
             }
             if (!any)
             {
-                _aimOffset = Vector3.up * 1.2f;
-                TargetRadius = 0.6f;
-                Reticle.SetSize(0.6f);
-                return;
+                aimOffset = Vector3.up * 1.2f;
+                radius = 0.6f;
+                halfHeight = 0.6f;
+                return false;
             }
 
             // Chest: a little above the middle of the body.
             Vector3 aim = b.center + Vector3.up * (b.extents.y * 0.2f);
-            _aimOffset = aim - root;
-            TargetRadius = Mathf.Max(b.extents.x, b.extents.z);
-            Reticle.SetSize(Mathf.Max(0.5f, Mathf.Min(TargetRadius, b.extents.y) * 0.9f));
+            aimOffset = aim - root;
+            radius = Mathf.Max(b.extents.x, b.extents.z);
+            halfHeight = b.extents.y;
+            return true;
         }
 
         void ValidateLock()
