@@ -8,6 +8,9 @@ the air gets its own chain, and finishers with special effects cap both chains.
 - **Data:** `Assets/_Project/ScriptableObjects/Combat/`.
 - **VFX:** `Assets/_Project/Art/VFX/Sword/`.
 - **Setup:** `Scripts/Editor/SwordAbilitySetup.cs`, run from **Tools ▸ Pickleball ▸ Setup Sword Abilities**.
+  The ruler sword's moveset: `Scripts/Editor/RulerMovesetSetup.cs` (**Tools ▸ Pickleball ▸ Setup Ruler
+  Moveset**, also run by Setup Sword Abilities), with the clip audit and contact sheets in
+  `RulerMovesetAudit.cs` / `RulerMovesetPreview.cs`.
 - **Tests:** `Tests/EditMode/Combat/`.
 
 ## 1. Purpose and player-facing feel
@@ -52,6 +55,25 @@ so the whole slice unlocks inside one Newton fight (600 HP), with a +250 defeat 
 Only damage actually dealt pays, and each target pays out its worth (max health in damage plus one
 defeat bonus) **once per session**. So the refilling training dummy can't be farmed, and a Newton
 rematch pays nothing new.
+
+### The ruler sword
+
+The ruler is the heavy weapon: a one-handed buster blade, about a metre long. Its own combo
+(`Moveset_Ruler`) is **three big, slower swings that hit harder**:
+
+- **Ground:** *Straightedge*, a 270° flat cleave from his left round to his right; *Reflex
+  Angle*, a spinning diagonal cleave back from his right; and *Plumb Line*, a leap and down-chop
+  that lands a 2.6 m shock ring where the blade strikes.
+- **Air:** *Full Rotation*, one committed spin that sweeps all the way round.
+
+Each hit deals 2–2.4× the compass hit in the same slot, after a wind-up 1.5–3× as long, with
+more hitstop, shake and FOV punch. A mashed chain takes about 1.5× as long. Damage per second is
+almost the compass's (1.04× on the blade), so the trade is **commitment**: fewer, later, longer
+swings that are harder to cancel, not more damage. The numbers are in §3, "Ruler tuning".
+
+Learned abilities follow the weapon (§2, "Abilities per weapon"). With the ruler, + C is a third
+cleave at ruler pace, Phase Shift is an overhead chop, and Area Under the Curve is a slower slam
+with a 3.6 m Riemann ring. The ruler declines Unit Circle: its air spin is already the circle.
 
 ## 2. Architecture
 
@@ -121,7 +143,16 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
     moveset's default finisher plays; if there is none, the chain has no finisher.
   - **Opener:** applies on the first press only. The highest-priority qualifying opener replaces
     hit 1, and the chain continues from hit 2.
+  - **Weapon first:** every learned ability is passed through the moveset
+    (`SwordMoveset.StepFor`) before any of this. The weapon gives it a swing (its own or the
+    ability's) or declines it, and a declined ability takes no slot at all. See "Abilities per
+    weapon" below.
   - The resolver returns an invalid step once the chain is spent.
+- **`ComboTiming`:** how long a mashed chain lasts, each step's wind-up, hitstop and damage,
+  computed from the step assets by `SwingTimeline`'s chain-window rule (chain at the later of
+  `comboOpen` and `activeEnd`, after any burst, never past `comboClose`). `ComboTimingTests`
+  checks it against the real timeline at 30, 60 and 144 fps. The compass-vs-ruler tables and
+  `RulerMovesetAssetTests` use it.
 - **`ComboProgress`:** ground and air hit counters. Ground resets when the chain is dropped or you
   leave the ground; air resets only on landing.
 - **`SwingTimeline`:** the swing clock, with blade-on and blade-off, chain-window, burst and finish
@@ -179,8 +210,9 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
 - **`SwordAbilityDefinition`** (`Abilities/Ability_*.asset`): the role (Extender, Finisher or
   Opener), the track, the step, chain order, priority, a `ComboCondition` (lock-on and target
   distance) and the toast text.
-- **`SwordMoveset`** (`Moveset_Compass.asset`): the base ground chain plus its default finisher,
-  and the base air chain plus an optional finisher.
+- **`SwordMoveset`** (`Moveset_Compass.asset`, `Moveset_Ruler.asset`): the base ground chain
+  plus its default finisher, the base air chain plus an optional finisher, and the weapon's
+  **ability rules** (below).
 - **`LevelingConfig`** (`Leveling_Player.asset`):
   - the curve: max level, base XP, growth;
   - earning: Lemmas per HP, defeat bonus;
@@ -189,10 +221,41 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
   The table lives here, not on the ability, so a different table can teach the same abilities in
   a different order. This is the same idea as KH's Dream Sword / Shield / Rod choice.
 
+### Abilities per weapon
+Abilities belong to the player and survive a weapon swap, but their swings are timed for the
+compass. Before this rule, the resolver laid every learned ability onto whatever moveset was
+active, so the ruler would have got the compass's 3× + C in the middle of its heavy chain.
+
+Each `SwordMoveset` now says how learned abilities play with it:
+- **`abilitySteps`** rows (`AbilityStepOverride`): an ability and the weapon's own step for it,
+  played in the ability's place. An **empty step declines** the ability for this weapon.
+- **`acceptOtherAbilities`**: whether an ability with no row plays its own step. It defaults to
+  on, so `Moveset_Compass`, which has no rows, plays exactly as before.
+- **What stays the ability's:** role, track, chain order, priority and condition always come
+  from the ability, so the chain keeps its shape on every weapon. `ResolvedStep.Source` is still
+  the ability, so toasts and effects credit it.
+- **A declined ability takes no slot.** It doesn't lengthen the chain, and a declined finisher
+  or opener can't win its slot and then play nothing; the next qualifying one, or the default,
+  plays instead.
+- `MeleeCombat` needs no change: it already passes the moveset to the resolver, so an
+  `Equip(moveset)` swap takes the new rules from the next press.
+
+The ruler sets `acceptOtherAbilities` off and lists its rows:
+
+| Ability | With the ruler |
+|---|---|
+| + C | `Step_RulerPlusC`: the Straightedge cleave at 1.3×, gold, with the "+" pop |
+| Phase Shift | `Step_RulerPhaseShift`: an overhead down-chop (`Ruler_Chop`), violet |
+| Area Under the Curve | `Step_RulerAreaUnderCurve`: the slam at 1.0×, 44 damage, a 3.6 m Riemann ring |
+| Unit Circle | declined (empty row) |
+| anything new | declined until the ruler gets a row |
+
 ### Animator
 - Every step plays a state on the masked upper-body **Attack** layer (built by Setup Weapon).
 - `SwordAbilitySetup.WireAttackStatesFromAssets()` adds or updates one state per step asset (clip,
-  speed, foot IK off). It never removes states.
+  speed, foot IK off). It never removes states. It finds every step under
+  `ScriptableObjects/Combat`, subfolders included, so the ruler's `Steps/Ruler/` steps get their
+  `Ruler_*` states by the same path.
 - The five base step assets mirror `WeaponSetup.AttackClips`' clip and speed (`Attack1–4`,
   `AirAttack`), so the two scripts agree on those states. Hit windows live only on the step
   assets; `WeaponSetup` no longer carries any.
@@ -200,7 +263,7 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
   the ability states (see §5).
 - New states get their hip turn baked by `SwingTwistSetup.Bake`, which the setup menu calls.
   Without the bake they would bring back the "swatting flies" pose.
-- **Full body when standing** (Step_Slash3 only, so far):
+- **Full body when standing** (Step_Slash3, and the ruler's two cleaves, + C and both slams):
   - **The layer.** A step flagged `fullBodyWhenStanding` also gets a state on the full-body
     **AttackBody** layer. That layer sits at index 1: Override, no mask, weight 0, no IK pass,
     Foot IK on its states.
@@ -275,6 +338,68 @@ Tune everything live in Play mode on the assets.
   - In Play mode, use **PlayerLevel ▸ ⋮ ▸ Debug: Gain One Level** or **Debug: Max Level**.
   - To test a moveset without levelling, add abilities to `SwordAbilities.startingAbilities`.
 
+### Ruler tuning
+
+The ruler's steps are `ScriptableObjects/Combat/Steps/Ruler/Step_Ruler*`, tuned the same way as
+the compass's: speed and windows, not code. `RulerMovesetAssetTests` (category `Assets`) pins the
+brief against the compass. If you change the brief on purpose, update its ranges:
+- each ground hit deals 2–2.5× the compass hit in its slot;
+- the mashed ground chain is 1.4–1.7× as long;
+- blade damage per second is 0.95–1.2× the compass's;
+- every wind-up is at least 1.4× as long, and every hitstop at least 1.5× as long.
+
+**Measured values, from the step assets** (`RulerMovesetAudit.TimingTable`, written by
+`-executeMethod RulerMovesetSetup.BatchVerify -timingOut <file>`). Wind-up is the time until the
+blade goes live; "chain at" is when a buffered press starts the next step (for a finisher, when
+the chain ends). Hitstop is per connecting hit.
+
+| Slot | Step | Clip (take) | Speed | Duration s | Active | Wind-up s | Chain at s | Damage | Knockback m/s | Hitstop s | Shake | FOV ° | Lunge m/s | Ring |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **Compass** ground 1 | Step_Slash1 | slash (5) | 2.5 | 0.547 | 0.32–0.60 | 0.175 | 0.328 | 10 | 2 | 0.05 | 0.15 | 0 | 1.5 | |
+| ground 2 | Step_Slash2 | attack (3) | 2.5 | 0.693 | 0.35–0.62 | 0.243 | 0.430 | 12 | 2 | 0.05 | 0.15 | 0 | 1.2 | |
+| ground 3 | Step_Slash3 | slash | 2.4 | 0.625 | 0.34–0.62 | 0.213 | 0.388 | 14 | 3 | 0.07 | 0.15 | 0 | 1.8 | |
+| finisher | Step_Slash4 | slash (3) | 2.2 | 0.712 | 0.34–0.64 | 0.242 | 0.678 (end) | 20 (+12.8 up) | 8 | 0.10 | 0.25 | 0 | 0 | |
+| air | Step_AirSlash | attack (4) | 2.2 | 0.455 | 0.25–0.60 | 0.114 | 0.455 (end) | 12 | 3 | 0.05 | 0.15 | 0 | 0 | |
+| + C | Step_PlusC | slash (5) | 3.0 | 0.456 | 0.30–0.58 | 0.137 | 0.264 | 13 | 1.5 | 0.05 | 0.15 | 0 | 0 | |
+| Area Under the Curve | Step_AreaUnderCurve | slash (3) | 2.0 | 0.783 | 0.34–0.64 | 0.266 | 0.744 (end) | 20 | 8 | 0.10 | 0.30 | 4 | 4 | 3 m, 12 dmg |
+| **Ruler** ground 1 | Step_RulerCleave | Ruler_Cleave | 1.15 | 0.928 | 0.41–0.61 | 0.380 | 0.649 | 24 | 1.5 | 0.09 | 0.22 | 2 | 2.5 | |
+| ground 2 | Step_RulerBackCleave | Ruler_BackCleave | 1.05 | 0.857 | 0.42–0.81 | 0.360 | 0.720 | 27 | 2 | 0.09 | 0.26 | 2.5 | 1.5 | |
+| finisher | Step_RulerSlam | Ruler_Slam | 1.1 | 1.667 | 0.43–0.57 | 0.717 | 1.450 (end) | 40 | 9 | 0.16 | 0.45 | 6 | 5 | 2.6 m @0.53, 12 dmg, kb 6, up 3 |
+| air | Step_RulerSpin | Ruler_Spin | 1.9 | 0.825 | 0.24–0.93 | 0.198 | 0.825 (end) | 24 | 3 | 0.09 | 0.25 | 3 | 0 | |
+| + C | Step_RulerPlusC | Ruler_Cleave | 1.3 | 0.821 | 0.41–0.61 | 0.336 | 0.574 | 22 | 1.2 | 0.08 | 0.20 | 1.5 | 2 | |
+| Phase Shift | Step_RulerPhaseShift | Ruler_Chop | 1.3 | 0.692 | 0.36–0.54 | 0.249 | 0.402 | 26 | 2.5 | 0.09 | 0.25 | 2 | 0 | |
+| Area Under the Curve | Step_RulerAreaUnderCurve | Ruler_Slam | 1.0 | 1.833 | 0.43–0.57 | 0.788 | 1.595 (end) | 44 | 10 | 0.18 | 0.50 | 7 | 5.5 | 3.6 m @0.53, 16 dmg, kb 7, up 3 |
+
+| Chain (mashed, one target) | Hits | Time s | + hitstop s | Blade damage | + rings | DPS blade | DPS + rings |
+|---|---|---|---|---|---|---|---|
+| Compass ground, Lv 1 | 4 | 1.822 | 2.092 | 56 | 56 | 26.8 | 26.8 |
+| Ruler ground, Lv 1 | 3 | 2.819 | 3.259 | 91 | 103 | 27.9 | 31.6 |
+| Compass ground, all learned | 5 | 2.154 | 2.554 | 69 | 81 | 27.0 | 31.7 |
+| Ruler ground, all learned | 4 | 3.539 | 4.079 | 117 | 133 | 28.7 | 32.6 |
+| Compass air, Lv 1 | 1 | 0.455 | 0.505 | 12 | 12 | 23.8 | 23.8 |
+| Ruler air, Lv 1 | 1 | 0.825 | 0.915 | 24 | 24 | 26.2 | 26.2 |
+| Compass air, all learned | 3 | 1.283 | 1.533 | 42 | 52 | 27.4 | 33.9 |
+| Ruler air, all learned | 2 | 1.459 | 1.639 | 50 | 50 | 30.5 | 30.5 |
+
+**Why DPS stays close to 1×.** The ruler pays in commitment: a wind-up 1.5–3× as long before
+anything can be hit, chain windows that open only after the follow-through (`comboOpen` past
+`activeEnd`), a third fewer hits, and so fewer moments to react or cancel. A higher DPS on top of
+that would make the compass pointless; a lower one would make the ruler a trap. On one target it
+ends up 1.04× on the blade, 1.18× when the slam's ring also lands. The ring is the reward for
+finishing the whole chain, and it does more against a crowd.
+
+**Tuning notes**
+- **Knockback:** mid-chain hits stay at 1.5–2 m/s, under the "about 1.5" guidance plus a
+  little, so a sliding target stays in reach of the long arcs. The weight comes from hitstop,
+  shake and FOV punch. The finisher pushes 9 m/s and its ring 6 m/s outward with a 3 m/s pop.
+- **Lunges:** the cleaves step in (2.5 and 1.5 m/s). Straightedge's arc crosses his front low,
+  1.3 m out; at 1 m/s it fell short of the training dummy from where the compass's opener reaches
+  it (play test r1). The slams lunge 5–5.5 m/s, which carries the leap forward.
+- **Ring timing:** `burst.triggerAt` 0.53 is the slam's landing (source frame 0.535).
+- **Clips are cut by take, not by window.** The `Ruler_*` takes (`RulerMovesetSetup.Takes`) trim
+  the source FBXs as fractions of their default take; change the cut there and re-run the menu.
+  Windows are fractions of the trimmed take.
+
 ## 4. How to extend
 
 **Add a new slash (Combo Plus, air hit, finisher or opener) in four steps:**
@@ -301,6 +426,23 @@ That needs no code. New *behaviour* is small and contained:
     and `ChibiLocomotion.Movement`.
   - See open questions.
 
+**Give a new weapon its own moveset** (as the ruler did):
+1. **Measure, don't guess.** Import candidate clips (`RulerMovesetSetup.ImportCandidatesForAudit`
+   does the Generic ones; revert the .meta files you don't keep) and run
+   `RulerMovesetAudit.Batch` with `-auditOut <csv>`. Per clip it reports the strike's wind-up end,
+   peak and end (fractions), the number of strikes, the tip's peak speed, arc and direction, the
+   hip turn, the foot lift and how close the blade comes to the head. It also writes per-sample
+   traces. `RulerMovesetPreview.Batch` renders contact sheets (three views, 8 times, the active
+   window outlined in red).
+2. **Cut takes** out of FBXs that nothing else imports. WeaponSetup re-imports the compass's five
+   with their default take only, which deletes any extra take cut from them.
+3. **Seed steps and a moveset** from a setup class like `RulerMovesetSetup`: steps under
+   `Steps/<Weapon>/`, state names prefixed `<Weapon>_`. Flag a step `fullBodyWhenStanding` when
+   its clip turns the hips more than about 90° or moves the legs.
+4. **Decide the ability rules:** turn `acceptOtherAbilities` off, and list a row per ability
+   with the weapon's own step, or an empty step to decline it.
+5. Run the menu, then **Setup Sword Abilities** on each scene with a player, to bake swing twist.
+
 **Using a clip from the pack that isn't wired yet:** 44 of the 49 Mixamo sword clips are still
 Generic and must be re-imported as Humanoid with `WeaponSetup.ImportAttackClips`' settings first.
 The setup menu warns about this. Candidates from the clip audit (2026-10-26, measured from the
@@ -314,6 +456,22 @@ FBX, not eyeballed):
 | `slash (2)` | 3.53 s | four strikes in a whirlwind | whirlwind finisher (needs several active windows) |
 | `power up` / `casting` | 2.37 / 2.97 s | planted charge / sword plant | charge-up or Explosion wind-up |
 | `kick` | 1.20 s | right-foot kick | opener / guard break (full-body only) |
+
+**The ruler's takes** (measured 2026-10-29 on the chibi rig with a 0.9 m blade; fractions of the
+source take; "hips" is the largest hip turn, which decided the full-body flags):
+
+| Take | Source, cut | What it is | Strike (of the take) | Tip arc / peak speed at 1× | Hips | Feet |
+|---|---|---|---|---|---|---|
+| `Ruler_Cleave` | `attack (2)` 0.05–0.87 | 270° flat cleave, his left round to his right, tip 1.3 m out; the tail after 0.87 is a still hold | 0.42–0.60, peak 0.50 | 266°, 37 m/s | 180° | planted |
+| `Ruler_BackCleave` | `slash (2)` 0.06–0.31 | the whirl's first strike: a spin, then a diagonal cleave from his right down to his left | 0.42–0.81, peak 0.51 | 352°, 33 m/s | 133° | planted |
+| `Ruler_Spin` | `slash (2)` 0.06–0.50 | both strikes of the whirl, all the way round | 0.23–0.93 (two strikes) | 363°, 32 m/s | 133° | (air) |
+| `Ruler_Slam` | `attack` 0.12–0.90 | crouch, leap (hips +0.5 m, feet +0.8 m), blade raised behind the head, down-chop landing at 0.53, crouch hold | 0.43–0.56, peak 0.48 | 189°, 23 m/s | 63° | leap in the pose |
+| `Ruler_Chop` | `slash (4)` 0.42–0.80 | overhead, straight down-chop | 0.29–0.43, peak 0.38 | 156°, 30 m/s | 131° | (air) |
+
+Rejected: `casting` (a sword plant: the blade goes through the face and into the floor),
+`power up` and `kick` (short, low arcs), and `slash (2)` whole (one window can only hit a target
+once, so its second and third strikes would be for show). None of the pack's unused clips is a
+wide right-to-left cleave, so Reflex Angle uses the whirl's first strike.
 
 ### Ability roadmap (math-themed, from the brainstorm)
 
@@ -341,6 +499,53 @@ A boss drop can grant an ability early; its level is the fallback.
 | ∞ | **The Limit Does Not Exist** | Berserk Charge | ground chain never ends at low HP | Singularity |
 
 ## 5. Known limitations and open questions
+
+- **The ruler (2026-10-29): verified headless, not hand-played.**
+  - EditMode: the whole suite passed headless (1664 run, 1659 passed, 0 failed, 5 skipped), 112
+    of them in `Tests/EditMode/Combat/`. Re-running Setup Ruler Moveset changes nothing.
+  - Play mode: `RulerMovesetScenario` (a harness scenario kept out of this branch, because `Tests/PlayMode/` belongs to no one here; the copy is in the session scratchpad) put the ruler on the
+    TrainingStage player in memory, with a 0.78 m stand-in blade and swing twist baked locally.
+    Against the floor dummy, mashed:
+    - Hits landed 0.47–0.48 s into Straightedge (24), 0.48–0.50 s into Reflex Angle (27),
+      0.42 s into + C (22), and 0.82 s into Plumb Line (40) with the ring at 1.08 s (12).
+      Area Under the Curve: 0.90 s (44), ring 1.18 s (16). The air spin: 0.30 s (24).
+    - Each swing lasted 0.75 / 0.83 / 0.67 (+ C) / 1.71–1.90 s, against the compass's
+      0.38 / 0.48 / 0.48 / 0.80 s in the same run. These match `ComboTiming` within a frame
+      plus hitstop.
+    - The full-body layer reached 1.0 on every grounded ruler swing. The feet stayed within 1 cm
+      of the stance on both cleaves and + C; the slams lift them 0.79 m in the pose (the leap).
+    - With the first tuning, Straightedge (lunge 1 m/s) missed the dummy from the compass
+      opener's distance. Its lunge is now 2.5 m/s and it hits.
+  - Contact sheets (stand-in blade): big, readable arcs. Straightedge is the cleanest. Reflex
+    Angle's spin carries the blade across the face around n≈0.2, and the slam raises it past the
+    top of the head around n≈0.45.
+- **Ruler: blade near the head.** With a 0.9 m blade on the raw takes, the blade enters a sphere
+  fitted to the chibi's head for 5% of Straightedge's samples, 36% of Reflex Angle's, 21% of the
+  spin's, 39% of the slam's and 29% of the chop's. The compass's raw clips score 11–51%, so they
+  are no worse, but runtime `WeaponClearance` has to push the longer blade further. That depends
+  on the ruler's clearance profile (`RulerWeaponClearance.asset`, owned by the grip work). Check
+  Reflex Angle and the slam's raise once the real `Held_Ruler` is on the hand.
+- **Ruler: the slam's leap is pose only.** The controller stays on the ground while the pose
+  rises 0.8 m and lands, so it reads as a hop-slam, but nothing can pass under him. When he is
+  moving it plays masked, and the legs keep running under the chop.
+- **Ruler: masked when moving.** Straightedge turns the hips 178° (as the compass's Attack2
+  does), so swung while moving, that turn goes into the waist. Full body covers standing only.
+- **Ruler: idle and run carry.** The locomotion clips hold the sword for a short blade. With a
+  1 m ruler, `idle (3)`'s rest pose lays the blade diagonally across the face, the flourish
+  swings it through the head, and `run` carries it up behind the head, through the hair.
+  Recommendation, not implemented (it needs a pose clip, a masked right-arm layer and the equip
+  hook, mostly outside this work's files): an Attack-style masked **Carry** layer for the right
+  arm, weighted by the equipped weapon and faded out by `SwordAnimatorDriver` while a swing plays.
+  Use one pose of the blade resting on the right shoulder, edge up, or held low and trailing
+  behind, which a heavy buster blade suits better. The `sheath sword` clips are worth measuring
+  for a held-low frame.
+- **Ruler: Phase Shift's hang gap.** A Full Rotation hit can land as early as 0.2 s in, and
+  Phase Shift's chop connects about 0.25 s after it starts. If the spin connects early, the gap
+  can reach about 0.8 s, longer than `airHangPerHitSeconds` (0.6), so he may dip between them.
+- **Abilities learned mid-chain re-resolve the chain (existing behaviour, seen with the ruler).**
+  In play test r1, the slam's hits levelled the player up and taught + C. The chain became four
+  long, so a buffered press played the slam again at index 3. The compass does the same thing
+  if it levels up mid-finisher. A fix would freeze the learned set per chain in `MeleeCombat`.
 
 - **Not play-tested yet.**
   - Verified in a headless Unity 6000.3.5f2 on the branch's own worktree:

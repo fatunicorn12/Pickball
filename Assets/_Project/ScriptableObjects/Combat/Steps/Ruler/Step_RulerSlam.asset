@@ -1,0 +1,52 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87c60d1db83e442cb02323c572fdf585, type: 3}
+  m_Name: Step_RulerSlam
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Combat.ComboStepDefinition
+  displayName: Plumb Line
+  animatorState: Ruler_Slam
+  clip: {fileID: -203655887218126122, guid: 4555ec6034c36c84da2c025a8caff3a7, type: 3}
+  playbackSpeed: 1.1
+  fallbackDuration: 0.6
+  blendIn: 0.14
+  fullBodyWhenStanding: 1
+  windows:
+    activeStart: 0.43
+    activeEnd: 0.57
+    comboOpen: 0.74
+    comboClose: 0.87
+  hit:
+    damage: 40
+    knockback: 9
+    launchSpeed: 0
+    hitstop: 0.16
+  lungeSpeed: 5
+  hangInAir: 1
+  burst:
+    enabled: 1
+    triggerAt: 0.53
+    radius: 2.6
+    expandSeconds: 0.3
+    forwardOffset: 1
+    heightTolerance: 0.6
+    hit:
+      damage: 12
+      knockback: 6
+      launchSpeed: 3
+      hitstop: 0.1
+  presentation:
+    trailColor: {r: 1, g: 0.86, b: 0.35, a: 0.95}
+    shakeAmount: 0.45
+    shakeSeconds: 0.35
+    fovPunch: 6
+    hitEffect: {fileID: 0}
+    burstEffect: {fileID: 5867602606327102601, guid: 4159452dbacede441aef66d16ea5e5f5, type: 3}

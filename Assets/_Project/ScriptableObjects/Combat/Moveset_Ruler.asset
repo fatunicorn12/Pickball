@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f5e4bff739341c98ed5ca0b0f3ea068, type: 3}
+  m_Name: Moveset_Ruler
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Combat.SwordMoveset
+  groundChain:
+  - {fileID: 11400000, guid: 5964032f6de8c624192f667064ef3ce4, type: 2}
+  - {fileID: 11400000, guid: 7a45db22925be804db9f2cabfed2d030, type: 2}
+  groundFinisher: {fileID: 11400000, guid: ed58a8d6e05596a46bb2aa1d25610380, type: 2}
+  airChain:
+  - {fileID: 11400000, guid: 4a0f75d9f62ae3c4886dc5580dc9d9b6, type: 2}
+  airFinisher: {fileID: 0}
+  acceptOtherAbilities: 0
+  abilitySteps:
+  - ability: {fileID: 11400000, guid: 6801341ddc70ffc4ea434250a53cc967, type: 2}
+    step: {fileID: 11400000, guid: 4e93627e77f184843a6b880db1d606cf, type: 2}
+  - ability: {fileID: 11400000, guid: 54e2457f41ae8174caccff6ac73a56e9, type: 2}
+    step: {fileID: 11400000, guid: 4a3b3b12812a2594fb254c6d5e076dc6, type: 2}
+  - ability: {fileID: 11400000, guid: 308414b014a738345a79b470cab3e826, type: 2}
+    step: {fileID: 11400000, guid: b7c1a5a3ec4b0df46a1418eaaa56c617, type: 2}
+  - ability: {fileID: 11400000, guid: b8a48e7a3c4595e409bbdf4b17d8ca6e, type: 2}
+    step: {fileID: 0}

@@ -26,6 +26,13 @@ namespace Pickleball.Sandbox.Combat
     /// carries on from the second.</item>
     /// </list>
     ///
+    /// Every learned ability is first passed through the moveset
+    /// (<see cref="SwordMoveset.StepFor"/>): the weapon decides which swing the
+    /// ability plays with it, or that it plays none. An ability the weapon declines
+    /// is skipped entirely — it neither lengthens the chain nor wins a finisher or
+    /// opener slot — so a heavy weapon is never handed another blade's fast swing.
+    /// Placement (role, track, order, priority, condition) is always the ability's.
+    ///
     /// Once the chain is spent the resolver returns an invalid step: the ground
     /// chain restarts after the swing ends, the air chain only after landing.
     ///
@@ -35,7 +42,19 @@ namespace Pickleball.Sandbox.Combat
     public sealed class ComboResolver
     {
         readonly List<ResolvedStep> _sequence = new();
-        readonly List<SwordAbilityDefinition> _extenders = new();
+        readonly List<Placed> _extenders = new();
+
+        /// <summary>A learned ability with the swing the moveset gave it.</summary>
+        readonly struct Placed
+        {
+            public readonly SwordAbilityDefinition Ability;
+            public readonly ComboStepDefinition Step;
+            public Placed(SwordAbilityDefinition ability, ComboStepDefinition step)
+            {
+                Ability = ability;
+                Step = step;
+            }
+        }
 
         /// <summary>The step the next press plays, or an invalid step if the
         /// chain has nothing more to give in this context.</summary>
@@ -67,44 +86,47 @@ namespace Pickleball.Sandbox.Combat
                 if (chain[i] != null)
                     _sequence.Add(new ResolvedStep(chain[i], ComboRole.Regular, track, _sequence.Count, false));
 
-            CollectExtenders(track, unlocked);
+            CollectExtenders(track, moveset, unlocked);
             for (int i = 0; i < _extenders.Count; i++)
                 _sequence.Add(new ResolvedStep(_extenders[i].Step, ComboRole.Extender, track,
-                                               _sequence.Count, false, _extenders[i]));
+                                               _sequence.Count, false, _extenders[i].Ability));
 
-            var finisher = BestQualifying(ComboRole.Finisher, context, unlocked);
-            if (finisher != null)
+            var finisher = BestQualifying(ComboRole.Finisher, context, moveset, unlocked);
+            if (finisher.Ability != null)
                 _sequence.Add(new ResolvedStep(finisher.Step, ComboRole.Finisher, track,
-                                               _sequence.Count, false, finisher));
+                                               _sequence.Count, false, finisher.Ability));
             else if (moveset.DefaultFinisherFor(track) is { } fallback)
                 _sequence.Add(new ResolvedStep(fallback, ComboRole.Finisher, track, _sequence.Count, false));
 
             if (context.HitsInChain == 0 && _sequence.Count > 0)
             {
-                var opener = BestQualifying(ComboRole.Opener, context, unlocked);
-                if (opener != null)
-                    _sequence[0] = new ResolvedStep(opener.Step, ComboRole.Opener, track, 0, false, opener);
+                var opener = BestQualifying(ComboRole.Opener, context, moveset, unlocked);
+                if (opener.Ability != null)
+                    _sequence[0] = new ResolvedStep(opener.Step, ComboRole.Opener, track, 0, false, opener.Ability);
             }
 
             if (_sequence.Count > 0) _sequence[^1] = _sequence[^1].AsLast();
             return _sequence;
         }
 
-        /// <summary>Unlocked extenders on <paramref name="track"/>, sorted by
-        /// chain order then name. Insertion sort: the list is a handful long and
-        /// this keeps the press allocation-free and the order stable.</summary>
-        void CollectExtenders(ComboTrack track, IReadOnlyList<SwordAbilityDefinition> unlocked)
+        /// <summary>Unlocked extenders on <paramref name="track"/> that the moveset
+        /// gives a swing, sorted by chain order then name. Insertion sort: the list
+        /// is a handful long and this keeps the press allocation-free and the order
+        /// stable.</summary>
+        void CollectExtenders(ComboTrack track, SwordMoveset moveset, IReadOnlyList<SwordAbilityDefinition> unlocked)
         {
             _extenders.Clear();
             if (unlocked == null) return;
             for (int i = 0; i < unlocked.Count; i++)
             {
                 var a = unlocked[i];
-                if (a == null || a.Step == null || a.Role != ComboRole.Extender || a.Track != track) continue;
+                if (a == null || a.Role != ComboRole.Extender || a.Track != track) continue;
+                var step = moveset.StepFor(a);
+                if (step == null) continue;
 
                 int at = _extenders.Count;
-                while (at > 0 && ComesBefore(a, _extenders[at - 1])) at--;
-                _extenders.Insert(at, a);
+                while (at > 0 && ComesBefore(a, _extenders[at - 1].Ability)) at--;
+                _extenders.Insert(at, new Placed(a, step));
             }
         }
 
@@ -115,19 +137,22 @@ namespace Pickleball.Sandbox.Combat
         }
 
         /// <summary>The highest-priority unlocked ability of <paramref name="role"/>
-        /// on the context's track whose condition holds. Ties go to the one
-        /// unlocked first, which only matters if two are authored identically.</summary>
-        static SwordAbilityDefinition BestQualifying(ComboRole role, in ComboContext context,
-                                                     IReadOnlyList<SwordAbilityDefinition> unlocked)
+        /// on the context's track whose condition holds and that the moveset gives a
+        /// swing, with that swing. Ties go to the one unlocked first, which only
+        /// matters if two are authored identically. Default (no ability) if none.</summary>
+        static Placed BestQualifying(ComboRole role, in ComboContext context, SwordMoveset moveset,
+                                     IReadOnlyList<SwordAbilityDefinition> unlocked)
         {
-            if (unlocked == null) return null;
-            SwordAbilityDefinition best = null;
+            if (unlocked == null) return default;
+            Placed best = default;
             for (int i = 0; i < unlocked.Count; i++)
             {
                 var a = unlocked[i];
-                if (a == null || a.Step == null || a.Role != role || a.Track != context.Track) continue;
+                if (a == null || a.Role != role || a.Track != context.Track) continue;
                 if (!a.Condition.IsMetBy(context)) continue;
-                if (best == null || a.Priority > best.Priority) best = a;
+                if (best.Ability != null && a.Priority <= best.Ability.Priority) continue;
+                var step = moveset.StepFor(a);
+                if (step != null) best = new Placed(a, step);
             }
             return best;
         }
