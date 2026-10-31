@@ -6,7 +6,7 @@ namespace Pickleball.Sandbox.Magic
 {
     /// <summary>
     /// Reads the spell selector's buttons and nothing else: the number keys pick
-    /// a slot directly, and two pad buttons cycle while aiming.
+    /// a slot directly, and two pad buttons and the mouse wheel cycle while aiming.
     /// <see cref="SpellSelector"/> reads it every frame and does the selecting.
     ///
     /// <b>Bindings, chosen so that none is taken from anything else</b> (every
@@ -19,6 +19,11 @@ namespace Pickleball.Sandbox.Magic
     ///    the orbit camera already ignores while aiming, so while aim is held
     ///    they belong to nobody. The binding paths are serialized: switching to
     ///    left / right is an Inspector change once Mount has moved.
+    ///  - Mouse wheel <b>while aiming</b>: down is next, up is previous. Outside
+    ///    aim the wheel is the orbit camera's zoom, which already ignores it while
+    ///    aiming, so the same aim-only rule as the pad makes it nobody else's.
+    ///    One step per wheel event at most every <c>scrollStepSeconds</c>, so a
+    ///    smooth-scrolling trackpad's stream of tiny deltas doesn't spin the row.
     ///
     /// <b>Presses are latched from the actions' performed callbacks</b>, the
     /// same way <see cref="SpellInput"/> latches fire (playtest M-1): a press
@@ -61,30 +66,47 @@ namespace Pickleball.Sandbox.Magic
                  "otherwise). Turn off only for bindings nothing else reads.")]
         [SerializeField] private bool padCycleOnlyWhileAiming = true;
 
+        [Tooltip("The mouse wheel cycles spells: down = next, up = previous. Only while aiming " +
+                 "(outside aim the wheel zooms the camera).")]
+        [SerializeField] private bool scrollWheel = true;
+
+        [Tooltip("Swap the wheel's direction: up = next.")]
+        [SerializeField] private bool invertScroll;
+
+        [Tooltip("Shortest time between two wheel steps, in seconds (unscaled). Tames trackpads " +
+                 "and fast spins; one notch is always one step.")]
+        [Range(0f, 0.5f)] [SerializeField] private float scrollStepSeconds = 0.08f;
+
         InputAction[] _slots;
         Action<InputAction.CallbackContext>[] _slotHandlers;
-        InputAction _previous, _next;
+        InputAction _previous, _next, _scroll;
         IAimState _aim;
         bool _aimResolved;
 
         // Latched presses, cleared in LateUpdate (see the class summary).
         int _slotLatched = -1;
         bool _nextLatched, _previousLatched;
+        int _scrollLatched;
+        float _lastScrollStepAt = float.NegativeInfinity;
 
         /// <summary>The slot (0-based) whose key went down since the last frame's
         /// LateUpdate; -1 for none. The lowest wins if several did.</summary>
         public int SlotPressedThisFrame => Blocked ? -1 : _slotLatched;
 
         /// <summary>+1 for next, -1 for previous, 0 for neither (or both), from
-        /// presses since the last frame's LateUpdate. 0 while not aiming when the
-        /// cycle is aim-only.</summary>
+        /// pad presses and wheel steps since the last frame's LateUpdate. Each
+        /// source is dropped while not aiming when it is aim-only (the wheel
+        /// always is).</summary>
         public int CycleThisFrame
         {
             get
             {
                 if (Blocked) return 0;
-                if (padCycleOnlyWhileAiming && Aim != null && !Aim.IsAiming) return 0;
-                return (_nextLatched ? 1 : 0) - (_previousLatched ? 1 : 0);
+                bool notAiming = Aim != null && !Aim.IsAiming;
+                int pad = padCycleOnlyWhileAiming && notAiming
+                    ? 0 : (_nextLatched ? 1 : 0) - (_previousLatched ? 1 : 0);
+                int wheel = notAiming ? 0 : _scrollLatched;
+                return Math.Sign(pad + wheel);
             }
         }
 
@@ -126,6 +148,13 @@ namespace Pickleball.Sandbox.Magic
             }
             _previous = Button("SpellPrevious", padPreviousBinding, OnPrevious);
             _next = Button("SpellNext", padNextBinding, OnNext);
+            if (scrollWheel)
+            {
+                // PassThrough: every wheel event, not just changes of value.
+                _scroll = new InputAction("SpellScroll", InputActionType.PassThrough, "<Mouse>/scroll/y");
+                _scroll.performed += OnScrollPerformed;
+                _scroll.Enable();
+            }
         }
 
         void OnDisable()
@@ -144,8 +173,10 @@ namespace Pickleball.Sandbox.Magic
             }
             if (_previous != null) _previous.performed -= OnPrevious;
             if (_next != null) _next.performed -= OnNext;
+            if (_scroll != null) _scroll.performed -= OnScrollPerformed;
             Dispose(ref _previous);
             Dispose(ref _next);
+            Dispose(ref _scroll);
         }
 
         void LateUpdate() => ClearLatches();
@@ -163,11 +194,26 @@ namespace Pickleball.Sandbox.Magic
 
         void OnPrevious(InputAction.CallbackContext _) => _previousLatched = true;
 
+        void OnScrollPerformed(InputAction.CallbackContext context) => OnScroll(context.ReadValue<float>());
+
+        /// <summary>One wheel event of <paramref name="delta"/> (positive = up).
+        /// Latches a step unless one was taken under <c>scrollStepSeconds</c> ago.</summary>
+        void OnScroll(float delta)
+        {
+            if (Mathf.Abs(delta) < 0.01f) return;
+            float now = Time.unscaledTime;
+            if (now - _lastScrollStepAt < scrollStepSeconds) return;
+            _lastScrollStepAt = now;
+            int step = delta < 0f ? 1 : -1;     // wheel down = next
+            _scrollLatched = invertScroll ? -step : step;
+        }
+
         void ClearLatches()
         {
             _slotLatched = -1;
             _nextLatched = false;
             _previousLatched = false;
+            _scrollLatched = 0;
         }
 
         static InputAction Button(string name, string path, Action<InputAction.CallbackContext> onPerformed)

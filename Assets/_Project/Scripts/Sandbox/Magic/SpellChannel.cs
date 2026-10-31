@@ -21,6 +21,15 @@ namespace Pickleball.Sandbox.Magic
     /// well, a push, anything) cancels as <see cref="ChannelStopReason.Displaced"/>.
     /// Damage interrupts only by <see cref="HitInterrupts"/>: a real hit does, a
     /// sub-threshold tick does not.
+    ///
+    /// <b>Settling.</b> A heal pressed mid-run used to cancel on the player's own
+    /// deceleration: the stick was still held for a frame or two, and the body
+    /// slid past the drift limit while braking. For the first
+    /// <see cref="SettleSeconds"/> of a channel, movement input and drift are
+    /// ignored (the caster brakes the body to a stop and roots it), and the
+    /// drift origin is re-taken where the body came to rest. Movement input
+    /// does not refuse the start either when there is a settle window: the
+    /// body is about to be stopped anyway.
     /// "You were hit" says more than "you let go" when both happened because
     /// the hit knocked the stick.
     ///
@@ -68,6 +77,13 @@ namespace Pickleball.Sandbox.Magic
         /// <see cref="Origin"/> before the channel cancels as
         /// <see cref="ChannelStopReason.Displaced"/>; 0 or less = no limit.</summary>
         public float MaxDrift { get; private set; }
+
+        /// <summary>Seconds at the start of the running channel during which movement
+        /// input and drift do not cancel it; 0 = none.</summary>
+        public float SettleSeconds { get; private set; }
+
+        /// <summary>True while the running channel is still in its settle window.</summary>
+        public bool IsSettling => IsChanneling && Elapsed + Epsilon < SettleSeconds;
 
         /// <summary>
         /// The one damage rule for a channel: a hit of at least
@@ -120,12 +136,18 @@ namespace Pickleball.Sandbox.Magic
         /// <param name="maxDrift">Metres the body may be moved from where it stands
         /// now (<see cref="ChannelSignals.Position"/>) before the channel cancels as
         /// <see cref="ChannelStopReason.Displaced"/>; 0 = no limit.</param>
+        /// <param name="settleSeconds">Seconds at the start during which movement
+        /// input and drift are ignored; while positive, movement input does not
+        /// refuse the start. 0 = none.</param>
         public ChannelStopReason TryBegin(in ChannelSignals signals, float duration, int cost,
-                                          ChannelManaTiming timing, Mana mana, float maxDrift = 0f)
+                                          ChannelManaTiming timing, Mana mana, float maxDrift = 0f,
+                                          float settleSeconds = 0f)
         {
             if (IsChanneling) return ChannelStopReason.None;
 
-            var reason = Interruption(signals);
+            var judged = signals;
+            if (settleSeconds > 0f) judged.Moving = false;
+            var reason = Interruption(judged);
             if (reason == ChannelStopReason.None && signals.HealthUnavailable) reason = ChannelStopReason.Unavailable;
             if (reason == ChannelStopReason.None && signals.HealthFull) reason = ChannelStopReason.FullHealth;
 
@@ -155,6 +177,7 @@ namespace Pickleball.Sandbox.Magic
             Paid = paid || cost <= 0;
             Origin = signals.Position;
             MaxDrift = maxDrift;
+            SettleSeconds = Mathf.Max(0f, settleSeconds);
             LastStop = ChannelStopReason.None;
             return ChannelStopReason.None;
         }
@@ -170,10 +193,16 @@ namespace Pickleball.Sandbox.Magic
         {
             if (!IsChanneling) return ChannelStep.Idle;
 
+            // Settling: the stick and the braking slide are the player stopping,
+            // not the player leaving.
+            bool settling = IsSettling;
+            var judged = signals;
+            if (settling) judged.Moving = false;
+
             // Displacement ranks after movement input ("Moved" says more when the
             // player walked) and before letting go.
-            var reason = Interruption(signals);
-            if ((reason == ChannelStopReason.None || reason == ChannelStopReason.Released)
+            var reason = Interruption(judged);
+            if (!settling && (reason == ChannelStopReason.None || reason == ChannelStopReason.Released)
                 && Drifted(Origin, signals.Position, MaxDrift))
                 reason = ChannelStopReason.Displaced;
             if (reason != ChannelStopReason.None)
@@ -183,6 +212,8 @@ namespace Pickleball.Sandbox.Magic
             }
 
             if (dt > 0f) Elapsed += dt;
+            // Drift is measured from where he came to rest, not where he pressed.
+            if (settling && !IsSettling) Origin = signals.Position;
             if (Elapsed + Epsilon < Duration) return ChannelStep.Channeling;
 
             if (!Paid)

@@ -231,6 +231,13 @@ namespace Pickleball.Sandbox.Magic
                  "0 = no limit.")]
         [Min(0f)] [SerializeField] private float channelMaxDrift = 0.4f;
 
+        [Tooltip("Seconds at the start of a channel during which movement input and drift " +
+                 "don't cancel it. The body is braked to a stop and held still for the whole " +
+                 "channel; this window is time to let go of the stick, so a heal pressed " +
+                 "mid-run starts instead of cancelling on the slowdown. After it, pushing the " +
+                 "stick cancels. 0 = cancel on any movement from the first frame.")]
+        [Range(0f, 1f)] [SerializeField] private float channelSettleSeconds = 0.35f;
+
         [Tooltip("Smallest single hit that interrupts a channel, in health points. Smaller " +
                  "ticks (a gravity well's core, a burn, a beam's chip) never do; a real hit " +
                  "does. 0 = any damage interrupts.")]
@@ -394,6 +401,9 @@ namespace Pickleball.Sandbox.Magic
         /// <summary>Metres a channel's body may be carried from its start before it
         /// cancels; 0 = no limit.</summary>
         public float ChannelMaxDrift => channelMaxDrift;
+
+        /// <summary>Seconds at a channel's start during which movement and drift are ignored.</summary>
+        public float ChannelSettleSeconds => channelSettleSeconds;
 
         /// <summary>Smallest single hit that interrupts a channel; 0 = any damage.</summary>
         public float ChannelInterruptDamage => channelInterruptDamage;

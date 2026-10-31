@@ -30,6 +30,7 @@ namespace Pickleball.Tests.Magic
         static void PressNext(SpellSelectInput input) => Call(input, "OnNext", default(InputAction.CallbackContext));
         static void PressPrevious(SpellSelectInput input) => Call(input, "OnPrevious", default(InputAction.CallbackContext));
         static void EndFrame(SpellSelectInput input) => Call(input, "LateUpdate");
+        static void Scroll(SpellSelectInput input, float delta) => Call(input, "OnScroll", delta);
 
         [Test]
         public void SlotPress_IsSeenAllFrame_ThenClearedByLateUpdate()
@@ -108,11 +109,77 @@ namespace Pickleball.Tests.Magic
         }
 
         [Test]
+        public void WheelDown_IsNext_WheelUp_IsPrevious()
+        {
+            var input = NewComponent<SpellSelectInput>();
+            SetFloat(input, "scrollStepSeconds", 0f);
+            Scroll(input, -120f);
+            Assert.That(input.CycleThisFrame, Is.EqualTo(1));
+            EndFrame(input);
+            Assert.That(input.CycleThisFrame, Is.EqualTo(0), "cleared by LateUpdate");
+            Scroll(input, 1f);
+            Assert.That(input.CycleThisFrame, Is.EqualTo(-1));
+        }
+
+        [Test]
+        public void Wheel_Inverted_SwapsDirection()
+        {
+            var input = NewComponent<SpellSelectInput>();
+            SetBool(input, "invertScroll", true);
+            Scroll(input, 120f);
+            Assert.That(input.CycleThisFrame, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Wheel_StepsAreSpacedByTheStepTime()
+        {
+            var input = NewComponent<SpellSelectInput>();
+            SetFloat(input, "scrollStepSeconds", 0.08f);
+            Scroll(input, -120f);
+            EndFrame(input);
+            // EditMode time stands still: a second event is inside the step gap.
+            Scroll(input, -120f);
+            Assert.That(input.CycleThisFrame, Is.EqualTo(0), "a trackpad's stream must not spin the row");
+        }
+
+        [Test]
+        public void Wheel_TinyDelta_IsIgnored()
+        {
+            var input = NewComponent<SpellSelectInput>();
+            Scroll(input, 0.001f);
+            Assert.That(input.CycleThisFrame, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Wheel_WhileNotAiming_IsDropped_EvenWithThePadCycleAlwaysOn()
+        {
+            var input = NewComponent<SpellSelectInput>();
+            var caster = input.gameObject.AddComponent<SpellCaster>();
+            SetReference(input, "aimSource", caster);
+            SetBool(input, "padCycleOnlyWhileAiming", false);
+
+            Scroll(input, -120f);
+            Assert.That(input.CycleThisFrame, Is.EqualTo(0), "outside aim the wheel zooms the camera");
+        }
+
+        [Test]
+        public void Wheel_WhileSpellBlocked_IsDropped()
+        {
+            var input = NewComponent<SpellSelectInput>();
+            var gate = input.gameObject.AddComponent<PlayerInputGate>();
+            SetReference(input, "inputGate", gate);
+            gate.Claim(_dialogue, InputBlock.All);
+            Scroll(input, -120f);
+            Assert.That(input.CycleThisFrame, Is.EqualTo(0));
+        }
+
+        [Test]
         public void Disable_ClearsLatchedPresses()
         {
             var input = NewComponent<SpellSelectInput>();
             PressSlot(input, 1);
             PressNext(input);
+            Scroll(input, -120f);
             Call(input, "OnDisable");
             Assert.That(input.SlotPressedThisFrame, Is.EqualTo(-1));
             Assert.That(input.CycleThisFrame, Is.EqualTo(0));

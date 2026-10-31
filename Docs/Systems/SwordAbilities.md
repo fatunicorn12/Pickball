@@ -34,14 +34,18 @@ How the chains behave:
   chain, and landing starts the ground chain fresh.
 - **One jump buys one air combo.** The air chain refills only when you land, which is what makes
   Air Combo Plus worth learning.
-- **Air hits that land hold you up.** Each air hit that connects (blade or ring) turns your gravity
-  off for `airHangPerHitSeconds` (0.6 s), and your vertical speed eases to rest. Each hit refreshes
-  the hold, so you float as long as you keep connecting.
-  - Swinging at nothing doesn't float you.
-  - You drop as soon as you stop landing hits, the air chain ends, you land, or a dash or tether
-    takes over.
-  - The longest float is bounded by the air chain (one per airtime), so every air hit you learn
-    lengthens it.
+- **Every air swing holds you up, hit or miss** (the Kingdom Hearts II / Castle Crashers model).
+  Each air step has a hover window (`airHoverStart`-`airHoverEnd`, the whole swing by default).
+  Inside it your gravity is off; a fall is caught as the window opens, and rising speed eases off.
+  KH2 does this with a "no gravity" frame range on each air attack animation, and Castle Crashers'
+  air strings float you with nothing to hit. The old rule (only landed hits bought hang time)
+  dropped you mid-combo on every whiff.
+  - You drop between swings if you stop pressing, when the air chain ends, when you land, or when a
+    dash or tether takes over.
+  - The longest float is bounded by the air chain (one per airtime, refilled only on landing, as in
+    KH2), so every air hit you learn lengthens it. Mashing can't stall forever.
+  - An air step may also set your vertical speed once as it starts (`airLift`): above zero is a
+    Castle Crashers uppercut hop, below zero a slam (with `hangInAir` off). The shipped steps use 0.
 - **The ground chain resets whenever a swing ends without a follow-up press.**
 - **Mashing never cuts a hit short.** A buffered press chains at the step's `comboOpen`, but never
   before its blade window has closed or its finisher ring has gone out.
@@ -182,12 +186,13 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
   - That one answer picks the chain for a press and drops the ground chain, so a one-frame flicker
     on a slope does neither.
   - Landing counts at once.
-- **`AirHang`** (in `CombatFeel.cs`): the hang timer.
-  - `MeleeCombat.Deal` calls `HitLanded` for every connecting hit from an air-track step that has
-    `hangInAir`. Hits refresh the timer rather than stack, so a ring striking three targets buys one
-    hit's worth.
-  - Each frame, `Tick` holds while the timer runs and an air-track swing is playing (hitstop
-    included). It clears the timer when the chain ends, you land, or an exclusive move owns the body.
+- **`AirHang`** (in `CombatFeel.cs`): the per-swing hover.
+  - Each frame, `Tick` holds while an air-track swing with `hangInAir` is playing and its progress
+    is inside the step's hover window (hitstop included: a frozen swing stays in its window). It
+    stops when the chain ends, you land, or an exclusive move owns the body. Hits play no part.
+  - `JustOpened` marks the frame a hold begins (not when one hovering swing chains into the next).
+    `MeleeCombat` then catches a fall with `ICombatImpulses.SetVerticalVelocity(0)`, unless the step
+    has its own `airLift`, which `Begin` set as the swing started.
   - `MeleeCombat` passes the answer to `ICombatImpulses.SuspendGravity`. The adapter forwards it to
     `MovementMotor.SuspendGravity`, which eases vertical speed to rest at
     `MovementConfig.anchorHaltRate` and clears the hang on landing.
@@ -397,9 +402,11 @@ Tune everything live in Play mode on the assets.
 - **Air hang:**
   - Untick `hangInAir` on a step that should drop instead, such as a plunge finisher. The flag is
     ignored on the ground chain.
-  - `MeleeCombat.airHangPerHitSeconds` (s) is how long one landed air hit holds you up. It has to
-    cover the gap to the next hit in the chain, about 0.45–0.6 s with the shipped steps, or a mashed
-    chain dips between hits. Shorter rewards only a tight combo; 0 turns the hang off.
+  - `airHoverStart` / `airHoverEnd` (fractions of the swing) set each air step's hover window.
+    Ending it early (say 0.7) lets a finisher sink through its follow-through, like a KH2 finisher.
+  - `airLift` (m/s, once at the swing's start): above 0 hops you up; the hover then eases it to rest,
+    rising v²/50 m at the default halt rate (5 m/s ≈ 0.5 m). Below 0 slams you down; untick
+    `hangInAir` with it or the hover stops the slam.
   - How quickly a rising or falling jump is stopped is `MovementConfig.anchorHaltRate` (m/s²),
     shared with the Gravity Anchor.
 - **Finisher rings:** the `burst` block.

@@ -27,9 +27,11 @@ namespace Pickleball.Sandbox.Magic
     ///  - <b>Zone</b> (Freeze Zone): a <see cref="FreezeZone"/> on the ground under
     ///    the crosshair.
     ///  - <b>Channel</b> (Heal): fire held, standing still, for the spell's time;
-    ///    the rules are <see cref="SpellChannel"/>'s. Any movement input, a jump,
-    ///    a dash or tether (or any busy move), a real hit (not a chip tick), being
-    ///    carried off the spot, letting go, or the gate blocking Spell cancels it.
+    ///    the rules are <see cref="SpellChannel"/>'s. Starting it brakes the body
+    ///    to a stop and roots it (movement lock) for the channel. A jump, a dash
+    ///    or tether (or any busy move), a real hit (not a chip tick), letting go,
+    ///    or the gate blocking Spell cancels it at any time; movement input and
+    ///    being carried off the spot only once the spell's settle window is over.
     /// Strike and Zone need floor under the crosshair (<see cref="AimPlaceable"/>);
     /// without it a press is refused before any mana is spent. It never claims the input gate: the
     ///    player stays free to move, and moving is how they cancel.
@@ -503,7 +505,7 @@ namespace Pickleball.Sandbox.Magic
                 if (mana == null) WarnNoMana();
 
                 var refused = Channel.TryBegin(signals, spell.ChannelSeconds, Cost, spell.ChannelManaTiming, mana,
-                                               spell.ChannelMaxDrift);
+                                               spell.ChannelMaxDrift, spell.ChannelSettleSeconds);
                 if (refused != ChannelStopReason.None)
                 {
                     ChannelCancelled?.Invoke(spell, refused);
@@ -511,11 +513,16 @@ namespace Pickleball.Sandbox.Magic
                     return;
                 }
                 _channelSpell = spell;
+                // Pressed mid-run: stop on the spot rather than slide out of the heal.
+                if (locomotion != null) locomotion.StopPlanar();
+                HoldStill(dt);
                 ChannelStarted?.Invoke(spell);
                 return;
             }
 
-            switch (Channel.Tick(dt, signals, mana))
+            var step = Channel.Tick(dt, signals, mana);
+            if (step == ChannelStep.Channeling) HoldStill(dt);
+            switch (step)
             {
                 case ChannelStep.Completed:
                     _lastHealed = 0f;
@@ -534,6 +541,15 @@ namespace Pickleball.Sandbox.Magic
                     if (Channel.LastStop == ChannelStopReason.NoMana) CastFailed?.Invoke();
                     break;
             }
+        }
+
+        /// <summary>Roots the body for another frame of the channel: no drive, so the
+        /// stick held through the settle window doesn't walk him off the spot. Two
+        /// frames' worth, like the air hang, so the lock survives whichever of motor
+        /// and caster ticks first; it lapses a frame after the channel ends.</summary>
+        void HoldStill(float dt)
+        {
+            if (locomotion != null) locomotion.LockMovement(2f * Mathf.Max(dt, 1f / 120f));
         }
 
         /// <summary>This frame's channel rules: fire held, movement input (read,

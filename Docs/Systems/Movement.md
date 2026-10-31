@@ -294,7 +294,10 @@ All of these keep their exact contracts:
 - `Velocity` and `AppliedFieldVelocity` (FluxionBeam; the `Velocity − AppliedFieldVelocity`
   identity is tested)
 - `AddMomentum` (Apple knockback)
-- `AddAcceleration` and `LockMovement` (GravityWell)
+- `AddAcceleration` and `LockMovement` (GravityWell; also SpellCaster, which roots the body each
+  frame of a Heal channel)
+- `StopPlanar()` (SpellCaster, once as a Heal channel starts): drive speed and momentum to zero;
+  field drift and vertical speed untouched
 - `IsMovementLocked`, `IsAnchored`
 
 `SetCombatFacingSource(IFacingSource)` lets combat supply where a swing must face. Whenever it
@@ -308,9 +311,9 @@ Two vertical levers were added for combat (sword abilities):
 - `SetVerticalVelocity(m/s)`: set once per event. Upward speed lifts him off the ground.
 - `SuspendGravity(seconds)`: an air hang, refreshed rather than accumulated. It ends on landing.
 
-Both are public on `ChibiLocomotion` and `MovementMotor`, but **combat can't reach them yet**.
-`Combat/ChibiMovementAdapter` (`ICombatImpulses`) forwards only `AddMomentum` and
-`LockMovement`. Forwarding the levers there is sword-abilities' planned follow-up.
+Both are public on `ChibiLocomotion` and `MovementMotor`, and `Combat/ChibiMovementAdapter`
+(`ICombatImpulses`) forwards both: every air swing's hover window, the fall-catch as it opens, and
+an air step's `airLift` (see SwordAbilities.md).
 
 The serialized field `lockOn` keeps its name, because `LockOnSetup` writes it by string. New code
 should hold an `IMovementState` (`ChibiLocomotion.Movement`) instead.

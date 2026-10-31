@@ -31,7 +31,9 @@ namespace Pickleball.Sandbox
     ///    one-off lunge impulse, never a per-frame push: a per-frame lunge once
     ///    slid the player metres per swing. The one per-frame request is the
     ///    air hang (<see cref="AirHang"/>), which only holds gravity off, and
-    ///    only while air hits keep landing.
+    ///    only through each air swing's own hover window, hit or miss (the
+    ///    KH2 / Castle Crashers model). An air step may also set his vertical
+    ///    speed once as it starts (a lift or a slam).
     /// </summary>
     public class MeleeCombat : MonoBehaviour
     {
@@ -81,12 +83,6 @@ namespace Pickleball.Sandbox
         [Tooltip("Seconds after a swing ends during which a press still continues " +
                  "the chain instead of restarting it. R1: 0.9 s-apart clicks always reset.")]
         [Range(0f, 1f)] [SerializeField] private float chainGraceSeconds = 0.45f;
-
-        [Tooltip("Seconds one landed air hit holds the player up. Each hit refreshes it, " +
-                 "so he floats while he keeps connecting and drops once he stops; the end " +
-                 "of the air chain drops him regardless. Longer forgives slow chains; " +
-                 "shorter means only a tight combo stays up. 0 = no hang.")]
-        [Range(0f, 1.5f)] [SerializeField] private float airHangPerHitSeconds = 0.6f;
 
         [Header("Lunge homing")]
         [Tooltip("A locked target within this many metres bends the lunge toward it. 0 = off.")]
@@ -353,14 +349,25 @@ namespace Pickleball.Sandbox
             if (justLeft) _progress.LeaveGround();
         }
 
-        /// <summary>Air-combo hang time: keep the player up while his air hits
-        /// keep landing; see <see cref="AirHang"/>. Runs ahead of the hitstop
-        /// return so a connecting air hit doesn't drop him mid-freeze.</summary>
+        /// <summary>Air-combo hang time: hold the player up through the playing
+        /// air swing's hover window, hit or miss; see <see cref="AirHang"/>.
+        /// Runs ahead of the hitstop return so a connecting air hit doesn't drop
+        /// him mid-freeze (the frozen swing stays inside its window).</summary>
         void HoldInAir(float dt)
         {
-            bool airSwing = IsAttacking && _current.Track == ComboTrack.Air;
-            float hold = _airHang.Tick(airSwing, IsGroundedRaw, !CanSwing, dt);
-            if (hold > 0f && _impulses != null) _impulses.SuspendGravity(hold);
+            bool hovering = IsAttacking && _current.Track == ComboTrack.Air && _current.Step.HangInAir;
+            var step = hovering ? _current.Step : null;
+            float hold = _airHang.Tick(hovering, SwingProgress,
+                                       step != null ? step.AirHoverStart : 0f,
+                                       step != null ? step.AirHoverEnd : 0f,
+                                       IsGroundedRaw, !CanSwing, dt);
+            if (_impulses == null) return;
+            // Catch a fall as the hover opens. A step with its own lift has set
+            // his vertical speed already, and the measured velocity may still be
+            // last frame's fall.
+            if (_airHang.JustOpened && step.AirLift == 0f && _movement != null && _movement.Velocity.y < 0f)
+                _impulses.SetVerticalVelocity(0f);
+            if (hold > 0f) _impulses.SuspendGravity(hold);
         }
 
         bool IsGroundedRaw => _movement == null || _movement.IsGrounded;
@@ -424,6 +431,10 @@ namespace Pickleball.Sandbox
                 }
                 if (speed > 0f) _impulses.AddImpulse(dir * speed);
             }
+
+            // An air step's uppercut hop or slam, once. Hit or miss, like the hover.
+            if (placement.Track == ComboTrack.Air && step.AirLift != 0f && _impulses != null)
+                _impulses.SetVerticalVelocity(step.AirLift);
 
             SwingStarted?.Invoke(placement);
         }
@@ -497,9 +508,6 @@ namespace Pickleball.Sandbox
             target.TakeHit(hit.Damage, point, push, hit.IsLauncher);
             // Max, not sum: a ring sweeping three targets in one frame is one impact.
             _hitstopLeft = Mathf.Max(_hitstopLeft, hit.Hitstop);
-            // Connecting in the air is what buys hang time; a whiff buys none.
-            if (placement.Track == ComboTrack.Air && placement.Step.HangInAir)
-                _airHang.HitLanded(airHangPerHitSeconds);
             HitLanded?.Invoke(report);
         }
 
