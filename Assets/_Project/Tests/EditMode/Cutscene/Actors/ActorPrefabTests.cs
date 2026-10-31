@@ -35,6 +35,18 @@ namespace Pickleball.Tests.Cutscene.Actors
             Assert.NotNull(a.Voice, "no voice source");
             Assert.AreEqual(0f, a.Voice.spatialBlend, "cutscene voices are 2D");
             Assert.NotNull(a.GetComponent<MouthFlap>(), "no mouth flap");
+            // Painted mouths: MouthSwap reads the flap and drives the face; the nod is off.
+            var swap = a.GetComponent<MouthSwap>();
+            Assert.NotNull(swap, "no mouth swap");
+            Assert.NotNull(swap.Config, "mouth swap has no config");
+            Assert.AreSame(a.GetComponent<MouthFlap>(), swap.Flap);
+            Assert.AreSame(a.GetComponentInChildren<EyeSwap>(), swap.Face);
+            Assert.IsTrue(swap.Face.HasMouths, "the face has no painted mouths");
+            Assert.AreEqual(3, swap.Face.MouthShapes);
+            for (int eye = 0; eye <= swap.Face.VariantCount; eye++)
+                for (int mouth = 1; mouth < 3; mouth++)
+                    Assert.NotNull(swap.Face.FaceTexture(eye, mouth), $"no face texture for eye {eye}, mouth {mouth}");
+            Assert.IsFalse(a.GetComponent<MouthFlap>().Nods, "the head nod should be off with painted mouths");
             Assert.NotNull(a.GetComponentInChildren<Animator>().avatar, "no avatar");
             // Head above eyes' ground and feet on the root's ground.
             Assert.AreEqual(a.transform.position.y, a.GetAnchor(CutsceneAnchor.Feet).position.y, 1e-4f);
@@ -66,6 +78,50 @@ namespace Pickleball.Tests.Cutscene.Actors
             Assert.AreEqual(ActorRigger.RotorBoneName, rotor.Rotor.name);
             Assert.AreEqual("Drop", a.GetComponentInChildren<EyeSwap>().VariantName(1));
             Assert.That(a.Height, Is.InRange(0.9f, 1.3f), "Birdy is about chin height on MC");
+        }
+
+        [Test]
+        public void FaceTextures_AllExistAndImportLikeTheirOriginal()
+        {
+            foreach (FacePaintSets.Set set in FacePaintSets.All)
+            {
+                var original = (TextureImporter)AssetImporter.GetAtPath(set.Original);
+                Assert.NotNull(original, set.Original);
+                foreach (string path in set.All)
+                {
+                    Assert.NotNull(AssetDatabase.LoadAssetAtPath<Texture2D>(path), $"{path} missing");
+                    var imp = (TextureImporter)AssetImporter.GetAtPath(path);
+                    Assert.AreEqual(original.maxTextureSize, imp.maxTextureSize, path);
+                    Assert.AreEqual(original.sRGBTexture, imp.sRGBTexture, path);
+                    Assert.AreEqual(original.GetPlatformTextureSettings("Android").maxTextureSize,
+                        imp.GetPlatformTextureSettings("Android").maxTextureSize, path);
+                }
+            }
+        }
+
+        [Test]
+        public void ModelWithoutPaintedFace_FallsBackToTheNod()
+        {
+            // The swap-a-model path: a humanoid whose texture has no painted set gets no EyeSwap
+            // or MouthSwap, and the flap nods the head.
+            var euler = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Art/Tripo/Characters/Euler/Euler.fbx");
+            Assume.That(euler, Is.Not.Null, "Euler.fbx not in this checkout");
+            var root = new GameObject("SwapSlot");
+            try
+            {
+                var model = (GameObject)Object.Instantiate(euler, root.transform);
+                var animator = model.GetComponent<Animator>();
+                var flapConfig = AssetDatabase.LoadAssetAtPath<MouthFlapConfig>(CutsceneActorPaths.McMouthFlap);
+                string line = ActorRigger.Rig(root, animator, CutsceneSpeakers.MC, flapConfig, null, null, Vector3.zero, Quaternion.identity);
+                StringAssert.Contains("head-nod", line);
+                Assert.IsNull(model.GetComponent<EyeSwap>());
+                Assert.IsNull(root.GetComponent<MouthSwap>());
+                Assert.IsTrue(root.GetComponent<MouthFlap>().Nods);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
         }
 
         [Test]

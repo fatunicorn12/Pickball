@@ -54,7 +54,7 @@ Cutscenes** runs the whole chain:
 | 2 | 2 Build Sets | `CutsceneSetBuilder.Build` | builds the five set prefabs and their meshes, materials and look assets (`VoidLook`, `VoidPostFX` and `ResolveConfig` are created once, then left for tuning) |
 | 3 | 3 Import Script | `CutsceneScriptImporter.Import` | parses the script into `OpeningScript.asset` and binds audio by line id |
 | 4 | 4 Build Opening Scene | `OpeningSceneBuilder.Build` | regenerates `Scenes/Cutscene/OpeningPlayable.unity` from a fresh copy of AcademyGreybox: hides the greybox's floating region signs, places the sets from `CutsceneSetList`, places Birdy and the propeller, runs 4b, adds the `Cutscene` root, builds the six timelines, wires the player, the sequence and the pickup, and saves |
-| 4b | 4b Rig Scene Actors | `CutsceneActorSetup.RigSceneActors` | gives the gameplay Player a `CutsceneActor` (id `MC`) and re-rigs every placed actor: anchors, measured H/HB, voice, mouth flap, eye swap |
+| 4b | 4b Rig Scene Actors | `CutsceneActorSetup.RigSceneActors` | gives the gameplay Player a `CutsceneActor` (id `MC`) and re-rigs every placed actor: anchors, measured H/HB, voice, mouth flap, eye swap, painted mouths (`MouthSwap`; the head-nod flap when the model has none) |
 | — | Rebuild Timelines | `OpeningSceneBuilder.RebuildTimelines` | rebuilds the six timelines on the existing scene (after 4b or new audio) and saves |
 | 5 | 5 Build Subtitle HUD | `SubtitleHudBuilder` | the `CutsceneHUD` canvas, `SubtitleView` and skip indicator |
 | 6 | 6 Build Cameras | `CutsceneCameraBuilder` | merges `OpeningShotSeed` into `OpeningShotTable.asset`, builds 52 shot cameras and the camera tracks, adds the CinemachineBrain to the hand-off's cutscene-only list, saves |
@@ -236,7 +236,8 @@ per shot), and `OpeningShotSeed` holds the camera rigs.
 | Void whiteness | `ResolveConfig.voidWhite` (1 = old grey; at least ~5.3 after vignette = white) | live |
 | Void bloom, white balance, vignette | `VoidPostFX.asset` | live |
 | Construction lines, colour flood | `ResolveConfig.asset` | live |
-| Mouth flap | `MC_MouthFlap.asset`, `Birdy_MouthFlap.asset` | live |
+| Mouth flap (voice level, attack/release, fallback nod) | `MC_MouthFlap.asset`, `Birdy_MouthFlap.asset` | live |
+| Painted mouth thresholds, hysteresis, hold | `MC_MouthSwap.asset`, `Birdy_MouthSwap.asset` | live |
 | Rotor speeds | `PropellerConfig.asset` | live |
 
 After any change that moves a camera or an actor, run **Validate Framing**. Flags must be 0. It
@@ -362,10 +363,10 @@ plays on any Humanoid with no retarget step. These parts do **not** carry over t
   hidden while the loose prop flies.
 - **The loose `Propeller` mesh.** It is extracted from `Birdy.fbx` (`tripo_part_1`, in the Rotor
   frame) by `Tools/Blender/cutscene_extract_propeller.py`.
-- **`EyeSwap` variants.** `Chibi_EyesClosed`, `Birdy_EyesDrop` are painted on each model's own
-  texture atlas.
-- **The mouth flap.** It nods the head bone, or a humanoid Jaw if the rig has one; it needs
-  re-tuning per model.
+- **`EyeSwap` faces (eye variants and the painted mouths).** All six per character are painted on
+  that model's own atlas, so a replacement gets none: no `EyeSwap`, no `MouthSwap`.
+- **Lip-sync.** Without painted mouths the mouth flap falls back to nodding the head bone (or a
+  humanoid Jaw); it needs re-tuning per model.
 - **`B_HardLanding`.** It is baked from a Mixamo clip imported with its own Mixamo avatar (Copy
   From Other Avatar can't apply). The baked copy is a muscle clip and does retarget; only
   re-baking it needs that source.

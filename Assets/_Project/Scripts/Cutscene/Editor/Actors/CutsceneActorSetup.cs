@@ -47,6 +47,9 @@ namespace Pickleball.Cutscene.Editor.Actors
                 so.FindProperty("attackRate").floatValue = 40f;
                 so.ApplyModifiedPropertiesWithoutUndo();
             });
+            // Read by ActorRigger by path when it wires MouthSwap; seeded before the prefabs.
+            SeedAsset<MouthSwapConfig>(CutsceneActorPaths.McMouthSwap);
+            SeedAsset<MouthSwapConfig>(CutsceneActorPaths.BirdyMouthSwap);
 
             var mcClips = BakeAll(McClips.All(), report);
             var birdyClips = BakeAll(BirdyClips.All(), report);
@@ -380,8 +383,9 @@ namespace Pickleball.Cutscene.Editor.Actors
 
         private static void ConfigureEyeTextures(StringBuilder report)
         {
-            CopyTextureSettings(CutsceneActorPaths.ChibiBaseColor, CutsceneActorPaths.ChibiEyesClosed, report);
-            CopyTextureSettings(CutsceneActorPaths.BirdyBaseColor, CutsceneActorPaths.BirdyEyesDrop, report);
+            foreach (FacePaintSets.Set set in FacePaintSets.All)
+                foreach (string painted in set.All)
+                    CopyTextureSettings(set.Original, painted, report);
         }
 
         /// <summary>The painted copy imports exactly like the original, so swapping never changes resolution or colour space.</summary>

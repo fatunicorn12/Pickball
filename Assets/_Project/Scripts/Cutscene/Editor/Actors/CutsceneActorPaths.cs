@@ -85,6 +85,12 @@ namespace Pickleball.Cutscene.Editor.Actors
         /// <summary>Birdy's mouth flap tunables (seeded once).</summary>
         public const string BirdyMouthFlap = DataDir + "/Birdy_MouthFlap.asset";
 
+        /// <summary>MC's painted-mouth thresholds (seeded once).</summary>
+        public const string McMouthSwap = DataDir + "/MC_MouthSwap.asset";
+
+        /// <summary>Birdy's painted-beak thresholds (seeded once).</summary>
+        public const string BirdyMouthSwap = DataDir + "/Birdy_MouthSwap.asset";
+
         /// <summary>The approved shot list (verbs are read from its §6 by the coverage test).</summary>
         public const string ShotList = "Docs/Story/OpeningCutscenes_ShotList.md";
     }

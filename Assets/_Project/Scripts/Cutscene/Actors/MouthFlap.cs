@@ -15,8 +15,9 @@ namespace Pickleball.Cutscene.Actors
     /// actor's right axis on top of the pose the Animator wrote this frame (additive).</para>
     /// <para>If nothing re-poses the bone between frames (no Animator, or it's culled), the
     /// previous frame's nod is taken off first, so the nod never accumulates.</para>
-    /// <para>Off, and costing nothing, while the source isn't playing: no audio exists yet, so
-    /// until it does this is inert.</para>
+    /// <para>Off, and costing nothing, while the source isn't playing.</para>
+    /// <para>On a model with painted mouths the nod is off (<c>nod</c>) and this only measures:
+    /// <see cref="MouthSwap"/> reads <see cref="Openness"/> and shows a mouth shape instead.</para>
     /// </remarks>
     [DisallowMultipleComponent]
     public sealed class MouthFlap : MonoBehaviour
@@ -35,6 +36,11 @@ namespace Pickleball.Cutscene.Actors
                  "whatever the bone's own axes are.")]
         [SerializeField] private Transform facing;
 
+        [Tooltip("Nod the bone with the voice. The setup menu turns this off when the model has " +
+                 "painted mouths (MouthSwap shows them instead); it stays on as the fallback for a " +
+                 "model without them. The openness is measured either way.")]
+        [SerializeField] private bool nod = true;
+
         private float[] _samples;
         private float _openness;
         private bool _wrote;
@@ -50,13 +56,24 @@ namespace Pickleball.Cutscene.Actors
         /// <summary>The bone that nods.</summary>
         public Transform Bone => bone;
 
+        /// <summary>True when the flap nods the bone (the fallback for a model without painted mouths).</summary>
+        public bool Nods => nod;
+
         /// <summary>Setup-menu entry point.</summary>
         public void Configure(MouthFlapConfig flapConfig, AudioSource voiceSource, Transform nodBone, Transform facingRoot)
+        {
+            Configure(flapConfig, voiceSource, nodBone, facingRoot, true);
+        }
+
+        /// <summary>Setup-menu entry point, choosing whether the flap nods.</summary>
+        public void Configure(MouthFlapConfig flapConfig, AudioSource voiceSource, Transform nodBone, Transform facingRoot,
+            bool nodWithVoice)
         {
             config = flapConfig;
             voice = voiceSource;
             bone = nodBone;
             facing = facingRoot;
+            nod = nodWithVoice;
         }
 
         private void OnEnable()
@@ -83,10 +100,10 @@ namespace Pickleball.Cutscene.Actors
         /// </summary>
         public void Apply(float rms, float dt)
         {
-            if (config == null || bone == null) return;
+            if (config == null) return;
 
             // Undo last frame's nod if nothing re-posed the bone since.
-            if (_wrote && bone.localRotation == _lastWritten) bone.localRotation = _lastBase;
+            if (_wrote && bone != null && bone.localRotation == _lastWritten) bone.localRotation = _lastBase;
             _wrote = false;
 
             float target = MouthFlapMath.Openness(rms, config.NoiseFloor, config.FullOpen);
@@ -96,6 +113,8 @@ namespace Pickleball.Cutscene.Actors
                 _openness = 0f;
                 return;
             }
+            // With painted mouths (MouthSwap) the openness is all that's wanted: no nod.
+            if (!nod || bone == null) return;
 
             float angle = MouthFlapMath.Angle(_openness, config.MaxAngle);
             Vector3 axis = facing != null ? facing.right : transform.right;

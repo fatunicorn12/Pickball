@@ -264,6 +264,7 @@ GameObject:
   - component: {fileID: 7745131706218353520}
   - component: {fileID: 2253448658874949232}
   - component: {fileID: 2686091474409142077}
+  - component: {fileID: 8747603082368698283}
   m_Layer: 0
   m_Name: Birdy_Actor
   m_TagString: Untagged
@@ -328,6 +329,22 @@ MonoBehaviour:
   voice: {fileID: 266258458190436216}
   bone: {fileID: 5779670156342348115}
   facing: {fileID: 7745131706218353520}
+  nod: 0
+--- !u!114 &8747603082368698283
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8513999124674023732}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99631ad74f4c5fa4dbb9ef8b37340ebb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pickleball.Cutscene::Pickleball.Cutscene.Actors.MouthSwap
+  config: {fileID: 11400000, guid: 67b9f976e2ff4704080e489d24ce03d4, type: 2}
+  flap: {fileID: 2686091474409142077}
+  face: {fileID: 4945111193368057152}
 --- !u!1 &8635365455278505920
 GameObject:
   m_ObjectHideFlags: 0
@@ -557,6 +574,14 @@ MonoBehaviour:
   - Drop
   variantTextures:
   - {fileID: 2800000, guid: 5233c4a6b77f5f64686066e6d9eaf7bd, type: 3}
+  mouthShapes: 3
+  faceTextures:
+  - {fileID: 0}
+  - {fileID: 2800000, guid: 192ae3d921dc26a47956f2417f207ed7, type: 3}
+  - {fileID: 2800000, guid: 34f57480e725a4a46b132b315e446e5f, type: 3}
+  - {fileID: 0}
+  - {fileID: 2800000, guid: bcbcf3c0c55ecee4983c4b6e536ec604, type: 3}
+  - {fileID: 2800000, guid: 2a6b4f5094926a04fb5f50f66ef6358d, type: 3}
   variant: 0
 --- !u!114 &9121034481359701464
 MonoBehaviour:
