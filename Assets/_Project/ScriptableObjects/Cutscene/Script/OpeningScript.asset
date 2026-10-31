@@ -1,0 +1,848 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 72e6c5d27854f7a43ac9976f66063431, type: 3}
+  m_Name: OpeningScript
+  m_EditorClassIdentifier: Pickleball.Cutscene::Pickleball.Cutscene.Script.CutsceneScript
+  sourcePath: Docs/Story/OpeningCutscenes.md
+  scenes:
+  - number: 1
+    title: The white void
+    notes:
+    - Pure white. No sound. MC is lying on his back in nothing at all. He sits up
+      slowly.
+    - 'The white swells, then resolves into the courtyard: green lawn, columns, gold
+      sunlight.'
+  - number: 2
+    title: The lost propeller
+    notes:
+    - A sputtering whine overhead. Birdy drops out of the sky, bounces off the lawn
+      and scrambles in circles, patting his empty helmet.
+    - 'Gameplay: the platforming section to find the propeller.'
+  - number: 3
+    title: '"You''re the one"'
+    notes:
+    - MC holds out the propeller. Birdy snatches it, clicks it onto his helmet, and
+      it whirs to life. He lifts a few inches off the ground, wobbling.
+  - number: 4
+    title: The path
+    notes:
+    - Jump cut. MC walks a winding stone path between olive trees. Birdy putters
+      along beside him at shoulder height.
+  - number: 5
+    title: The Academy
+    notes:
+    - 'The path crests a rise. The whole Academy opens up below: columns, domes,
+      terracotta roofs, the gnomon at the centre.'
+    - MC stares at him. Birdy beams back. The jokes end here.
+  - number: 6
+    title: The world coming apart
+    notes:
+    - 'MC''s eyes drift north. Past the Academy, the edge of the world is fraying:
+      marble breaks into floating shapes, then ink lines, then blank white. Above
+      it hangs a perfectly black sun.'
+    - Birdy's rotor whirs and he zips ahead down the path. MC looks at the black
+      sun a moment longer, then follows. Gameplay begins.
+  lines:
+  - id: OC_S1_01
+    scene: 1
+    speaker: MC
+    rawText: '[groggy] ...Okay. White void. I''m dead. Probably dead.'
+    displayText: ...Okay. White void. I'm dead. Probably dead.
+    tags:
+    - text: groggy
+      position: 0
+    cards:
+    - ...Okay. White void. I'm dead. Probably dead.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S1_02
+    scene: 1
+    speaker: MC
+    rawText: '[pause] Wait.'
+    displayText: Wait.
+    tags:
+    - text: pause
+      position: 0
+    cards:
+    - Wait.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S1_03
+    scene: 1
+    speaker: MC
+    rawText: '[slowly, then building] Wait wait wait. White void. No body pain. Weird
+      calm feeling.'
+    displayText: Wait wait wait. White void. No body pain. Weird calm feeling.
+    tags:
+    - text: slowly, then building
+      position: 0
+    cards:
+    - Wait wait wait. White void. No body pain. Weird calm feeling.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S1_04
+    scene: 1
+    speaker: MC
+    rawText: '[excited, shouting] Fuck yeah. Isekai!'
+    displayText: Fuck yeah. Isekai!
+    tags:
+    - text: excited, shouting
+      position: 0
+    cards:
+    - Fuck yeah. Isekai!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S1_05
+    scene: 1
+    speaker: MC
+    rawText: '[eager] Okay. Okay okay okay. Status screen. Status! Open status.'
+    displayText: Okay. Okay okay okay. Status screen. Status! Open status.
+    tags:
+    - text: eager
+      position: 0
+    cards:
+    - Okay. Okay okay okay. Status screen. Status! Open status.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S1_06
+    scene: 1
+    speaker: MC
+    rawText: '[pause] ...Menu?'
+    displayText: ...Menu?
+    tags:
+    - text: pause
+      position: 0
+    cards:
+    - ...Menu?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S1_07
+    scene: 1
+    speaker: MC
+    rawText: '[flat] Cool. No menu. Hard mode. Love that for me.'
+    displayText: Cool. No menu. Hard mode. Love that for me.
+    tags:
+    - text: flat
+      position: 0
+    cards:
+    - Cool. No menu. Hard mode. Love that for me.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S2_01
+    scene: 2
+    speaker: BIRDY
+    rawText: '[panicked] No no no no no. Where''d it go? Where did it go?!'
+    displayText: No no no no no. Where'd it go? Where did it go?!
+    tags:
+    - text: panicked
+      position: 0
+    cards:
+    - No no no no no. Where'd it go? Where did it go?!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S2_02
+    scene: 2
+    speaker: BIRDY
+    rawText: '[panicked] My propeller! It was right on my head! It''s always on my
+      head!'
+    displayText: My propeller! It was right on my head! It's always on my head!
+    tags:
+    - text: panicked
+      position: 0
+    cards:
+    - My propeller! It was right on my head! It's always on my head!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S2_03
+    scene: 2
+    speaker: MC
+    rawText: '[quietly, to himself] ...What is this guy on about?'
+    displayText: ...What is this guy on about?
+    tags:
+    - text: quietly, to himself
+      position: 0
+    cards:
+    - ...What is this guy on about?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S2_04
+    scene: 2
+    speaker: BIRDY
+    rawText: '[spotting MC, suddenly very close] You! Hi! Sorry. Hi. Emergency.'
+    displayText: You! Hi! Sorry. Hi. Emergency.
+    tags:
+    - text: spotting mc, suddenly very close
+      position: 0
+    cards:
+    - You! Hi! Sorry. Hi. Emergency.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S2_05
+    scene: 2
+    speaker: BIRDY
+    rawText: '[pleading] Can you help me find my propeller? Please? I can''t fly
+      without it. I can barely stand without it.'
+    displayText: Can you help me find my propeller? Please? I can't fly without it.
+      I can barely stand without it.
+    tags:
+    - text: pleading
+      position: 0
+    cards:
+    - Can you help me find my propeller? Please?
+    - I can't fly without it. I can barely stand without it.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S2_06
+    scene: 2
+    speaker: MC
+    rawText: '[sighs] Okay, okay. I''ll help. Where''d you last have it?'
+    displayText: Okay, okay. I'll help. Where'd you last have it?
+    tags:
+    - text: sighs
+      position: 0
+    cards:
+    - Okay, okay. I'll help. Where'd you last have it?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S2_07
+    scene: 2
+    speaker: BIRDY
+    rawText: '[certain] The sky! I had it in the sky!'
+    displayText: The sky! I had it in the sky!
+    tags:
+    - text: certain
+      position: 0
+    cards:
+    - The sky! I had it in the sky!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S2_08
+    scene: 2
+    speaker: MC
+    rawText: '[flat] That''s... not helpful.'
+    displayText: That's... not helpful.
+    tags:
+    - text: flat
+      position: 0
+    cards:
+    - That's... not helpful.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S2_09
+    scene: 2
+    speaker: BIRDY
+    rawText: '[eager] It''s round! It spins! It''s about this big! [pause] I can''t
+      show you how big. My wings are very small.'
+    displayText: It's round! It spins! It's about this big! I can't show you how
+      big. My wings are very small.
+    tags:
+    - text: eager
+      position: 0
+    - text: pause
+      position: 43
+    cards:
+    - It's round! It spins! It's about this big!
+    - I can't show you how big. My wings are very small.
+    midHoldAfterCard: 0
+    audio: {fileID: 0}
+  - id: OC_S2_10
+    scene: 2
+    speaker: MC
+    rawText: '[sighs] Great. First quest. Fetch a bird his hat.'
+    displayText: Great. First quest. Fetch a bird his hat.
+    tags:
+    - text: sighs
+      position: 0
+    cards:
+    - Great. First quest. Fetch a bird his hat.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_01
+    scene: 3
+    speaker: BIRDY
+    rawText: '[gasps, overjoyed] My propeller! You found it! Oh, thank you, thank
+      you, thank you!'
+    displayText: My propeller! You found it! Oh, thank you, thank you, thank you!
+    tags:
+    - text: gasps, overjoyed
+      position: 0
+    cards:
+    - My propeller! You found it! Oh, thank you, thank you, thank you!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_02
+    scene: 3
+    speaker: BIRDY
+    rawText: '[proud] And we''re back, baby. One perfect circle, spinning very, very
+      fast.'
+    displayText: And we're back, baby. One perfect circle, spinning very, very fast.
+    tags:
+    - text: proud
+      position: 0
+    cards:
+    - And we're back, baby. One perfect circle, spinning very, very fast.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_03
+    scene: 3
+    speaker: BIRDY
+    rawText: '[pause, staring at MC''s back] Wait.'
+    displayText: Wait.
+    tags:
+    - text: pause, staring at mc's back
+      position: 0
+    cards:
+    - Wait.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_04
+    scene: 3
+    speaker: BIRDY
+    rawText: '[slowly] Wait wait wait. That sword. That''s a compass-blade.'
+    displayText: Wait wait wait. That sword. That's a compass-blade.
+    tags:
+    - text: slowly
+      position: 0
+    cards:
+    - Wait wait wait. That sword. That's a compass-blade.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_05
+    scene: 3
+    speaker: BIRDY
+    rawText: '[awed whisper] You''re... you''re the one. Aren''t you?'
+    displayText: You're... you're the one. Aren't you?
+    tags:
+    - text: awed whisper
+      position: 0
+    cards:
+    - You're... you're the one. Aren't you?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_06
+    scene: 3
+    speaker: MC
+    rawText: '[confused] The one what?'
+    displayText: The one what?
+    tags:
+    - text: confused
+      position: 0
+    cards:
+    - The one what?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_07
+    scene: 3
+    speaker: BIRDY
+    rawText: '[excited] The Guardian! I''ve been looking everywhere for you!'
+    displayText: The Guardian! I've been looking everywhere for you!
+    tags:
+    - text: excited
+      position: 0
+    cards:
+    - The Guardian! I've been looking everywhere for you!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_08
+    scene: 3
+    speaker: BIRDY
+    rawText: '[pause] Well, not everywhere. I crashed. But before I crashed, I was
+      definitely looking.'
+    displayText: Well, not everywhere. I crashed. But before I crashed, I was definitely
+      looking.
+    tags:
+    - text: pause
+      position: 0
+    cards:
+    - Well, not everywhere. I crashed.
+    - But before I crashed, I was definitely looking.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_09
+    scene: 3
+    speaker: MC
+    rawText: I have no idea what you're talking about.
+    displayText: I have no idea what you're talking about.
+    tags: []
+    cards:
+    - I have no idea what you're talking about.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_10
+    scene: 3
+    speaker: BIRDY
+    rawText: '[committed] The prophecy! The ancient texts! The...'
+    displayText: The prophecy! The ancient texts! The...
+    tags:
+    - text: committed
+      position: 0
+    cards:
+    - The prophecy! The ancient texts! The...
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_11
+    scene: 3
+    speaker: BIRDY
+    rawText: '[pause, losing steam] ...the thing a guy told me about once.'
+    displayText: ...the thing a guy told me about once.
+    tags:
+    - text: pause, losing steam
+      position: 0
+    cards:
+    - ...the thing a guy told me about once.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_12
+    scene: 3
+    speaker: MC
+    rawText: '[resigned, under his breath] Is this seriously my fucking companion
+      for this world?'
+    displayText: Is this seriously my fucking companion for this world?
+    tags:
+    - text: resigned, under his breath
+      position: 0
+    cards:
+    - Is this seriously my fucking companion for this world?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_13
+    scene: 3
+    speaker: BIRDY
+    rawText: '[small, a little hurt] ...I can hear you. I have ears. They''re just
+      inside the helmet.'
+    displayText: ...I can hear you. I have ears. They're just inside the helmet.
+    tags:
+    - text: small, a little hurt
+      position: 0
+    cards:
+    - ...I can hear you. I have ears. They're just inside the helmet.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S3_14
+    scene: 3
+    speaker: BIRDY
+    rawText: '[pause, then bouncing back] But that''s okay! First impressions are
+      just rough drafts!'
+    displayText: But that's okay! First impressions are just rough drafts!
+    tags:
+    - text: pause, then bouncing back
+      position: 0
+    cards:
+    - But that's okay! First impressions are just rough drafts!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S4_01
+    scene: 4
+    speaker: MC
+    rawText: '[casual] Okay. Rules. Do I need to eat here? Sleep?'
+    displayText: Okay. Rules. Do I need to eat here? Sleep?
+    tags:
+    - text: casual
+      position: 0
+    cards:
+    - Okay. Rules. Do I need to eat here? Sleep?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S4_02
+    scene: 4
+    speaker: BIRDY
+    rawText: '[cheerful] Yes and yes!'
+    displayText: Yes and yes!
+    tags:
+    - text: cheerful
+      position: 0
+    cards:
+    - Yes and yes!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S4_03
+    scene: 4
+    speaker: MC
+    rawText: Taxes?
+    displayText: Taxes?
+    tags: []
+    cards:
+    - Taxes?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S4_04
+    scene: 4
+    speaker: BIRDY
+    rawText: '[pause] What''s a taxes?'
+    displayText: What's a taxes?
+    tags:
+    - text: pause
+      position: 0
+    cards:
+    - What's a taxes?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S4_05
+    scene: 4
+    speaker: MC
+    rawText: '[content] God, I love it here.'
+    displayText: God, I love it here.
+    tags:
+    - text: content
+      position: 0
+    cards:
+    - God, I love it here.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S4_06
+    scene: 4
+    speaker: MC
+    rawText: '[casual, testing the waters] So like... do I even need to worry about
+      STDs in here?'
+    displayText: So like... do I even need to worry about STDs in here?
+    tags:
+    - text: casual, testing the waters
+      position: 0
+    cards:
+    - So like... do I even need to worry about STDs in here?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S4_07
+    scene: 4
+    speaker: BIRDY
+    rawText: '[genuinely confused] S-T-D? Is that like... a bird thing?'
+    displayText: S-T-D? Is that like... a bird thing?
+    tags:
+    - text: genuinely confused
+      position: 0
+    cards:
+    - S-T-D? Is that like... a bird thing?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S4_08
+    scene: 4
+    speaker: MC
+    rawText: '[beat] Never mind.'
+    displayText: Never mind.
+    tags:
+    - text: beat
+      position: 0
+    cards:
+    - Never mind.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S5_01
+    scene: 5
+    speaker: BIRDY
+    rawText: '[grand, gesturing] And here we are! The Academy!'
+    displayText: And here we are! The Academy!
+    tags:
+    - text: grand, gesturing
+      position: 0
+    cards:
+    - And here we are! The Academy!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S5_02
+    scene: 5
+    speaker: MC
+    rawText: '[awed] Whoa. It''s huge.'
+    displayText: Whoa. It's huge.
+    tags:
+    - text: awed
+      position: 0
+    cards:
+    - Whoa. It's huge.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S5_03
+    scene: 5
+    speaker: BIRDY
+    rawText: '[chuckles] That''s what she said.'
+    displayText: That's what she said.
+    tags:
+    - text: chuckles
+      position: 0
+    cards:
+    - That's what she said.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S5_04
+    scene: 5
+    speaker: MC
+    rawText: '[pause, turning to him] Wait. You didn''t know what an STD was five
+      minutes ago.'
+    displayText: Wait. You didn't know what an STD was five minutes ago.
+    tags:
+    - text: pause, turning to him
+      position: 0
+    cards:
+    - Wait. You didn't know what an STD was five minutes ago.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S5_05
+    scene: 5
+    speaker: BIRDY
+    rawText: '[completely earnest] Oh! No, I have lots of sex. I just... I got them
+      all.'
+    displayText: Oh! No, I have lots of sex. I just... I got them all.
+    tags:
+    - text: completely earnest
+      position: 0
+    cards:
+    - Oh! No, I have lots of sex. I just... I got them all.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S5_06
+    scene: 5
+    speaker: MC
+    rawText: '[long pause] ...'
+    displayText: ...
+    tags:
+    - text: long pause
+      position: 0
+    cards:
+    - ...
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S5_07
+    scene: 5
+    speaker: BIRDY
+    rawText: '[cheerfully] I don''t think they''re a problem though!'
+    displayText: I don't think they're a problem though!
+    tags:
+    - text: cheerfully
+      position: 0
+    cards:
+    - I don't think they're a problem though!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_01
+    scene: 6
+    speaker: MC
+    rawText: '[quiet, serious] Hey. What''s happening over there?'
+    displayText: Hey. What's happening over there?
+    tags:
+    - text: quiet, serious
+      position: 0
+    cards:
+    - Hey. What's happening over there?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_02
+    scene: 6
+    speaker: MC
+    rawText: Why is it... coming apart like that?
+    displayText: Why is it... coming apart like that?
+    tags: []
+    cards:
+    - Why is it... coming apart like that?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_03
+    scene: 6
+    speaker: BIRDY
+    rawText: '[bright, a little too quickly] Oh! That. Yeah. That''s the bad part.'
+    displayText: Oh! That. Yeah. That's the bad part.
+    tags:
+    - text: bright, a little too quickly
+      position: 0
+    cards:
+    - Oh! That. Yeah. That's the bad part.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_04
+    scene: 6
+    speaker: BIRDY
+    rawText: '[upbeat, like a tour guide] Okay! So. This world has Guardians. Eight
+      of them.'
+    displayText: Okay! So. This world has Guardians. Eight of them.
+    tags:
+    - text: upbeat, like a tour guide
+      position: 0
+    cards:
+    - Okay! So. This world has Guardians. Eight of them.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_05
+    scene: 6
+    speaker: BIRDY
+    rawText: The greatest minds that ever lived. Each one keeps a big idea safe.
+      Angles. Stars. Gravity. That kind of thing.
+    displayText: The greatest minds that ever lived. Each one keeps a big idea safe.
+      Angles. Stars. Gravity. That kind of thing.
+    tags: []
+    cards:
+    - The greatest minds that ever lived. Each one keeps a big idea safe.
+    - Angles. Stars. Gravity. That kind of thing.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_06
+    scene: 6
+    speaker: BIRDY
+    rawText: '[pause] But lately, math hasn''t been mathing.'
+    displayText: But lately, math hasn't been mathing.
+    tags:
+    - text: pause
+      position: 0
+    cards:
+    - But lately, math hasn't been mathing.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_07
+    scene: 6
+    speaker: BIRDY
+    rawText: '[cheerful again] They''ve all been corrupted by something. And the
+      world''s been coming apart at the edges.'
+    displayText: They've all been corrupted by something. And the world's been coming
+      apart at the edges.
+    tags:
+    - text: cheerful again
+      position: 0
+    cards:
+    - They've all been corrupted by something.
+    - And the world's been coming apart at the edges.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_08
+    scene: 6
+    speaker: BIRDY
+    rawText: '[excited] So you, my friend, are going to set them straight!'
+    displayText: So you, my friend, are going to set them straight!
+    tags:
+    - text: excited
+      position: 0
+    cards:
+    - So you, my friend, are going to set them straight!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_09
+    scene: 6
+    speaker: MC
+    rawText: But how did this even happen? Why are they corrupted?
+    displayText: But how did this even happen? Why are they corrupted?
+    tags: []
+    cards:
+    - But how did this even happen? Why are they corrupted?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_10
+    scene: 6
+    speaker: BIRDY
+    rawText: '[pause] I''m... not really sure. It''s just been like this for a while.'
+    displayText: I'm... not really sure. It's just been like this for a while.
+    tags:
+    - text: pause
+      position: 0
+    cards:
+    - I'm... not really sure. It's just been like this for a while.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_11
+    scene: 6
+    speaker: MC
+    rawText: How long's a while?
+    displayText: How long's a while?
+    tags: []
+    cards:
+    - How long's a while?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_12
+    scene: 6
+    speaker: BIRDY
+    rawText: '[pause, softer] Long enough that people stopped asking.'
+    displayText: Long enough that people stopped asking.
+    tags:
+    - text: pause, softer
+      position: 0
+    cards:
+    - Long enough that people stopped asking.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_13
+    scene: 6
+    speaker: BIRDY
+    rawText: '[bright] But that''s why you''re here!'
+    displayText: But that's why you're here!
+    tags:
+    - text: bright
+      position: 0
+    cards:
+    - But that's why you're here!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_14
+    scene: 6
+    speaker: MC
+    rawText: Why me, though?
+    displayText: Why me, though?
+    tags: []
+    cards:
+    - Why me, though?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_15
+    scene: 6
+    speaker: BIRDY
+    rawText: That compass you wield. Only navigators carry those.
+    displayText: That compass you wield. Only navigators carry those.
+    tags: []
+    cards:
+    - That compass you wield. Only navigators carry those.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_16
+    scene: 6
+    speaker: BIRDY
+    rawText: '[gently] You were a navigator. Somewhere else. Some other world.'
+    displayText: You were a navigator. Somewhere else. Some other world.
+    tags:
+    - text: gently
+      position: 0
+    cards:
+    - You were a navigator. Somewhere else. Some other world.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_17
+    scene: 6
+    speaker: MC
+    rawText: '[confused] Huh?'
+    displayText: Huh?
+    tags:
+    - text: confused
+      position: 0
+    cards:
+    - Huh?
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_18
+    scene: 6
+    speaker: BIRDY
+    rawText: '[warm] You''ll figure it out as you go. Just know that this world needs
+      you.'
+    displayText: You'll figure it out as you go. Just know that this world needs
+      you.
+    tags:
+    - text: warm
+      position: 0
+    cards:
+    - You'll figure it out as you go. Just know that this world needs you.
+    midHoldAfterCard: -1
+    audio: {fileID: 0}
+  - id: OC_S6_19
+    scene: 6
+    speaker: BIRDY
+    rawText: '[pause, then excited] And hey! We''re gonna do this together!'
+    displayText: And hey! We're gonna do this together!
+    tags:
+    - text: pause, then excited
+      position: 0
+    cards:
+    - And hey! We're gonna do this together!
+    midHoldAfterCard: -1
+    audio: {fileID: 0}

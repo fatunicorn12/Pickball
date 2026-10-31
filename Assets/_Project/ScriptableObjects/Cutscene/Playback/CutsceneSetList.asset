@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d399cb114f25e94abd62bc5aa721c3a, type: 3}
+  m_Name: CutsceneSetList
+  m_EditorClassIdentifier: Pickleball.Cutscene::Pickleball.Cutscene.Playback.CutsceneSetList
+  sets:
+  - {fileID: 2309917914147931458, guid: ab31065f529070d40bc03aa54ace20c0, type: 3}
+  - {fileID: 6670410468762395723, guid: b75723a74ea1350439cdd1653181c150, type: 3}
+  - {fileID: 924704652701953744, guid: f1902a1c4b43bd64c8510bad24711563, type: 3}
+  - {fileID: 3969460870166966438, guid: 02f80b9ed5094d8439da3d71c0ac3a69, type: 3}
+  - {fileID: 7532281423408609096, guid: 9a8640cff2d95f745a0ed77cee5d9875, type: 3}

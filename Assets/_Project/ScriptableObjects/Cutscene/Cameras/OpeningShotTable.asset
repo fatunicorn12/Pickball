@@ -1,0 +1,6705 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c6b499425e16f714aa5a4e6f117ccd85, type: 3}
+  m_Name: OpeningShotTable
+  m_EditorClassIdentifier: Pickleball.Cutscene.Cameras::Pickleball.Cutscene.Cameras.CutsceneShotTable
+  shots:
+  - shotId: S1_SH01
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 5
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 2.6, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 5
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 2, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 1
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 5
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.5}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S1_SH02
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0.55, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0.5335, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 1
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.5}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 25
+    lensEnd: 25
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 2
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S1_SH03
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 16
+        marker: MC_Start
+        frame: 4
+        frameMarker: MC_Start
+        side: 0
+        yaw: 0
+        h: {x: -1.4, y: 0.25, z: -0.6}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: -0.85, y: 0, z: -0.85}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 1
+        levelMarker: 
+      ease: 2
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.45, y: 0.65}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S1_SH04
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0.2, y: 0.04, z: 1.25}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.7}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 55
+    lensEnd: 55
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 2
+    noiseAmplitude: 0
+    noiseFrequency: 2
+    bursts:
+    - at:
+        beat: 0
+        at: 0.9
+      attack: 0.1
+      hold: 0.4
+      decay: 0.6
+      peak: 1.2
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S1_SH05
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: -0.6, y: 0, z: -0.9}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: -0.7, y: -0.05, z: 1.3}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.2, y: 0.5}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 1
+    noiseAmplitude: 0.2
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S1_SH06
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0.1, y: 0, z: 1.5}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.6}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S1_SH07
+    notes: "Lens 40\xB0\u219250\xB0 as the table says, so it pops from S1_SH06's
+      30\xB0 at the VFX transition."
+    body: 1
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0.1, y: 0, z: 1.5}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: -1
+        at: 2
+      point:
+        basis: 4
+        marker: 
+        frame: 4
+        frameMarker: MC_Start
+        side: 0
+        yaw: 0
+        h: {x: 0.3, y: 0.8, z: -2.2}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: -1
+        at: 4
+      point:
+        basis: 4
+        marker: 
+        frame: 4
+        frameMarker: MC_Start
+        side: 0
+        yaw: 0
+        h: {x: 1.2, y: 1.2, z: -2.7}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 4
+        frameMarker: MC_Start
+        side: 0
+        yaw: 0
+        h: {x: 2, y: 1.5, z: -3}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.6}
+      ease: 1
+    - time:
+        beat: 99
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.4}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 50
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S2_SH01
+    notes: "The tilt: 1.0\u20131.6 s the composer slides MC.Head to the bottom of
+      frame (the camera tilts up), then hands its aim to Birdy.Head by 2.2 s; the
+      angle follows where Birdy is."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 4
+        frameMarker: MC_Start
+        side: 0
+        yaw: 0
+        h: {x: 2, y: 1.5, z: -3}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.4}
+      ease: 1
+    - time:
+        beat: 1
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.4}
+      ease: 0
+    - time:
+        beat: -1
+        at: 1.6
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.1}
+      ease: 2
+    - time:
+        beat: 2
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 1
+    avoidMargin: 10.5
+    lensStart: 50
+    lensEnd: 50
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: -1
+        at: 1.6
+    - subject: 7
+      from:
+        beat: -1
+        at: 1.6
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S2_SH02
+    notes: 
+    body: 3
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 16
+        marker: Ledge_View
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 15
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 15
+    followRelativeMarker: Propeller_Ledge
+    followDamping: {x: 0.4, y: 0.4, z: 0.4}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 15
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 1
+    tcuAllowed: []
+  - shotId: S2_SH03
+    notes: "\"Behind MC's left shoulder\" is taken relative to MC's line to Birdy_Land,
+      not his facing: from his facing, MC's body covers Birdy_Land (30\xB0 to his
+      right)."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 5
+        frameMarker: Birdy_Land
+        side: 0
+        yaw: 0
+        h: {x: -0.5, y: 1.25, z: -1.8}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 16
+        marker: Birdy_Land
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.4}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 45
+    lensEnd: 45
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 1
+    noiseAmplitude: 0.3
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S2_SH04
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: -0.15, y: 0, z: 1.3}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.45, y: 0.6}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S2_SH05
+    notes: "Camera 2.33\xB7HB from Birdy_Lean's head point but 75\xB0 east of Birdy's
+      forward: straight on, 2.33\xB7HB is more than the 0.45\xB7H between Birdy and
+      MC and puts the lens inside MC."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 16
+        marker: MC_Start
+        frame: 4
+        frameMarker: MC_Start
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0.45}
+        hb: {x: -2.250607, y: 0.2, z: -0.60304844}
+        m: {x: 0, y: 0, z: 0}
+        level: 7
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 16
+        marker: MC_Start
+        frame: 4
+        frameMarker: MC_Start
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0.45}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      screen: {x: 0.5, y: 0.52}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 75
+    lensEnd: 75
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.22
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0.25
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S2_SH06
+    notes: "0.5\xB7H right of MC.Head instead of 0.35\xB7H: with the real actors
+      MC's hair covered Birdy from 0.35\xB7H."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: -0.5, y: 0.15, z: -0.5}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0.05
+    pushFrom:
+      beat: -1
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.55, y: 0.42}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.25
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S2_SH07
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0.2, y: 0.45, z: 1.1}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.6}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S2_SH08
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 13
+        marker: 
+        frame: 3
+        frameMarker: 
+        side: 2
+        yaw: 0
+        h: {x: 0, y: 0.5, z: 2.2}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.5}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S2_SH09
+    notes: "50\xB0 off Birdy's forward: he faces MC, so the straight-on axis looks
+      through MC's back."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: 50
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 8}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S2_SH10
+    notes: "Crane ends at MC.Head + (0.35, 0.3, -2.9)\xB7H, not (0.35, 0.55, -1.2)\xB7H:
+      from 1.2\xB7H behind, MC.Head and the 5 m ledge are 40\xB0 apart and can't
+      share a 40\xB0 frame; from 2.9\xB7H MC sits bottom-left and the ledge upper-right
+      as the framing column wants."
+    body: 1
+    path:
+    - time:
+        beat: 2
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0.3, y: 0.05, z: 1}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 2
+        at: 1.5
+      point:
+        basis: 1
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 1.25, y: 0.7, z: -0.7}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 3
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0.45, y: 0.87, z: -2.4}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.45, y: 0.6}
+      ease: 1
+    - time:
+        beat: 2
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.45, y: 0.6}
+      ease: 0
+    - time:
+        beat: 2
+        at: 1.5
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.32, y: 0.5}
+      ease: 1
+    - time:
+        beat: 2
+        at: 2.2
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.42, y: 0.38}
+      ease: 1
+    - time:
+        beat: 3
+        at: 0
+      target:
+        basis: 16
+        marker: Propeller_Ledge
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.62, y: 0.66}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH01
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 13
+        marker: 
+        frame: 3
+        frameMarker: 
+        side: 3
+        yaw: 0
+        h: {x: 0, y: 0.5, z: 2.4}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.5}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH02
+    notes: "45\xB0 above and 60\xB0 round from Birdy's front: straight on, the lens
+      sat against MC's head; 60\xB0 still keeps his eyes below the frame."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 11
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: 60
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 1.5588, z: 0.9}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 11
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.3}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 11
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 1
+    tcuAllowed: []
+  - shotId: S3_SH03
+    notes: "50\xB0 off Birdy's forward (MC stands on the straight-on axis)."
+    body: 3
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -50
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 9}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 7
+    followRelativeMarker: 
+    followDamping: {x: 0.25, y: 0.25, z: 0.25}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH04
+    notes: "Orbits 90\xB0 the other way (away from MC), so MC never passes between
+      the lens and Birdy."
+    body: 2
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -50
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 9}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 7
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: -90
+    orbitFrom:
+      beat: -1
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH05
+    notes: "50\xB0 off-axis; MC (0.65\xB7H in front of Birdy) is in the frame's side,
+      not out of it: at 8\u201312\xB7HB nothing keeps him out."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: 75
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 12}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: 75
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 8}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 2
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 8
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.22
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH06
+    notes: "Behind-right of MC's BODY and above his right shoulder, looking down
+      the blade that rests on it (guard at his chest, tip up over the shoulder).
+      MC_TurnAway bakes a 180\xB0 body turn while the actor root keeps facing Path_Start
+      (toward Birdy), so the body's behind-right is the root's front-left: offsets
+      (\u2212x, +z) in the root frame, and Birdy is behind the camera. Aimed at mid-blade,
+      not the guard, which his hair hides from here."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 6
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: -0.55, y: 0.25, z: 0.2}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 6
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: -0.5, y: 0.25, z: 0.32}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 6
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: -0.1, y: 0.13, z: 0.13}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.5}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 6
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 1
+    tcuAllowed: []
+  - shotId: S3_SH07
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 16
+        marker: MC_Handover
+        frame: 4
+        frameMarker: MC_Handover
+        side: 0
+        yaw: 0
+        h: {x: -0.45, y: 0.32, z: 1.2}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0.03
+    pushFrom:
+      beat: -1
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.64}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH08
+    notes: "50\xB0 off Birdy's forward (MC stands on the straight-on axis)."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -50
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 10}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.22
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH09
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 13
+        marker: 
+        frame: 3
+        frameMarker: 
+        side: 3
+        yaw: 0
+        h: {x: 0, y: 0.6, z: 2}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.5}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH10
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 16
+        marker: MC_Handover
+        frame: 4
+        frameMarker: MC_Handover
+        side: 0
+        yaw: 0
+        h: {x: -0.45, y: 0.32, z: 1.2}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 4
+        frameMarker: MC_Handover
+        side: 0
+        yaw: 0
+        h: {x: -0.45, y: 0.32, z: 1.05}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.64}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 36
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH11
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 13
+        marker: 
+        frame: 3
+        frameMarker: 
+        side: 3
+        yaw: 0
+        h: {x: 0, y: 0.55, z: 4.5}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.45}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH12
+    notes: "(0.7, 0, 1.05)\xB7H instead of (0.2, 0, 1.25)\xB7H: Birdy hovers 0.65\xB7H
+      in front of MC, so the near-frontal line put his head over MC's face."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: -0.9, y: 0, z: 0.6}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.45, y: 0.6}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S3_SH13
+    notes: "50\xB0 off Birdy's forward (MC stands on the straight-on axis)."
+    body: 1
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -50
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 4, z: 9}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 2
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -50
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 4, z: 9}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 2
+        at: 0.8
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -50
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 9}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    craneEase: 3
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.5}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.22
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S4_SH01
+    notes: 
+    body: 4
+    path: []
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.45, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: Cam_Track_S4_Start
+    trackEnd: Cam_Track_S4_End
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 1.04
+    walkFrom: Path_Track_A
+    walkTo: Path_Track_B
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S4_SH02
+    notes: 'MC reads screen-left of Birdy, not right: Birdy putters on MC''s west
+      side and the camera looks back south.'
+    body: 3
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 7.5}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.4, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 7
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S4_SH03
+    notes: 
+    body: 4
+    path: []
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.45, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 10.5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: Cam_Track_S4_Start
+    trackEnd: Cam_Track_S4_End
+    trackStop:
+      beat: 4
+      at: 0
+    walkSpeed: 1.04
+    walkFrom: Path_Track_A
+    walkTo: Path_Track_B
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S5_SH01
+    notes: "Black sun kept \u2265 5\xB0 out of frame by panning when it would show;
+      the end aims at the pair, not the gnomon, so they stay centred (review round
+      3)."
+    body: 1
+    path:
+    - time:
+        beat: 1
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0.15, y: 0.55, z: -1.4}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 1
+        at: 2.5
+      point:
+        basis: 4
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0.08, y: 2.3, z: -2.9}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 2
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 1.8, y: 4, z: -3.6}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    - time:
+        beat: 1
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 0
+    - time:
+        beat: 2
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.25}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 1
+    avoidMargin: 13.5
+    lensStart: 40
+    lensEnd: 50
+    lensFrom:
+      beat: 1
+      at: 0
+    lensTo:
+      beat: 2
+      at: 0
+    lensEase: 1
+    fracCap: 0.25
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S5_SH02
+    notes: Front three-quarter as written; Birdy faces north there, so the background
+      is the slope, not the Academy.
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -15
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 10}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 1
+    avoidMargin: 13.5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.22
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S5_SH03
+    notes: "The pair faces along NE\u2013SW, so the side-on camera is south-east
+      of them and the black sun (NNE) stays well off frame right; a pan correction
+      remains as a guard."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 12
+        marker: 
+        frame: 3
+        frameMarker: 
+        side: 1
+        yaw: 0
+        h: {x: 0, y: 0.08, z: 2.2}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 1
+    avoidMargin: 13.5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH01
+    notes: 'Behind the right ear of MC''s final facing (toward the black sun), not
+      his live facing: he turns to the sun during the shot.'
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 0.33, y: 0.06, z: -0.62}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0.02
+    pushFrom:
+      beat: -1
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 16
+        marker: Rim_Gaze
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.62, y: 0.48}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: BlackSun
+    avoidPanOnly: 0
+    avoidMargin: 8
+    lensStart: 27
+    lensEnd: 27
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 2
+    focus:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    - time:
+        beat: 1
+        at: 0
+      target:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    - time:
+        beat: 2
+        at: 0
+      target:
+        basis: 16
+        marker: Rim_Gaze
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH02
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 2.2, y: 1.15, z: -4.2}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 16
+        marker: Rim_Gaze
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.55, y: 0.38}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH03
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 0.9, y: -0.05, z: 1.6}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 0.25, y: -0.025, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 7
+      from:
+        beat: -1
+        at: 0.3
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH04
+    notes: "Capped at frac 0.20 (the table's \u2264 0.20): from beside MC's shoulder
+      Birdy_Guide is only ~1.2\xB7H away, frac \u2248 0.4 at nominal sizes, so the
+      camera backs off along the line to Birdy."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 0.55, y: -0.05, z: -0.25}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 0.95, y: -0.05, z: -0.25}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.38, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.2
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 4
+    focus:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 8
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH05
+    notes: "TCU rig 40\xB0 off Birdy's eyeline, not 10\xB0: at 4.15\xB7HB the 10\xB0
+      rig puts the lens inside MC."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -40
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 4.15}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -40
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 3.9}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 8
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.58}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 2.8
+    focus:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 8
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed:
+    - from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+  - shotId: S6_SH06
+    notes: "The pan is the composer's aim moving from Birdy to Pair.Mid over 1.0
+      s, so its angle is whatever brings MC in (the table's 25\xB0 didn't, from this
+      rig)."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 0.95, y: -0.05, z: -0.25}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.38, y: 0.55}
+      ease: 1
+    - time:
+        beat: 1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.38, y: 0.55}
+      ease: 0
+    - time:
+        beat: 1
+        at: 1
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 40
+    lensEnd: 40
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.2
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 1
+      from:
+        beat: 1
+        at: 1
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH07
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: -0.2, y: 0, z: 1}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.45, y: 0.6}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH08
+    notes: "TCU rig 40\xB0 off Birdy's eyeline, not 10\xB0: at 4.15\xB7HB the 10\xB0
+      rig puts the lens inside MC."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -40
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 4.15}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 8
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.58}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 2.8
+    focus:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 8
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed:
+    - from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+  - shotId: S6_SH09
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: -0.2, y: 0, z: 1}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.45, y: 0.6}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH10
+    notes: "TCU rig 40\xB0 off Birdy's eyeline, not 10\xB0: at 4.15\xB7HB the 10\xB0
+      rig puts the lens inside MC."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -40
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 4.15}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -40
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 3.9}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 8
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.58}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 2.8
+    focus:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 8
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed:
+    - from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+  - shotId: S6_SH11
+    notes: "50\xB0 off Birdy's forward (MC stands on the straight-on axis)."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: 70
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 8.5}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 7
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.6, y: 0.55}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.22
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH12
+    notes: "0.55\xB7H from the blade instead of 0.45\xB7H: at 0.45\xB7H the lens
+      grazed MC's sleeve."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 6
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0.55, y: -0.1, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 6
+        marker: 
+        frame: 1
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0.55, y: 0.1, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 6
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.5}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 6
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 1
+    tcuAllowed: []
+  - shotId: S6_SH13
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: -0.75, y: 0, z: 1.3}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 0
+        at: 1
+      point:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: -0.75, y: 0, z: 1.3}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 99
+        at: 0
+      point:
+        basis: 1
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: -0.42, y: 0, z: 0.72}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 2
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.6}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH14
+    notes: 
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 12
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 0.6, y: 0.1, z: -1.8}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 12
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.45, y: 0.45}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 35
+    lensEnd: 35
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0.28
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  - shotId: S6_SH15
+    notes: "TCU rig 40\xB0 off Birdy's eyeline, not 10\xB0: at 4.15\xB7HB the 10\xB0
+      rig puts the lens inside MC."
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -60
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 4.15}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 1
+        at: 0
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -60
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 4.15}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 1
+        at: 0.5
+      point:
+        basis: 7
+        marker: 
+        frame: 2
+        frameMarker: 
+        side: 0
+        yaw: -40
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 10}
+        m: {x: 0, y: 0, z: 0}
+        level: 8
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 8
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.58}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 30
+    lensEnd: 30
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 2.8
+    focus:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 8
+        marker: 
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    subjects:
+    - subject: 7
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed:
+    - from:
+        beat: -1
+        at: 0
+      to:
+        beat: 1
+        at: 0.5
+  - shotId: S6_SH16
+    notes: Ends behind MC, the black sun upper-centre above his head; CutsceneCameraHandback
+      blends 2.0 s into the orbit camera.
+    body: 0
+    path:
+    - time:
+        beat: -1
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 1, z: -4.6}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 1
+        at: 0.1
+      point:
+        basis: 4
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 1, z: -4.6}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 0
+    - time:
+        beat: 3
+        at: 0
+      point:
+        basis: 4
+        marker: 
+        frame: 5
+        frameMarker: BlackSun
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0.9, z: -3}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      ease: 1
+    craneEase: 1
+    push: 0
+    pushFrom:
+      beat: 0
+      at: 0
+    pushTo:
+      beat: 99
+      at: 0
+    pushEase: 1
+    aim: 0
+    aimKeys:
+    - time:
+        beat: -1
+        at: 0
+      target:
+        basis: 16
+        marker: BlackSun
+        frame: 0
+        frameMarker: 
+        side: 0
+        yaw: 0
+        h: {x: 0, y: 0, z: 0}
+        hb: {x: 0, y: 0, z: 0}
+        m: {x: 0, y: 0, z: 0}
+        level: 0
+        levelMarker: 
+      screen: {x: 0.5, y: 0.8}
+      ease: 1
+    panDegrees: 0
+    panFrom:
+      beat: 0
+      at: 0
+    panTo:
+      beat: 99
+      at: 0
+    panEase: 1
+    avoidMarker: 
+    avoidPanOnly: 0
+    avoidMargin: 5
+    lensStart: 60
+    lensEnd: 60
+    lensFrom:
+      beat: -1
+      at: 0
+    lensTo:
+      beat: 99
+      at: 0
+    lensEase: 1
+    fracCap: 0
+    followTarget: 0
+    followRelativeMarker: 
+    followDamping: {x: 0, y: 0, z: 0}
+    orbitDegrees: 0
+    orbitFrom:
+      beat: 0
+      at: 0
+    orbitTo:
+      beat: 99
+      at: 0
+    orbitEase: 1
+    trackStart: 
+    trackEnd: 
+    trackStop:
+      beat: 99
+      at: 1000
+    walkSpeed: 0
+    walkFrom: 
+    walkTo: 
+    gameplayDistanceScale: 1
+    gameplayFrom:
+      beat: 0
+      at: 0
+    gameplayTo:
+      beat: 99
+      at: 0
+    gameplayEase: 1
+    noise: 0
+    noiseAmplitude: 0
+    noiseFrequency: 1
+    bursts: []
+    aperture: 0
+    focus: []
+    subjects:
+    - subject: 1
+      from:
+        beat: -1
+        at: 0
+      to:
+        beat: 99
+        at: 0
+    insert: 0
+    tcuAllowed: []
+  handheld: {fileID: 11400000, guid: 6487290e5bcbe344e86e84729cc3c44a, type: 2}
+  shake6D: {fileID: 11400000, guid: abe4c32ce53b03946b9c64293822c756, type: 2}
+  aspect: 1.7777778
+  safeFrame: 0.9
+  tcuFlagFraction: 0.3
+  seedVersion: 45

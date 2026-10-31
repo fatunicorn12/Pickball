@@ -1,0 +1,23 @@
+{
+    "name": "Pickleball.Cutscene.Cameras",
+    "rootNamespace": "Pickleball.Cutscene.Cameras",
+    "references": [
+        "Pickleball.Cutscene",
+        "Pickleball.Runtime",
+        "Unity.Cinemachine",
+        "Unity.Splines",
+        "Unity.Timeline",
+        "Unity.Mathematics",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
