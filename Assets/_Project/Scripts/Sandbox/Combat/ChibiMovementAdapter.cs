@@ -42,5 +42,10 @@ namespace Pickleball.Sandbox.Combat
         {
             if (locomotion != null && seconds > 0f) locomotion.SuspendGravity(seconds);
         }
+
+        public void SetVerticalVelocity(float metresPerSecond)
+        {
+            if (locomotion != null) locomotion.SetVerticalVelocity(metresPerSecond);
+        }
     }
 }

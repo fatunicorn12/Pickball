@@ -150,6 +150,16 @@ namespace Pickleball.Sandbox.Movement
 
         public bool IsMovementLocked => _moveLockLeft > 0f;
 
+        /// <summary>Stops his own travel across the ground outright: drive speed
+        /// and carried momentum both go to zero (a heal channel starting). Once,
+        /// on an event; pair it with <see cref="LockMovement"/> to keep him still.
+        /// Field drift and vertical speed are untouched.</summary>
+        public void StopPlanar()
+        {
+            Speed = 0f;
+            Momentum = Vector3.zero;
+        }
+
         /// <summary>True while the Gravity Anchor holds his own gravity off.</summary>
         public bool IsAnchored => _anchorLeft > 0f;
 

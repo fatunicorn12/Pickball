@@ -14,7 +14,8 @@ namespace Pickleball.Sandbox.Combat
     ///
     /// The shove is horizontal: ChibiLocomotion drops the y of AddMomentum.
     /// Vertical motion goes through <see cref="SuspendGravity"/> (air-combo hang
-    /// time); a plunge finisher would add SetVerticalVelocity the same way.
+    /// time) and <see cref="SetVerticalVelocity"/> (catching a fall as a hover
+    /// opens, an air step's lift or slam).
     /// </summary>
     public interface ICombatImpulses
     {
@@ -30,5 +31,8 @@ namespace Pickleball.Sandbox.Combat
         /// easing vertical speed to rest. Refreshes rather than stacks, so call it
         /// every frame of a hang with a short time; it ends on landing.</summary>
         void SuspendGravity(float seconds);
+        /// <summary>Set the player's vertical speed outright, in m/s. Once per
+        /// event (a swing starting, a hover opening), never per frame.</summary>
+        void SetVerticalVelocity(float metresPerSecond);
     }
 }

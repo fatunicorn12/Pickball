@@ -1,3 +1,4 @@
+using Pickleball.Sandbox.Juggle;
 using UnityEngine;
 
 namespace Pickleball.Sandbox
@@ -11,10 +12,16 @@ namespace Pickleball.Sandbox
     /// special case. Its health refills a moment after the last hit (and after
     /// a KO), so a combo can be practised over and over against a full bar.
     ///
-    /// Knockback rocks the <see cref="visual"/> on a spring and a launcher pops
-    /// it up, while the root and its collider stay planted. A target that
-    /// actually flew off would wander away from the measuring grid it is
-    /// standing on, and lock-on would lose it.
+    /// Knockback rocks the <see cref="visual"/> on a spring, while the root and
+    /// its collider stay planted. A target that actually flew off would wander
+    /// away from the measuring grid it is standing on, and lock-on would lose it.
+    ///
+    /// Launchers and air hits go through a <see cref="JuggleState"/>, the same
+    /// Castle-Crashers weight-class juggle an enemy would use: a launcher pops
+    /// the visual up, every air hit relaunches it by the weight rule, and a KO
+    /// taken in the air holds the refill until it lands. Pick the weight class
+    /// in <see cref="juggle"/> (Medium by default) and use the component's
+    /// <i>Apply Weight Preset</i> menu to restore that class's numbers.
     /// </summary>
     [RequireComponent(typeof(Health))]
     public class TrainingDummy : MonoBehaviour
@@ -30,10 +37,12 @@ namespace Pickleball.Sandbox
         [Tooltip("Degrees of lean per metre/second of knockback.")]
         [SerializeField] private float leanPerKnockback = 6f;
         [SerializeField] private float maxLean = 40f;
-        [Tooltip("How high a launcher pops the visual, in metres.")]
-        [SerializeField] private float launchHeight = 0.7f;
         [SerializeField] private float springStiffness = 140f;
         [SerializeField] private float springDamping = 9f;
+
+        [Header("Juggle")]
+        [Tooltip("Weight class and juggle tuning. Live: edits apply on the next hit.")]
+        [SerializeField] private JuggleSettings juggle = JuggleSettings.For(JuggleWeight.Medium);
 
         Health _health;
         Vector3 _visualRest;
@@ -42,7 +51,12 @@ namespace Pickleball.Sandbox
 
         Vector3 _leanAxis = Vector3.right;
         float _lean, _leanVelocity;
-        float _hop, _hopVelocity;
+        JuggleState _juggle;
+
+        /// <summary>The dummy's juggle: height, air hits, hitstun. For reading;
+        /// the dummy drives it from its own hits. Built lazily because plain C#
+        /// state comes back null after a hot reload.</summary>
+        public JuggleState Juggle => _juggle ??= new JuggleState(juggle);
 
         void Awake()
         {
@@ -58,15 +72,28 @@ namespace Pickleball.Sandbox
         {
             _health.Hurt += OnHurt;
             _health.Knocked += OnKnocked;
+            _health.Died += OnDied;
         }
 
         void OnDisable()
         {
             _health.Hurt -= OnHurt;
             _health.Knocked -= OnKnocked;
+            _health.Died -= OnDied;
+        }
+
+        [ContextMenu("Apply Weight Preset")]
+        void ApplyWeightPreset()
+        {
+            juggle = JuggleSettings.For(juggle.Weight);
+            if (_juggle != null) _juggle.Settings = juggle;
         }
 
         void OnHurt(float amount, Vector3 at) => _lastHit = Time.time;
+
+        // A KO in the air waits for the ground; the dummy's version of dying is
+        // the refill, which Update holds while the defeat is pending.
+        void OnDied(Health _) => Juggle.Defeat();
 
         void OnKnocked(Vector3 knockback, bool launch)
         {
@@ -80,16 +107,23 @@ namespace Pickleball.Sandbox
                 float lean = Mathf.Min(flat.magnitude * leanPerKnockback, maxLean);
                 _leanVelocity = lean * Mathf.Sqrt(springStiffness) * 1.4f;
             }
-            if (launch)
-                _hopVelocity = Mathf.Sqrt(2f * Mathf.Abs(Physics.gravity.y) * launchHeight);
+            Juggle.Settings = juggle;
+            Juggle.Hit(launch);
         }
 
         void Update()
         {
             float dt = Time.deltaTime;
 
+            var juggleState = Juggle;
+            juggleState.Settings = juggle;
+            // Touching down with a KO is when the dummy "dies": the refill
+            // timer starts from the landing, not from the last hit.
+            if (juggleState.Tick(dt) == JuggleLanding.LandedDefeated)
+                _lastHit = Time.time;
+
             bool hurt = _health.IsDead || _health.Current < _health.Max;
-            if (hurt && Time.time - _lastHit >= refillDelay)
+            if (hurt && !juggleState.DefeatPending && Time.time - _lastHit >= refillDelay)
                 _health.ResetToFull();
 
             if (visual == null) return;
@@ -98,16 +132,9 @@ namespace Pickleball.Sandbox
             _leanVelocity += (-springStiffness * _lean - springDamping * _leanVelocity) * dt;
             _lean += _leanVelocity * dt;
 
-            if (_hop > 0f || _hopVelocity > 0f)
-            {
-                _hopVelocity += Physics.gravity.y * dt;
-                _hop += _hopVelocity * dt;
-                if (_hop <= 0f) { _hop = 0f; _hopVelocity = 0f; }
-            }
-
             Vector3 localAxis = transform.InverseTransformDirection(_leanAxis);
             visual.localRotation = Quaternion.AngleAxis(_lean, localAxis) * _visualRestRotation;
-            visual.localPosition = _visualRest + Vector3.up * _hop;
+            visual.localPosition = _visualRest + Vector3.up * juggleState.Height;
         }
     }
 }

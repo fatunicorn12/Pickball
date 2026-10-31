@@ -11,7 +11,7 @@ namespace Pickleball.Sandbox.Magic
     /// selection with no knowledge of slots.
     ///
     /// Gameplay only. Buttons come from <see cref="SpellSelectInput"/> (number
-    /// keys pick a slot, the pad cycles while aiming); the HUD's
+    /// keys pick a slot, the pad and mouse wheel cycle while aiming); the HUD's
     /// <c>SpellSelectorView</c> listens to <see cref="SelectionChanged"/> and
     /// reads the slots. Empty slots are skipped by cycling and refused by
     /// <see cref="Select"/>. The index arithmetic is <see cref="SpellSelection"/>.

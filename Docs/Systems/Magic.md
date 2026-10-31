@@ -130,7 +130,15 @@ zones, station volumes) are untouched. A target found through several colliders 
 per frame (`FreezeZoneTriggerTests`).
 
 **Heal.** Hold aim (the casting stance; no crosshair is shown), then hold fire for 2 s:
-- **Any movement input cancels it**: the stick past 0.2, crouch, flip, mount or anchor. So do
+- **Starting it stops the body.** Pressing fire mid-run starts the channel (movement input does
+  not refuse it), zeroes drive speed and momentum (`MovementMotor.StopPlanar`) and roots the body
+  with a per-frame `LockMovement` for the whole channel. Before this, a heal pressed while
+  running cancelled on the player's own slowdown: the stick was still held for a frame, or the
+  braking slide carried the body past the drift limit.
+- **Settle window** (`channelSettleSeconds`, 0.35 s): for the channel's first moments movement
+  input and drift are ignored, giving the player time to let go of the stick, and the drift
+  origin is re-taken where the body came to rest (`SpellChannel.IsSettling`).
+- **After the settle window, any movement input cancels it**: the stick past 0.2, crouch, flip, mount or anchor. So do
   **jump** (or leaving the ground), **dash or tether** (or any move that makes
   `ChibiLocomotion.IsBusy`), **a real hit**, **letting go** of fire or aim, and the input gate
   **blocking Spell** (a conversation). Switching spell cancels it too.
@@ -140,8 +148,8 @@ per frame (`FreezeZoneTriggerTests`).
 - **One damage rule:** a single hit of at least `channelInterruptDamage` (1 HP) interrupts
   ("Hit!"); smaller ticks (a gravity well's 0.1 core tick, a burn) never do
   (`SpellChannel.HitInterrupts`). It is per hit, not accumulated.
-- The channel never claims the input gate and never zeroes input: the player stays free to move,
-  and moving is how they cancel. It reads movement input through `PlayerMovementInput.Read()`
+- The channel never claims the input gate and never zeroes input: once settled, pushing the stick
+  is how they cancel (the movement lock lapses a frame after the channel ends). It reads movement input through `PlayerMovementInput.Read()`
   (read-only; the press edges are per-frame, so reading twice changes nothing).
 - **Mana is paid on completion** (proposed; needs the user's OK). The cost must be affordable to
   start, but a cancelled heal costs nothing. `ChannelManaTiming.OnStart` on the asset switches to
@@ -213,7 +221,7 @@ claim on `InputBlock.LockOn` also drops a held lock and hides the lock-on hint (
 ## 2. Architecture
 
 ```
-SpellSelectInput (1-9; pad up/down while aiming) ──▶ SpellSelector ── SetSpell ──▶ SpellCaster
+SpellSelectInput (1-9; pad up/down and wheel while aiming) ──▶ SpellSelector ── SetSpell ──▶ SpellCaster
                                                         └─ SelectionChanged ─▶ SpellSelectorView
 SpellInput (RMB/LT held, LMB/RT pressed; polled, actions rebuilt in OnEnable)
      │ read every frame
@@ -407,12 +415,16 @@ delivery that reads the field.
   (0-1 of normal speed; 0 is a full freeze), `slowLinger` (s after leaving), `groundProbeDistance`.
 - **Heal** (Channel): `channelSeconds`, `channelManaTiming` (OnCompletion / OnStart), `healAmount`,
   `channelMoveDeadzone` (raw stick still counted as standing), `channelMaxDrift` (m the body may be
-  carried before it cancels; 0 = off), `channelInterruptDamage` (smallest hit that interrupts;
+  carried before it cancels; 0 = off), `channelSettleSeconds` (s at the start when movement and
+  drift are ignored; 0 = cancel from the first frame), `channelInterruptDamage` (smallest hit that interrupts;
   0 = any), `refuseAtFullHealth`, `cooldown`.
 - **The slot order** is the `spells` list on the player's `SpellSelector` (slot 1 = key 1). Setup
   Magic fills it only when empty.
 - **The pad cycle buttons** are the `padPreviousBinding` / `padNextBinding` paths on
   `SpellSelectInput`, with `padCycleOnlyWhileAiming`.
+- **The mouse wheel** cycles while aiming (down = next): `scrollWheel`, `invertScroll` and
+  `scrollStepSeconds` (0.08 s, the shortest gap between wheel steps) on `SpellSelectInput`.
+  Outside aim the wheel stays the orbit camera's zoom, which already ignores it while aiming.
 - **A target's stagger cap** is `StatusReceiver.maxStaggerSeconds` (1.5 s).
 
 **Look:** every visual's colours, sizes and timings are serialized on its component in the prefab
@@ -535,7 +547,7 @@ aiming" component.
 - **Freeze Zone and stagger only affect targets that opt in.** Today that is the training dummies,
   which never move, so on them the slow is only a status you can see. Newton needs his owner's
   change (§4).
-- **"Standing still" for Heal reads input and position.** Input cancels at once ("Moved"); being
+- **"Standing still" for Heal reads input and position.** After the 0.35 s settle window, input cancels at once ("Moved"); being
   carried more than 0.4 m by anything cancels as "Pulled". The channel reads
   `PlayerMovementInput.Read()` a second time each frame, read-only.
 - **The HUD fixes need Setup Magic re-run on both scenes** (manager): the bigger selector and

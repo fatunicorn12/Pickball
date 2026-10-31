@@ -69,12 +69,27 @@ namespace Pickleball.Sandbox.Combat
                  "stops you; a few m/s makes a finisher or gap-closer step in.")]
         [Min(0f)] [SerializeField] private float lungeSpeed;
 
-        [Tooltip("Air track only: a hit from this swing that lands holds the player up " +
-                 "(gravity off, vertical speed eased to rest) for MeleeCombat's " +
-                 "airHangPerHitSeconds; whiffs hold nothing, and the chain's end drops him. " +
+        [Tooltip("Air track only: this swing holds the player up through its hover window, " +
+                 "hit or miss (KH2's no-gravity frames, Castle Crashers' air strings). A fall is " +
+                 "caught as the window opens; rising speed eases off. The chain's end drops him. " +
                  "Turn off for a step that should drop, such as a plunge finisher. " +
                  "Ignored on the ground chain.")]
         [SerializeField] private bool hangInAir = true;
+
+        [Tooltip("Fraction of the swing (0-1) at which the hover starts. 0 catches him as " +
+                 "the swing begins.")]
+        [Range(0f, 1f)] [SerializeField] private float airHoverStart;
+
+        [Tooltip("Fraction of the swing (0-1) at which the hover ends and gravity returns. " +
+                 "1 holds through the whole swing; earlier lets a finisher sink before its " +
+                 "follow-through, like a KH2 air finisher.")]
+        [Range(0f, 1f)] [SerializeField] private float airHoverEnd = 1f;
+
+        [Tooltip("Air track only: vertical speed set once as the swing starts, in m/s. " +
+                 "Above 0 is a Castle Crashers uppercut (a hop that the hover then eases to " +
+                 "rest: v²/50 m of height at the default 25 m/s² halt rate, so 5 m/s ≈ 0.5 m); below 0 " +
+                 "is a slam, which needs Hang In Air off or the hover stops it. 0 = no change.")]
+        [Range(-20f, 10f)] [SerializeField] private float airLift;
 
         [Header("Area burst")]
         [SerializeField] private AreaBurst burst;
@@ -95,9 +110,18 @@ namespace Pickleball.Sandbox.Combat
         public HitSettings Hit => hit;
         public float LungeSpeed => lungeSpeed;
 
-        /// <summary>This step's landed air hits hold the player up; see
-        /// <see cref="AirHang"/>.</summary>
+        /// <summary>This air swing holds the player up through its hover window,
+        /// hit or miss; see <see cref="AirHang"/>.</summary>
         public bool HangInAir => hangInAir;
+
+        /// <summary>Hover window start, fraction of the swing (0-1).</summary>
+        public float AirHoverStart => airHoverStart;
+
+        /// <summary>Hover window end, fraction of the swing (0-1).</summary>
+        public float AirHoverEnd => airHoverEnd;
+
+        /// <summary>Vertical speed (m/s) set once as an air swing starts; 0 = none.</summary>
+        public float AirLift => airLift;
         public AreaBurst Burst => burst;
         public SwingPresentation Presentation => presentation;
 

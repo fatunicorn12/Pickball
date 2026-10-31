@@ -113,6 +113,13 @@ namespace Pickleball.Sandbox
 
         public bool IsMovementLocked => Motor != null && Motor.IsMovementLocked;
 
+        /// <summary>Stops his own planar motion outright, once. See
+        /// <see cref="MovementMotor.StopPlanar"/>.</summary>
+        public void StopPlanar()
+        {
+            if (Motor != null) Motor.StopPlanar();
+        }
+
         /// <summary>True while the Gravity Anchor is holding his own gravity off.</summary>
         public bool IsAnchored => Motor != null && Motor.IsAnchored;
 

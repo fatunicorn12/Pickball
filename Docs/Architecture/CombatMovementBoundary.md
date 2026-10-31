@@ -69,12 +69,13 @@ time, so the ring is gone inside a talk's 0.25 s settle, and Tab locks again onc
 track and decides when the ground chain is dropped. A one-frame flicker can no longer start an
 air step.
 
-**Landed air hits hang through `SuspendGravity`.** `ICombatImpulses.SuspendGravity` goes through
-the adapter to `ChibiLocomotion.SuspendGravity`, then to the motor. `MeleeCombat` refreshes it every
-frame while an air-track swing plays and a hit landed within `airHangPerHitSeconds` (see `AirHang`).
-The hang ends when hits stop landing, the chain ends, the player lands (since `f876b63`), or a dash
-or tether takes the body. `SetVerticalVelocity` is still unwired. A
-plunge would add it to the interface the same way.
+**Air swings hang through `SuspendGravity`, hit or miss.** `ICombatImpulses.SuspendGravity` goes
+through the adapter to `ChibiLocomotion.SuspendGravity`, then to the motor. `MeleeCombat` refreshes
+it every frame while an air-track swing plays inside its step's hover window (see `AirHang`; the
+Kingdom Hearts II / Castle Crashers model replaced the old hit-earned hang). The hang ends outside
+the window, when the chain ends, the player lands (since `f876b63`), or a dash or tether takes the
+body. `ICombatImpulses.SetVerticalVelocity` catches a fall as a hover opens and applies an air
+step's `airLift` once as it starts; the adapter forwards it to `ChibiLocomotion.SetVerticalVelocity`.
 
 ## Pad and key layout contract
 

@@ -67,47 +67,70 @@ namespace Pickleball.Sandbox.Combat
     }
 
     /// <summary>
-    /// Air-combo hang time, earned by connecting: each air hit that lands holds
-    /// the player up for a short while, so he stays up only while he keeps
-    /// hitting something. Swinging at nothing doesn't float him, and the hang
-    /// ends at once when the air chain does, he lands, or a dash or tether takes
-    /// the body. MeleeCombat ticks this every frame and refreshes movement's
-    /// gravity suspension with the answer.
+    /// Air-combo hang time, owned by the swing (Kingdom Hearts II and Castle
+    /// Crashers both do it this way): every air swing holds the player up
+    /// through its own hover window, a fraction of the swing set on the step,
+    /// <b>whether or not it connects</b>. KH2 puts a "no gravity" frame range on
+    /// each air attack animation; Castle Crashers' air strings float you with
+    /// nothing to hit. The previous rule (only landed hits bought hang time)
+    /// dropped the player mid-combo whenever a swing whiffed and made the air
+    /// game feel random.
     ///
-    /// Bounded by the air chain itself: one airtime buys one air combo, so the
-    /// longest hang grows only as the chain does (Air Combo Plus, air finishers).
+    /// <b>Bounded by the air chain</b>, as in KH2: one airtime buys one air
+    /// combo (<see cref="ComboProgress"/>, refilled only on landing), so the
+    /// longest float is the learned air chain's length, and the chain's end,
+    /// a landing, or a dash or tether drops him at once.
+    ///
+    /// <see cref="JustOpened"/> marks the frame a hover window opens, when
+    /// MeleeCombat catches a fall (vertical speed to at least zero, KH2's "no
+    /// gravity" and Castle Crashers' light-attack rule). Rising speed is left
+    /// to ease off, so a jump's or a lift's height carries into the hang.
+    /// MeleeCombat ticks this every frame and refreshes movement's gravity
+    /// suspension with the answer.
     /// </summary>
     public sealed class AirHang
     {
-        float _left;
+        /// <summary>True while the playing air swing is holding him up.</summary>
+        public bool IsHolding { get; private set; }
 
-        /// <summary>True while a landed hit is still holding him up.</summary>
-        public bool IsHolding => _left > 0f;
+        /// <summary>True on the single tick on which a hold began: a hover window
+        /// opened, from not holding. Not raised when one hovering swing chains
+        /// straight into another.</summary>
+        public bool JustOpened { get; private set; }
 
-        /// <summary>An air hit connected: hold for <paramref name="seconds"/> from
-        /// now. Refreshes rather than stacks, so a ring striking three targets in
-        /// one frame buys no more than one hit.</summary>
-        public void HitLanded(float seconds) => _left = Mathf.Max(_left, seconds);
+        /// <summary>True when <paramref name="progress"/> (0-1 through the swing)
+        /// is inside the hover window [<paramref name="start"/>, <paramref name="end"/>].
+        /// An empty window (end at or before start) never hovers.</summary>
+        public static bool InWindow(float progress, float start, float end)
+            => end > start && progress >= start && progress <= end;
 
-        public void Cancel() => _left = 0f;
+        public void Cancel()
+        {
+            IsHolding = false;
+            JustOpened = false;
+        }
 
         /// <summary>
         /// Advance by <paramref name="dt"/>. Returns the seconds of gravity
         /// suspension to request this frame, or 0 for none. A hold covers two
-        /// frames, because the motor may tick its countdown before this
-        /// frame's refresh lands; the hang therefore outlives its timer by at
-        /// most a frame or two.
+        /// frames, because the motor may tick its countdown before this frame's
+        /// refresh lands; the hang therefore outlives its window by at most a
+        /// frame or two.
         /// </summary>
-        /// <param name="inAirChain">An air-track swing is playing (hitstop included).
-        /// False drops him: the chain is over.</param>
+        /// <param name="hoveringSwing">An air-track swing whose step hangs in the air
+        /// is playing (hitstop included). False drops him: the chain is over.</param>
+        /// <param name="progress">0-1 through that swing.</param>
+        /// <param name="start">Hover window start, fraction of the swing.</param>
+        /// <param name="end">Hover window end, fraction of the swing.</param>
         /// <param name="grounded">Raw grounded flag: nothing to hold up.</param>
         /// <param name="busy">An exclusive move (dash, tether) owns the body.</param>
-        public float Tick(bool inAirChain, bool grounded, bool busy, float dt)
+        public float Tick(bool hoveringSwing, float progress, float start, float end,
+                          bool grounded, bool busy, float dt)
         {
-            if (!inAirChain || grounded || busy) { _left = 0f; return 0f; }
-            if (_left <= 0f) return 0f;
-            _left = Mathf.Max(0f, _left - dt);
-            return 2f * dt;
+            bool hold = hoveringSwing && !grounded && !busy && InWindow(progress, start, end);
+            JustOpened = hold && !IsHolding;
+            IsHolding = hold;
+            return hold ? 2f * dt : 0f;
         }
     }
 
