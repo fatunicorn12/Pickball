@@ -1,0 +1,31 @@
+{
+    "name": "Pickleball.Tests.EditMode.Cutscene",
+    "rootNamespace": "Pickleball.Tests.Cutscene",
+    "references": [
+        "Pickleball.Cutscene",
+        "Pickleball.Cutscene.Editor",
+        "Pickleball.Runtime",
+        "Unity.Timeline",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "UniTask",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,121 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 27fbb3f15b2342ea93bd6645ec00c0f1, type: 3}
+  m_Name: MC_ActionLibrary
+  m_EditorClassIdentifier: Pickleball.Cutscene::Pickleball.Cutscene.CutsceneActionLibrary
+  actorId: MC
+  idleVerb: idle stand
+  entries:
+  - verb: lie still
+    clip: {fileID: 7400000, guid: 65964baeed95fc14896ae0980ce728a9, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: eyes open
+    clip: {fileID: 7400000, guid: bf1466f80320786409d3321b3731a086, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: sit up
+    clip: {fileID: 7400000, guid: 8689c935f97c3eb48b13c70e520ff862, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: look around
+    clip: {fileID: 7400000, guid: 6c75e3639d029c54dacbb110419fdf55, type: 2}
+    loop: 1
+    blendIn: 0.3
+  - verb: fist pump
+    clip: {fileID: 7400000, guid: a03e55aec95f38244a497af76d443295, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: reach out
+    clip: {fileID: 7400000, guid: 0d810addd7ee538479c01f86851d26aa, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: lower arm
+    clip: {fileID: 7400000, guid: b4325edc771423d4eb4cec741d2373f4, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: glance to lens
+    clip: {fileID: 7400000, guid: 201d23682ad27a145b26f7d5dc258fa2, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: turn
+    clip: {fileID: 7400000, guid: 749f81a6094f0b94f88907be6bf05eae, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: look up
+    clip: {fileID: 7400000, guid: b10ed7a346e82ad4cbbffcd485161701, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: flinch
+    clip: {fileID: 7400000, guid: 39285489d71c7d24582f5ff418b6f110, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: look off
+    clip: {fileID: 7400000, guid: 667beba9151cd954285cada8c81685ed, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: sigh shrug
+    clip: {fileID: 7400000, guid: b8ce995d096cbd54db9a6344dc5b90ae, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: flat stare
+    clip: {fileID: 7400000, guid: 00cb5f256c4fc674fa44e59a2508bea6, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: hold out
+    clip: {fileID: 7400000, guid: f9cc519542144b94996a845e2ec643f8, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: turn away
+    clip: {fileID: 7400000, guid: 99521bb162d61c947b68b8e028379701, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: confused head tilt
+    clip: {fileID: 7400000, guid: 958f74bda05d0b746be9b024b5fa7aff, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: resigned mutter
+    clip: {fileID: 7400000, guid: e6976ed94b5790b42810ba289c3f9e03, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: walk
+    clip: {fileID: 7400000, guid: d4cb5e8c850267649807c9311e870832, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: walk relaxed
+    clip: {fileID: 7400000, guid: abe582b8c1909f7409bce8ab0a1d8e10, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: stop
+    clip: {fileID: 7400000, guid: 923de015513034048959473e62ed129c, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: awed look
+    clip: {fileID: 7400000, guid: 7080621fdc098a842866ff22ef56bc48, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: serious frown
+    clip: {fileID: 7400000, guid: 762705b836943e840b8a78e7f0289c4c, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: touch hilt
+    clip: {fileID: 7400000, guid: 3958d7383ebf13f48a8a7a696574997a, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: idle stand
+    clip: {fileID: 7400000, guid: 2ae339c479b371940bcddeb1fe064207, type: 2}
+    loop: 1
+    blendIn: 0.3
+  - verb: idle look
+    clip: {fileID: 7400000, guid: c91f4196f358f1c419640b28699076a8, type: 2}
+    loop: 1
+    blendIn: 0.25

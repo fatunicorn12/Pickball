@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e0141909c97b4c2e95f84ed2fa73aca5, type: 3}
+  m_Name: SubtitleStyle
+  m_EditorClassIdentifier: Pickleball.Cutscene::Pickleball.Cutscene.Subtitles.SubtitleStyle
+  speakers:
+  - speakerId: BIRDY
+    displayName: Birdy
+    colour: {r: 1, g: 0.8, b: 0.34, a: 1}
+  - speakerId: MC
+    displayName: MC
+    colour: {r: 0.9, g: 0.92, b: 0.98, a: 1}
+  fallbackSpeakerColour: {r: 0.92, g: 0.92, b: 0.92, a: 1}
+  fontSize: 44
+  textColour: {r: 1, g: 1, b: 1, a: 1}
+  maxCharsPerLine: 42
+  maxLines: 2
+  sentenceBreakBonus: 8
+  clauseBreakBonus: 4
+  lineSpacing: 0
+  fadeSeconds: 0.15
+  cardSwapSeconds: 0.1
+  backingColour: {r: 0.02, g: 0.025, b: 0.04, a: 0.9}
+  backingPadding: {x: 40, y: 18}
+  backingCornerScale: 1.4
+  bottomMargin: 48
+  tabFontSize: 28
+  tabColour: {r: 0.02, g: 0.025, b: 0.04, a: 0.78}
+  tabPadding: {x: 22, y: 6}
+  tabGap: 4
+  tabHorizontalAnchor: 0.5
+  skipRingSize: 64
+  skipRingColour: {r: 1, g: 1, b: 1, a: 0.95}
+  skipTrackColour: {r: 1, g: 1, b: 1, a: 0.22}
+  skipLabel: hold to skip
+  skipLabelFontSize: 24
+  skipLabelGap: 14
+  skipBackingColour: {r: 0.02, g: 0.025, b: 0.04, a: 0.6}
+  skipBackingPadding: {x: 18, y: 10}
+  skipFadeSeconds: 0.15
+  skipMargin: {x: 48, y: 48}

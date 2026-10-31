@@ -68,6 +68,10 @@ scripts:
 13. **Setup Hypatia Fight**. Needs nothing else; it generates its own scene,
     `HypatiaFight.unity`, as a copy of ChibiSandbox, so re-run it after ChibiSandbox changes
     (it rebuilds only when its inputs changed; see `Docs/Systems/HypatiaBoss.md`).
+13. **Cutscene ▸ Setup Opening Cutscenes**, after Build Academy Greybox. It regenerates
+    `Scenes/Cutscene/OpeningPlayable.unity` as a copy of AcademyGreybox, then the opening's
+    timelines and cameras. Re-run it after AcademyGreybox changes, then run **Validate Framing**
+    as a separate step (see `Docs/Systems/Cutscene.md` §2.2).
 
 Setup Chibi Sandbox already runs the player-level setups as part of its build:
 - `MovementSetup.WirePlayer` and `EnsureConfigs`

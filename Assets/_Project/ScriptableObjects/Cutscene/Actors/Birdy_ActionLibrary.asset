@@ -1,0 +1,153 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 27fbb3f15b2342ea93bd6645ec00c0f1, type: 3}
+  m_Name: Birdy_ActionLibrary
+  m_EditorClassIdentifier: Pickleball.Cutscene::Pickleball.Cutscene.CutsceneActionLibrary
+  actorId: BIRDY
+  idleVerb: hover idle
+  entries:
+  - verb: crash tumble
+    clip: {fileID: 7400000, guid: 3fb31bddb9b9ced419e816981b5032ed, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: crash tumble and bounce, scramble up
+    clip: {fileID: 7400000, guid: a7d3fac4126ba6d4ebf58efc97701a01, type: 2}
+    loop: 0
+    blendIn: 0.1
+  - verb: panic circling
+    clip: {fileID: 7400000, guid: 15ba93ef1933ca640bd538f29631b19b, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: close lean-in
+    clip: {fileID: 7400000, guid: 3c26fd488a2fdc1418b7b4c942381633, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: plead
+    clip: {fileID: 7400000, guid: e1ec2973f51d7cb4eb8859cff23843b6, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: point up
+    clip: {fileID: 7400000, guid: e31f314c3e0bb0c4285b4a17577bda48, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: eager bounce
+    clip: {fileID: 7400000, guid: 776061677ee457148b8ff63fba411340, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: tiny wing spread
+    clip: {fileID: 7400000, guid: dc545a351a103c84894ea9307f221a26, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: sad droop
+    clip: {fileID: 7400000, guid: 52136c15fcd1e4f4e8638d32bc149965, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: snatch
+    clip: {fileID: 7400000, guid: 5b06ac772e7a34d46ae300c0236bc9c2, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: propeller click
+    clip: {fileID: 7400000, guid: a67a90c4706c31b4db35b96053312b20, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: hover wobble
+    clip: {fileID: 7400000, guid: 82864cb00cd8cfd4a9c26632fef4eba2, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: overjoyed
+    clip: {fileID: 7400000, guid: 81112547e2d868444ace18830160ec50, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: proud loop
+    clip: {fileID: 7400000, guid: 2a343d82383b7334b92b2074e78c6d17, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: stare
+    clip: {fileID: 7400000, guid: cf0c9517ecee4924eb56bc47118390db, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: awed
+    clip: {fileID: 7400000, guid: 9d28d074164bc37428130aede138093b, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: excited flap
+    clip: {fileID: 7400000, guid: 85c1fe0492e4efc4db8735552ac9067e, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: deflate
+    clip: {fileID: 7400000, guid: 1799dbd8768a78948b5c788f6e6b92d4, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: losing steam
+    clip: {fileID: 7400000, guid: 1799dbd8768a78948b5c788f6e6b92d4, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: grand gesture
+    clip: {fileID: 7400000, guid: 54a4cc4bcd4491b458d94fe1b80c176a, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: perky recovery
+    clip: {fileID: 7400000, guid: 8410b51869d7f564397a1a4d77882821, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: putter hover
+    clip: {fileID: 7400000, guid: 719d0aeec0ea0074594875cdbb256cd2, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: confused head tilt
+    clip: {fileID: 7400000, guid: 30af8eaaa967a5f4298a47a33c10ab1c, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: chuckle
+    clip: {fileID: 7400000, guid: 6af486f6fc6c5f94c9f5ddab6a5de41d, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: earnest nod
+    clip: {fileID: 7400000, guid: 0cc3a67556c42684b9a537305f370f47, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: beam
+    clip: {fileID: 7400000, guid: b8b9fa72a53f3ce4494a12bb9dd4b16f, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: zip in
+    clip: {fileID: 7400000, guid: d60db5c36dc1de24bb8eb7b66e2e01f5, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: tour-guide gesture
+    clip: {fileID: 7400000, guid: 5bf006ce21998364a8b97b538a7fec57, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: cheer slip
+    clip: {fileID: 7400000, guid: 44b605bcd2f5d824c9585bde50cd37bd, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: point at mc
+    clip: {fileID: 7400000, guid: 4f59368c2994f3c44ac4915ddae0cfd2, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: warm lean
+    clip: {fileID: 7400000, guid: 13a88c2fdd8162743a8f626b8456d365, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: zip-off
+    clip: {fileID: 7400000, guid: 4ab0337c2027a7c4397ef228ed397ae1, type: 2}
+    loop: 0
+    blendIn: 0.25
+  - verb: hover idle
+    clip: {fileID: 7400000, guid: a2bc39d27396d2e4c99e020378792b72, type: 2}
+    loop: 1
+    blendIn: 0.25
+  - verb: crash tumble and bounce
+    clip: {fileID: 7400000, guid: a7d3fac4126ba6d4ebf58efc97701a01, type: 2}
+    loop: 0
+    blendIn: 0.1

@@ -1,0 +1,22 @@
+{
+    "name": "Pickleball.Cutscene",
+    "rootNamespace": "Pickleball.Cutscene",
+    "references": [
+        "Pickleball.Runtime",
+        "Unity.Timeline",
+        "UniTask",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro",
+        "Unity.RenderPipelines.Core.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

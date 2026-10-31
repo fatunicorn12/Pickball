@@ -1,0 +1,28 @@
+{
+    "name": "Pickleball.Cutscene.Editor",
+    "rootNamespace": "Pickleball.Cutscene.Editor",
+    "references": [
+        "Pickleball.Cutscene",
+        "Pickleball.Runtime",
+        "Pickleball.Editor",
+        "Unity.Timeline",
+        "Unity.Timeline.Editor",
+        "UniTask",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
