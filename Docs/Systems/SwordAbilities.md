@@ -46,6 +46,8 @@ How the chains behave:
     KH2), so every air hit you learn lengthens it. Mashing can't stall forever.
   - An air step may also set your vertical speed once as it starts (`airLift`): above zero is a
     Castle Crashers uppercut hop, below zero a slam (with `hangInAir` off). The shipped steps use 0.
+- **Enemies have weight.** Launched targets juggle by Castle Crashers weight class (Light forever,
+  Medium ~17 air hits, Heavy 1-3); see [Juggle.md](Juggle.md).
 - **The ground chain resets whenever a swing ends without a follow-up press.**
 - **Mashing never cuts a hit short.** A buffered press chains at the step's `comboOpen`, but never
   before its blade window has closed or its finisher ring has gone out.
