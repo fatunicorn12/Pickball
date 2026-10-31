@@ -35,6 +35,17 @@ namespace Pickleball.Cutscene.Editor.Pipeline
     /// </summary>
     public static class OpeningTimelineBuilder
     {
+        /// <summary>
+        /// The minimum card time for voiced lines, from <c>CutscenePlaybackConfig</c> (or
+        /// <see cref="LineTiming.DefaultMinCardSeconds"/> before the config exists). The timeline and
+        /// camera builders both lay scenes out with it, so their beat times agree.
+        /// </summary>
+        public static float MinCardSeconds()
+        {
+            var config = AssetDatabase.LoadAssetAtPath<Pickleball.Cutscene.Playback.CutscenePlaybackConfig>(PipelinePaths.PlaybackConfig);
+            return config != null ? config.MinCardSeconds : LineTiming.DefaultMinCardSeconds;
+        }
+
         /// <summary>Shot track name.</summary>
         public const string ShotTrackName = "Shots";
         /// <summary>Subtitle track name.</summary>
@@ -69,7 +80,7 @@ namespace Pickleball.Cutscene.Editor.Pipeline
             {
                 try
                 {
-                    var layout = TimelineLayout.Layout(s, OpeningTimingPlan.Scene(s), lines);
+                    var layout = TimelineLayout.Layout(s, OpeningTimingPlan.Scene(s), lines, MinCardSeconds());
                     result[s - 1] = BuildScene(ctx, script, layout, report);
                 }
                 catch (ArgumentException e)

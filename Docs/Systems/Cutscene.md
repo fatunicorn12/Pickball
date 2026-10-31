@@ -441,16 +441,25 @@ plays on any Humanoid with no retarget step. These parts do **not** carry over t
 - **Voice is bound (64 of 65 lines).** Menu 3 bound every clip in
   `Audio/Cutscene/Opening/` by line id; only `OC_S5_06` ("...") has none and keeps its placeholder
   inside S5's 2.0 s hold. Rebuild Timelines retimed every shot as audio + the same holds:
-  - S1 32.83 → **37.41 s**, S2 51.00 → **53.57**, S3 57.40 → **57.26**, S4 24.10 → **27.83**,
-    S5 27.33 → **29.22**, S6 79.10 → **76.86**; block 1 now 90.98 s, block 2 191.17 s
-    (total 271.77 → 282.15 s).
-  - Every audio clip's length equals its WAV, and its subtitle cards start and end with it (a
-    two-card line splits inside the clip). The gaps between lines are the 0.3 s inter-line gap
-    plus the line's hold: [pause] 0.8, [beat] 0.6, [long pause] 2.0, Birdy's scene-6 [pause] 1.0.
+  - | Scene | Placeholder | Audio | Audio + 1.0 s minimum card |
+    |---|---|---|---|
+    | S1 | 32.83 | 37.41 | **37.98** |
+    | S2 | 51.00 | 53.57 | **53.57** |
+    | S3 | 57.40 | 57.26 | **57.78** |
+    | S4 | 24.10 | 27.83 | **28.15** |
+    | S5 | 27.33 | 29.22 | **29.22** |
+    | S6 | 79.10 | 76.86 | **77.17** |
+    | Total | 271.77 | 282.15 | **283.87** (block 1 91.55, block 2 192.32) |
+  - Every audio clip plays at its WAV's length from its line's start. A line's slot is
+    max(clip, `CutscenePlaybackConfig.minCardSeconds`, 1.0 s) and its subtitle covers the whole
+    slot; each card of a multi-card line gets at least the minimum where the slot allows it.
+    Four clips are shorter than 1.0 s (OC_S1_02 0.43, OC_S3_03 0.48, OC_S4_03 0.68, OC_S6_17
+    0.69 s): their cards now stay up 1.0 s, and everything after them moves back by the
+    difference (it reads as a beat). Placeholder timing is unchanged (its floor is 1.5 s).
+    `MinCardTimeTests`. Changing the minimum needs Rebuild Timelines and 6 Build Cameras.
+  - After the slot come the 0.3 s inter-line gap and the line's hold: [pause] 0.8, [beat] 0.6,
+    [long pause] 2.0, Birdy's scene-6 [pause] 1.0.
   - Validate Framing after the retime: 0 flags, 0 warnings.
-  - Very short lines now show their card only as long as the audio: OC_S1_02 0.43 s, OC_S3_03
-    0.48 s, OC_S4_03 0.68 s, OC_S6_17 0.69 s (the placeholder floor was 1.5 s). Hard to read;
-    a minimum card time would need the subtitle track to outlast its clip.
   - Lip-sync is the painted mouths (`MouthSwap`, see `Docs/Art/CutsceneCharacters.md`), checked in
     a Play recording of both blocks with audio. The shot list's sound design is still untested.
 - **The sword is always in MC's hand.** Gameplay has no sheath or back socket, and the weapon

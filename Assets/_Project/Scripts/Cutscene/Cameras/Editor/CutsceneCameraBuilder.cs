@@ -146,7 +146,7 @@ namespace Pickleball.Cutscene.Cameras.Editor
                 SceneLayout layout = null;
                 try
                 {
-                    if (script != null) layout = TimelineLayout.Layout(s, OpeningTimingPlan.Scene(s), lines);
+                    if (script != null) layout = TimelineLayout.Layout(s, OpeningTimingPlan.Scene(s), lines, OpeningTimelineBuilder.MinCardSeconds());
                 }
                 catch (ArgumentException e)
                 {

@@ -4,7 +4,8 @@ namespace Pickleball.Cutscene.Playback
 {
     /// <summary>
     /// Tunables for cutscene playback: how long the skip button must be held and how fast the
-    /// gameplay HUD fades away and back. Read by <see cref="CutscenePlayer"/>; created by the
+    /// gameplay HUD fades away and back, and the minimum subtitle card time the timeline builders lay
+    /// voiced lines out with. Read by <see cref="CutscenePlayer"/>; created by the
     /// <c>4 Build Opening Scene</c> menu at <c>ScriptableObjects/Cutscene/Playback/</c> if missing.
     /// </summary>
     [CreateAssetMenu(menuName = "Pickleball/Cutscene/Playback Config", fileName = "CutscenePlaybackConfig")]
@@ -33,6 +34,15 @@ namespace Pickleball.Cutscene.Playback
         [Range(0f, 1f)]
         [SerializeField] private float hudHiddenAlpha;
 
+        [Header("Subtitles (timeline layout)")]
+        [Tooltip("Shortest time a voiced line's card stays up, in seconds. A clip shorter than this " +
+                 "still plays at its real length, and the line's slot is stretched to this, so later " +
+                 "lines move back a little (it reads as a beat). Also the floor for each card of a " +
+                 "multi-card line where the line is long enough. Baked into the timelines: run " +
+                 "Rebuild Timelines and 6 Build Cameras after changing it.")]
+        [Min(0f)]
+        [SerializeField] private float minCardSeconds = Pickleball.Cutscene.Script.LineTiming.DefaultMinCardSeconds;
+
         /// <summary>Skip hold time, seconds.</summary>
         public float SkipHoldSeconds => skipHoldSeconds;
 
@@ -41,5 +51,8 @@ namespace Pickleball.Cutscene.Playback
 
         /// <summary>HUD alpha during a cutscene.</summary>
         public float HudHiddenAlpha => hudHiddenAlpha;
+
+        /// <summary>Minimum card time for voiced lines, seconds (read by the timeline builders).</summary>
+        public float MinCardSeconds => minCardSeconds;
     }
 }

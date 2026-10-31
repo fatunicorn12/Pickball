@@ -9,7 +9,8 @@ namespace Pickleball.Cutscene.Timeline.Plan
     /// line specs, so "assigning a clip shifts every later beat and nothing earlier" is a unit test.
     /// <list type="bullet">
     /// <item>Wordless beats and holds take their seconds.</item>
-    /// <item>A line takes its speech (the clip's length, or the placeholder rule) plus the 0.3 s gap.
+    /// <item>A line takes its speech (the clip's length but at least the minimum card time, or the
+    /// placeholder rule) plus the 0.3 s gap. The clip plays at its real length from the line's start.
     /// A mid-line hold without audio is added between the cards; with audio it is assumed to be in
     /// the clip (ElevenLabs renders the <c>[pause]</c>), so the line is exactly the clip plus the gap.</item>
     /// <item>A line inside a hold starts at the hold's offset and the hold lasts at least as long as
@@ -22,7 +23,16 @@ namespace Pickleball.Cutscene.Timeline.Plan
     {
         /// <summary>Lays out one scene.</summary>
         /// <exception cref="ArgumentException">A line beat names an id <paramref name="lines"/> doesn't have.</exception>
-        public static SceneLayout Layout(int scene, IReadOnlyList<ShotPlan> shots, IReadOnlyDictionary<string, LineSpec> lines)
+        public static SceneLayout Layout(int scene, IReadOnlyList<ShotPlan> shots, IReadOnlyDictionary<string, LineSpec> lines) =>
+            Layout(scene, shots, lines, LineTiming.DefaultMinCardSeconds);
+
+        /// <summary>
+        /// Lays out one scene with a minimum card time for voiced lines (seconds; the playback
+        /// config's <c>MinCardSeconds</c>). Every builder that needs beat times must pass the same value.
+        /// </summary>
+        /// <exception cref="ArgumentException">A line beat names an id <paramref name="lines"/> doesn't have.</exception>
+        public static SceneLayout Layout(int scene, IReadOnlyList<ShotPlan> shots, IReadOnlyDictionary<string, LineSpec> lines,
+            float minCardSeconds)
         {
             if (shots == null) throw new ArgumentNullException(nameof(shots));
             if (lines == null) throw new ArgumentNullException(nameof(lines));
@@ -46,14 +56,14 @@ namespace Pickleball.Cutscene.Timeline.Plan
                             break;
                         case BeatKind.Line:
                         {
-                            var span = PlaceLine(Spec(lines, beat.LineId, shot.Id), shot.Id, t, beat.MidHold);
+                            var span = PlaceLine(Spec(lines, beat.LineId, shot.Id), shot.Id, t, beat.MidHold, minCardSeconds);
                             lineSpans.Add(span);
                             t = span.End;
                             break;
                         }
                         case BeatKind.LineInHold:
                         {
-                            var span = PlaceLine(Spec(lines, beat.LineId, shot.Id), shot.Id, t + beat.Offset, 0f);
+                            var span = PlaceLine(Spec(lines, beat.LineId, shot.Id), shot.Id, t + beat.Offset, 0f, minCardSeconds);
                             lineSpans.Add(span);
                             t = Math.Max(t + beat.Seconds, span.End);
                             break;
@@ -85,20 +95,40 @@ namespace Pickleball.Cutscene.Timeline.Plan
         /// Places one line starting at <paramref name="start"/>. Public so the card timing rule is
         /// tested directly.
         /// </summary>
-        public static LineSpan PlaceLine(LineSpec line, string shotId, double start, float midHold)
+        public static LineSpan PlaceLine(LineSpec line, string shotId, double start, float midHold) =>
+            PlaceLine(line, shotId, start, midHold, LineTiming.DefaultMinCardSeconds);
+
+        /// <summary>
+        /// Places one line with a minimum card time for voiced lines: the slot's speech part is
+        /// max(clip length, <paramref name="minCardSeconds"/>), the subtitle covers all of it, and
+        /// each card of a multi-card line gets at least the minimum where the slot allows it.
+        /// </summary>
+        public static LineSpan PlaceLine(LineSpec line, string shotId, double start, float midHold, float minCardSeconds)
         {
             float speech = LineTiming.SpeechSeconds(line.DisplayChars, line.AudioSeconds);
             int cardCount = Math.Max(1, line.Cards.Length);
             int holdAfter = midHold > 0f
                 ? (line.MidHoldAfterCard >= 0 ? line.MidHoldAfterCard : (cardCount > 1 ? 0 : cardCount - 1))
                 : -1;
+            float hold = holdAfter >= 0 ? midHold : 0f;
 
-            // With audio the hold is inside the clip; without, it is added to the line.
-            double spoken = line.HasAudio ? Math.Max(0.0, speech - (holdAfter >= 0 ? midHold : 0f)) : speech;
-            double slotSpeech = line.HasAudio ? speech : speech + (holdAfter >= 0 ? midHold : 0f);
+            // With audio the hold is inside the clip and the slot is at least the minimum card time;
+            // without audio the hold is added to the line (placeholder timing is unchanged).
+            double slotSpeech = line.HasAudio ? LineTiming.VoicedSlotSpeech(speech, minCardSeconds) : speech + hold;
+            double spoken = line.HasAudio ? Math.Max(0.0, slotSpeech - hold) : speech;
 
             int totalChars = 0;
             for (int i = 0; i < line.Cards.Length; i++) totalChars += line.Cards[i].Length;
+
+            var lengths = new double[cardCount];
+            for (int i = 0; i < cardCount; i++)
+            {
+                double share = line.Cards.Length == 0 || totalChars == 0
+                    ? 1.0 / cardCount
+                    : (double)line.Cards[i].Length / totalChars;
+                lengths[i] = spoken * share;
+            }
+            if (line.HasAudio && cardCount > 1) ApplyMinimum(lengths, spoken, minCardSeconds);
 
             var cards = new CardSpan[cardCount];
             double c = start;
@@ -106,10 +136,7 @@ namespace Pickleball.Cutscene.Timeline.Plan
             for (int i = 0; i < cardCount; i++)
             {
                 starts[i] = c;
-                double share = line.Cards.Length == 0 || totalChars == 0
-                    ? 1.0 / cardCount
-                    : (double)line.Cards[i].Length / totalChars;
-                c += spoken * share;
+                c += lengths[i];
                 if (i == holdAfter) c += midHold;
             }
             double speechEnd = start + slotSpeech;
@@ -120,6 +147,34 @@ namespace Pickleball.Cutscene.Timeline.Plan
                 cards[i] = new CardSpan(i, text, starts[i], end);
             }
             return new LineSpan(line, shotId, start, speechEnd, speechEnd + LineTiming.Gap, cards);
+        }
+
+        /// <summary>
+        /// Gives every card at least <paramref name="min"/> seconds when the total allows it, taking
+        /// the time from the longer cards in proportion to what they have above the minimum; when it
+        /// doesn't, the cards share the total equally. The total never changes.
+        /// </summary>
+        static void ApplyMinimum(double[] lengths, double total, float min)
+        {
+            int n = lengths.Length;
+            if (min <= 0f || n == 0) return;
+            if (total < n * (double)min)
+            {
+                for (int i = 0; i < n; i++) lengths[i] = total / n;
+                return;
+            }
+            double deficit = 0, surplus = 0;
+            for (int i = 0; i < n; i++)
+            {
+                if (lengths[i] < min) deficit += min - lengths[i];
+                else surplus += lengths[i] - min;
+            }
+            if (deficit <= 0 || surplus <= 0) return;
+            for (int i = 0; i < n; i++)
+            {
+                if (lengths[i] < min) lengths[i] = min;
+                else lengths[i] -= deficit * (lengths[i] - min) / surplus;
+            }
         }
 
         static LineSpec Spec(IReadOnlyDictionary<string, LineSpec> lines, string id, string shotId)
