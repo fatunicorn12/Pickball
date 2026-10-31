@@ -438,8 +438,21 @@ plays on any Humanoid with no retarget step. These parts do **not** carry over t
     - X3 S6_SH16: MC ends holding his sword out, not in an idle stand.
     - S2_SH10: the crane passes about 1.5 m behind MC's head at 47.3 s (hair in the top of frame
       for about 0.3 s, no pop).
-- **No audio yet.** All 65 lines run on placeholder timing. Lip-sync (the mouth flap) and the
-  sound design in the shot list are untested.
+- **Voice is bound (64 of 65 lines).** Menu 3 bound every clip in
+  `Audio/Cutscene/Opening/` by line id; only `OC_S5_06` ("...") has none and keeps its placeholder
+  inside S5's 2.0 s hold. Rebuild Timelines retimed every shot as audio + the same holds:
+  - S1 32.83 → **37.41 s**, S2 51.00 → **53.57**, S3 57.40 → **57.26**, S4 24.10 → **27.83**,
+    S5 27.33 → **29.22**, S6 79.10 → **76.86**; block 1 now 90.98 s, block 2 191.17 s
+    (total 271.77 → 282.15 s).
+  - Every audio clip's length equals its WAV, and its subtitle cards start and end with it (a
+    two-card line splits inside the clip). The gaps between lines are the 0.3 s inter-line gap
+    plus the line's hold: [pause] 0.8, [beat] 0.6, [long pause] 2.0, Birdy's scene-6 [pause] 1.0.
+  - Validate Framing after the retime: 0 flags, 0 warnings.
+  - Very short lines now show their card only as long as the audio: OC_S1_02 0.43 s, OC_S3_03
+    0.48 s, OC_S4_03 0.68 s, OC_S6_17 0.69 s (the placeholder floor was 1.5 s). Hard to read;
+    a minimum card time would need the subtitle track to outlast its clip.
+  - Lip-sync is the painted mouths (`MouthSwap`, see `Docs/Art/CutsceneCharacters.md`), checked in
+    a Play recording of both blocks with audio. The shot list's sound design is still untested.
 - **The sword is always in MC's hand.** Gameplay has no sheath or back socket, and the weapon
   system is out of scope here. Birdy notices "that sword" on MC's back (S3_SH05/06); in S3_SH06
   the camera looks over MC's right shoulder at the blade resting on it from the turn-away pose.
