@@ -145,6 +145,12 @@ public static class ChibiSandboxSetup
         // frame 2. Frames past 17 are its own landing, which the Land state
         // already covers, so they are cut.
         ("runJump", ClipDir + "/Running Jump.fbx",           false,  1, 17),
+        // Big Jump (Mixamo X Bot, "Big Jump To Roll", 72 frames): 15-21 is the
+        // leap off the ground, held on its last frame until JumpDouble hands to
+        // Fall. The feet leave at 15-16. Past 21 the body pitches over 62 deg
+        // into the roll, which would read as the triple's flip, so it is cut.
+        // Its .meta carries the canonical X Bot reference skeleton (see "dive").
+        ("jumpDouble", ClipDir + "/Big Jump.fbx",            false, 15, 21),
         // Dash pose: frames 9-13 of Running Jump are the airborne stretch â€”
         // feet up, hips high, body leaning into travel. Non-looping, so it
         // holds that pose for the whole 0.22s dash. No new download needed.
@@ -236,7 +242,7 @@ public static class ChibiSandboxSetup
         // animation for a prop and file it under Art/Props.
         ("Hanging.fbx", ClipDir), ("Throw.fbx", ClipDir),
         ("Skateboarding (1).fbx", ClipDir), ("Run To Dive.fbx", ClipDir),
-        ("Belly Slide Pose Wide.fbx", ClipDir),
+        ("Belly Slide Pose Wide.fbx", ClipDir), ("Big Jump.fbx", ClipDir),
         ("Standing Sprint Forward.fbx", ClipDir), ("Sprint Turn.fbx", ClipDir),
         ("Crouched To Sprinting.fbx", ClipDir),
         (WorldFile, WorldDir), (ColliderFile, WorldDir),
