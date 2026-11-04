@@ -337,13 +337,13 @@ hygiene as before. `MovementSetup.AddMovementStates` then adds:
 - Foot IK is off on every new state. The driver also sets `ChibiFootIK.Suppressed` during the
   belly slide.
 
-**Clips.** Dive and BellySlide have real clips. The rest are placeholders until more of the
+**Clips.** JumpDouble, Dive and BellySlide have real clips. The rest are placeholders until more of the
 Mixamo set in `Pickball-mixamo-inbox` is imported:
 
 | State | Clip |
 |---|---|
 | SkidTurn | placeholder: Run To Stop's braking plant, played at 2× |
-| JumpDouble | placeholder: Running Jump |
+| JumpDouble | `Big Jump.fbx` frames 15–21, holding the last until the hand-off to Fall (about 0.68 s from sprint): a leap with the body pitched 25° to 62° forward, trailing legs and the cape streaming behind. It replaces Running Jump, which the first jump already plays at run speed, so the two read the same. Past frame 21 the take pitches into a roll. |
 | TripleJump | placeholder: the trimmed front flip |
 | SideFlip | placeholder: the trimmed front flip played backwards |
 | Rollout | placeholder: the trimmed front flip |
@@ -351,7 +351,7 @@ Mixamo set in `Pickball-mixamo-inbox` is imported:
 | Dive | `Run To Dive.fbx` frames 15–20, holding the last: body flat, both hands straight ahead and together, legs scissored. Past about frame 22 the take pitches into a roll. |
 | BellySlide | `Belly Slide Pose Wide.fbx`, an authored two-frame pose held for the whole slide: arms ahead in a shallow V (17° out, 6° up), torso flat, head up, legs together with the knees bent. The V puts the hands beside the big head rather than under it. An arms-together version was tried first, and its hands sat under the head, mostly hidden from the side. The model is lowered 0.45 m (`bellySlideOffset`), which puts its lowest point about 1 cm above the floor. |
 
-Both are Mixamo X Bot clips. Their `.meta` files carry the canonical X Bot reference skeleton
+All three are Mixamo X Bot clips. Their `.meta` files carry the canonical X Bot reference skeleton
 from the clip audit: every `mixamorig:*` rotation in `humanDescription.skeleton` is the same as
 in `Run To Dive.fbx.meta`. With each file's own frame-0 reference instead, the knees and feet
 play 30–40° off on the chibi. `SetupClips` rewrites only `clipAnimations`, so a re-run keeps the
