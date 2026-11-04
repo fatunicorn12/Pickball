@@ -1489,6 +1489,7 @@ public static class ChibiSandboxSetup
         PlacePickup(AbilityKind.Tether, spawn + new Vector3(0f, 0f, -3f));
         PlaceAnchors(spawn);
         InventorySetup.AttachToPlayer(go);   // inventory + weapon switching (scene overrides, not the prefab)
+        CombatVoiceSetup.AttachToPlayer(go);   // attack grunts + hurt sounds (scene override too)
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, ScenePath);
