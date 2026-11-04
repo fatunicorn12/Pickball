@@ -60,6 +60,21 @@ namespace Pickleball.Sandbox.Juggle
                  "Off: it dies where it is hit.")]
         [SerializeField] private bool defeatOnLanding;
 
+        [Tooltip("Hitstun multiplier for a Heavy blow (a slam). 2 staggers twice as long as a flinch.")]
+        [Min(1f)] [SerializeField] private float heavyStunScale;
+
+        [Tooltip("Upward speed a Knock Away throws it with, in m/s, before weightScale. " +
+                 "Higher is a longer, more dramatic arc; 3 m/s is about a 0.5 m hop.")]
+        [Min(0f)] [SerializeField] private float knockAwayLift;
+
+        [Tooltip("Share of the blow's knockback speed it flies away with. 1 is the blow's own " +
+                 "speed; lower for a target that should not leave blade reach.")]
+        [Min(0f)] [SerializeField] private float knockAwayCarry;
+
+        [Tooltip("Seconds it stays down after a Knock Away lands. It ignores hits and can't act " +
+                 "meanwhile, which is the breather a finisher buys.")]
+        [Min(0f)] [SerializeField] private float recoverSeconds;
+
         public JuggleWeight Weight => weight;
         public float LaunchSpeed => launchSpeed;
         public float RelaunchSpeed => relaunchSpeed;
@@ -70,11 +85,21 @@ namespace Pickleball.Sandbox.Juggle
         public float Hitstun => hitstun;
         public float Gravity => gravity;
         public bool DefeatOnLanding => defeatOnLanding;
+        public float HeavyStunScale => heavyStunScale;
+        public float KnockAwayLift => knockAwayLift;
+        public float KnockAwayCarry => knockAwayCarry;
+        public float RecoverSeconds => recoverSeconds;
 
         public JuggleSettings(JuggleWeight weight, float launchSpeed, float relaunchSpeed,
                               float weightScale, float decay, float minRelaunch, float maxHeight,
-                              float hitstun, float gravity = 9.81f, bool defeatOnLanding = true)
+                              float hitstun, float gravity = 9.81f, bool defeatOnLanding = true,
+                              float heavyStunScale = 2f, float knockAwayLift = 3f,
+                              float knockAwayCarry = 0.6f, float recoverSeconds = 0.8f)
         {
+            this.heavyStunScale = Mathf.Max(1f, heavyStunScale);
+            this.knockAwayLift = Mathf.Max(0f, knockAwayLift);
+            this.knockAwayCarry = Mathf.Max(0f, knockAwayCarry);
+            this.recoverSeconds = Mathf.Max(0f, recoverSeconds);
             this.weight = weight;
             this.launchSpeed = Mathf.Max(0f, launchSpeed);
             this.relaunchSpeed = Mathf.Max(0f, relaunchSpeed);

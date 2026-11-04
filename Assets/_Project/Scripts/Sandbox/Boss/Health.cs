@@ -242,13 +242,30 @@ namespace Pickleball.Sandbox
         /// does not — so they are passed on rather than applied here.</summary>
         public void TakeHit(float amount, Vector3 hitPoint, Vector3 knockback, bool launch,
                             DamageKind kind = DamageKind.Physical)
+            => TakeHit(new HitImpact(amount, hitPoint, knockback,
+                                     launch ? HitReaction.Launch : HitReaction.Flinch, kind));
+
+        /// <summary>The weapon entry point with the hit's full reaction. Damage first,
+        /// then <see cref="Knocked"/> and <see cref="Impacted"/>, so a listener sees
+        /// the health the hit left behind.</summary>
+        public void TakeHit(HitImpact impact)
         {
-            Damage(amount, hitPoint, kind: kind);
-            Knocked?.Invoke(knockback, launch);
+            Damage(impact.Damage, impact.Point, kind: impact.Kind);
+            Knocked?.Invoke(impact.Knockback, impact.Reaction == HitReaction.Launch);
+            Impacted?.Invoke(impact);
         }
 
-        /// <summary>Raised by <see cref="TakeHit"/> so whoever owns the body can
-        /// decide what a shove means for them.</summary>
+        /// <summary>Raised by <see cref="TakeHit(float, Vector3, Vector3, bool, DamageKind)"/>
+        /// so whoever owns the body can decide what a shove means for them.</summary>
         public event Action<Vector3, bool> Knocked;
+
+        /// <summary>Raised for every weapon hit, with its <see cref="HitReaction"/>. For
+        /// a body that reacts differently to a flinch, a launch and a knock-away.</summary>
+        public event Action<HitImpact> Impacted;
+
+        /// <summary>Where the visible body is, relative to this object's root. Zero
+        /// unless its owner flies the body while the root stays planted, as a juggled
+        /// training dummy does. Lock-on adds it so the aim stays on the body.</summary>
+        public Vector3 BodyOffset { get; set; }
     }
 }

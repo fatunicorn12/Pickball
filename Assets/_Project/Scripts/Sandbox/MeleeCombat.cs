@@ -33,7 +33,9 @@ namespace Pickleball.Sandbox
     ///    air hang (<see cref="AirHang"/>), which only holds gravity off, and
     ///    only through each air swing's own hover window, hit or miss (the
     ///    KH2 / Castle Crashers model). An air step may also set his vertical
-    ///    speed once as it starts (a lift or a slam).
+    ///    speed once as it starts (a lift or a slam), and an air swing with a
+    ///    target in reach homes on it through one impulse, one vertical speed
+    ///    and one stop (<see cref="AirHomingPlan"/>).
     /// </summary>
     public class MeleeCombat : MonoBehaviour
     {
@@ -93,6 +95,11 @@ namespace Pickleball.Sandbox
         [Tooltip("Gap to the target surface, in metres, under which the lunge is skipped " +
                  "so the player is not shoved through it.")]
         [Min(0f)] [SerializeField] private float homingStopGap = 0.8f;
+
+        [Header("Air homing")]
+        [Tooltip("How an air swing pulls him to its target: the locked one, or with no lock " +
+                 "the enemy a lock-on press would pick. Needs Lock On wired.")]
+        [SerializeField] private AirHomingSettings airHoming = AirHomingSettings.Default;
 
         /// <summary>A step has started. Raised for every step, chained or not.</summary>
         public event Action<ResolvedStep> SwingStarted;
@@ -163,6 +170,8 @@ namespace Pickleball.Sandbox
         float _startBufferedUntil = -1f;
         ChainGrace _grace;
         AirHang _airHang;
+        float _homingStopLeft;
+        bool _homedVertically;
 
         /// <summary>One ring in flight. Pooled: a finisher every second must not
         /// allocate.</summary>
@@ -212,6 +221,8 @@ namespace Pickleball.Sandbox
             _airHang = new AirHang();
             _segments = new (Vector3, Vector3)[BladeSweep.MaxSegments];
             _hitstopLeft = 0f;
+            _homingStopLeft = 0f;
+            _homedVertically = false;
             _queued = false;
             _startBufferedUntil = -1f;
 
@@ -284,6 +295,7 @@ namespace Pickleball.Sandbox
             float dt = Time.deltaTime;
             TrackGround(dt);
             HoldInAir(dt);
+            TickAirHoming(dt);
 
             // Hitstop: hold the clock (and so the blade, the chain windows and
             // any rings in flight) so a connecting hit reads as impact rather
@@ -362,12 +374,55 @@ namespace Pickleball.Sandbox
                                        step != null ? step.AirHoverEnd : 0f,
                                        IsGroundedRaw, !CanSwing, dt);
             if (_impulses == null) return;
-            // Catch a fall as the hover opens. A step with its own lift has set
-            // his vertical speed already, and the measured velocity may still be
-            // last frame's fall.
-            if (_airHang.JustOpened && step.AirLift == 0f && _movement != null && _movement.Velocity.y < 0f)
+            // Catch a fall as the hover opens. A step with its own lift, or a swing
+            // homing on a target's height, has set his vertical speed already, and
+            // the measured velocity may still be last frame's fall.
+            if (_airHang.JustOpened && step.AirLift == 0f && !_homedVertically
+                && _movement != null && _movement.Velocity.y < 0f)
                 _impulses.SetVerticalVelocity(0f);
             if (hold > 0f) _impulses.SuspendGravity(hold);
+        }
+
+        /// <summary>Stop an air homing swing's travel when it has arrived. Runs ahead
+        /// of the hitstop return: hitstop freezes the swing's clock, not his body.
+        /// An exclusive move that took the body meanwhile keeps its own motion.</summary>
+        void TickAirHoming(float dt)
+        {
+            if (_homingStopLeft <= 0f) return;
+            _homingStopLeft -= dt;
+            if (_homingStopLeft > 0f) return;
+            _homingStopLeft = 0f;
+            if (CanSwing && _impulses != null) _impulses.StopPlanar();
+        }
+
+        /// <summary>Carry an air swing to its target, if one is in reach. True when
+        /// it homed, which takes the place of the step's lunge.</summary>
+        bool TryHomeInAir(ComboStepDefinition step)
+        {
+            if (_impulses == null || lockOn == null) return false;
+            if (!lockOn.TryGetAttackTarget(airHoming.Range, out Vector3 point, out float radius)) return false;
+
+            var windows = step.Windows;
+            float arrive = step.Duration * (windows.ActiveStart + windows.ActiveEnd) * 0.5f;
+            var plan = AirHomingPlan.Solve(airHoming, transform.position, point, radius, arrive,
+                                           _impulses.HangHaltRate,
+                                           mayChangeHeight: step.HangInAir && step.AirLift == 0f);
+            if (!plan.IsValid) return false;
+
+            // A lock-on already squares him up; with no lock nothing else would.
+            if (!lockOn.IsLocked) _impulses.FaceToward(point, step.Duration);
+            if (plan.TravelSeconds > 0f)
+            {
+                _impulses.StopPlanar();    // the plan is the whole of his travel
+                _impulses.AddImpulse(plan.Velocity);
+                _homingStopLeft = plan.TravelSeconds;
+            }
+            if (plan.SetsVertical)
+            {
+                _impulses.SetVerticalVelocity(plan.VerticalSpeed);
+                _homedVertically = true;
+            }
+            return true;
         }
 
         bool IsGroundedRaw => _movement == null || _movement.IsGrounded;
@@ -417,8 +472,11 @@ namespace Pickleball.Sandbox
             // The sweep history is kept across a chain: the blade moves
             // continuously from one step into the next.
 
+            _homedVertically = false;
+            bool homed = placement.Track == ComboTrack.Air && TryHomeInAir(step);
+
             // An impulse, once — see ICombatImpulses for why never per frame.
-            if (step.LungeSpeed > 0f && _impulses != null)
+            if (!homed && step.LungeSpeed > 0f && _impulses != null)
             {
                 Vector3 dir = Flat(transform.forward);
                 float speed = step.LungeSpeed;
@@ -505,7 +563,7 @@ namespace Pickleball.Sandbox
         {
             var report = new MeleeHitReport(target, col, point, hit.Damage, placement, fromBurst);
             HitConnecting?.Invoke(report);
-            target.TakeHit(hit.Damage, point, push, hit.IsLauncher);
+            target.TakeHit(new HitImpact(hit.Damage, point, push, hit.Reaction));
             // Max, not sum: a ring sweeping three targets in one frame is one impact.
             _hitstopLeft = Mathf.Max(_hitstopLeft, hit.Hitstop);
             HitLanded?.Invoke(report);

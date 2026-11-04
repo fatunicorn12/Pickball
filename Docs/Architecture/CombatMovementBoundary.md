@@ -18,7 +18,8 @@ LockOnTargeting ◀──reads── ChibiLocomotion (facade + glue, IFacingSour
 ## Decisions
 
 **Combat sees movement only through two small interfaces.** `ICombatMovement` (`IsGrounded`,
-`IsBusy`, `Velocity`, `IsMovementLocked`) and `ICombatImpulses` (`AddImpulse`, `LockMovement`, `SuspendGravity`).
+`IsBusy`, `Velocity`, `IsMovementLocked`) and `ICombatImpulses` (`AddImpulse`, `LockMovement`,
+`SuspendGravity`, `SetVerticalVelocity`, `StopPlanar`, `FaceToward`, `HangHaltRate`).
 `ChibiMovementAdapter` is the one file that changes when movement changes; the combo code never
 names a movement class. `MeleeCombat` takes the source as a serialized `MonoBehaviour` cast to
 the interface, falling back to `GetComponent`.
@@ -41,7 +42,9 @@ MeleeCombat, the Newton fight and the setup scripts depend on that API. New code
 
 **Facing: lock-on and combat decide where, movement decides when.** `ChibiLocomotion` implements
 `IFacingSource` and installs itself on the motor in `OnEnable`. Priority order:
-1. A registered combat facing source (`SetCombatFacingSource`). None is registered yet.
+1. A registered combat facing source (`SetCombatFacingSource`). `ChibiMovementAdapter` registers
+   itself and answers only while an `ICombatImpulses.FaceToward` request is running: an air swing
+   homing on a target with no lock. Otherwise it declines, and the next rule applies.
 2. The lock-on target, which is *urgent* while `MeleeCombat.IsAttacking` and only applied once
    the player stops otherwise.
 
@@ -55,7 +58,9 @@ or a finisher.
 
 **While locked, camera look turns into target flicks.** `SandboxOrbitCamera` ignores mouse and
 right-stick look, and `LockOnTargeting` reads them as left/right target hops. The lock's aim point
-is measured once, at lock time, so the camera doesn't "breathe".
+is measured once, at lock time, so the camera doesn't "breathe". It does follow
+`Health.BodyOffset`, which is zero unless the target flies its body while its root stays planted
+(a juggled training dummy), so the lock stays on a launched body.
 
 **The input gate ends targeting (Breath of the Wild).** While any claimant on `PlayerInputGate`
 blocks `LockOn` (a conversation, an aim), `LockOnTargeting` drops the toggle and flicks, releases
@@ -76,6 +81,20 @@ Kingdom Hearts II / Castle Crashers model replaced the old hit-earned hang). The
 the window, when the chain ends, the player lands (since `f876b63`), or a dash or tether takes the
 body. `ICombatImpulses.SetVerticalVelocity` catches a fall as a hover opens and applies an air
 step's `airLift` once as it starts; the adapter forwards it to `ChibiLocomotion.SetVerticalVelocity`.
+
+**Air swings home on their target through events, never a per-frame push.** `MeleeCombat` asks
+`LockOnTargeting.TryGetAttackTarget` as an air swing starts, and applies one `AirHomingPlan`:
+`StopPlanar`, one `AddImpulse`, one `SetVerticalVelocity`, and a second `StopPlanar` on arrival. The
+per-frame lunge that once slid the player metres per swing stays gone. The vertical speed relies on
+the hover easing to rest at `HangHaltRate`, so changing `SuspendGravity`'s easing changes where a
+homing swing ends; `AirHomingPlanTests` flies the same easing. No movement code changed for this:
+the adapter uses `ChibiLocomotion`'s existing public API.
+
+**Hit reactions are opt-in on the receiver's side.** `IDamageable.TakeHit(HitImpact)` is a default
+interface method that forwards to the plain `TakeHit`, so a receiver that doesn't implement it (a
+Hypatia orbiter, a test stub) gets exactly the call it always got. `Health` implements it and raises
+`Impacted` alongside the older `Knocked`, and only a body that subscribes reacts. Today that's
+`TrainingDummy`. Bosses ignore `Impacted`, so they pick up no juggle, knock-away or break-out.
 
 ## Pad and key layout contract
 

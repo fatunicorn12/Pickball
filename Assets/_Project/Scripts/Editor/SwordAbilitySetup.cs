@@ -95,9 +95,13 @@ public static class SwordAbilitySetup
                 Clip = "sword and shield slash (3).fbx", Speed = 2.2f,
                 Windows = new SwingWindows(0.34f, 0.64f, 0.64f, 0.95f), Hit = new HitSettings(20f, 8f, 12.8f, 0.1f),
                 Shake = 0.25f },
-        new() { Asset = "Step_AirSlash", Display = "Air Slash", State = "AirAttack",
-                Clip = "sword and shield attack (4).fbx", Speed = 2.2f, BlendIn = 0.06f,
-                Windows = new SwingWindows(0.25f, 0.60f, 0.60f, 1f), Hit = new HitSettings(12f, 3f, 0f, 0.05f) },
+        // Shares + C's state, so it plays the same clip at the same speed. The compact
+        // attack (4), and with it the AirAttack state, stays out of the chain: its tip
+        // reaches 0.54 m ahead against 1.33 m here, and it sat high enough to pass over
+        // anything standing on the ground (see the clip audit in the system doc).
+        new() { Asset = "Step_AirSlash", Display = "Air Slash", State = "PlusC",
+                Clip = "sword and shield slash (5).fbx", Speed = 3.0f, BlendIn = 0.06f,
+                Windows = new SwingWindows(0.30f, 0.58f, 0.58f, 1f), Hit = new HitSettings(12f, 3f, 0f, 0.05f) },
 
         // Lv 2 — + C. Attack1's flat sweep, played faster as a quick fourth hit:
         // direction A, so it alternates into the B-direction Rising Finish.
@@ -115,8 +119,8 @@ public static class SwordAbilitySetup
         // way round the player in mid-air, with a radius line sweeping like θ.
         new() { Asset = "Step_UnitCircle", Display = "Unit Circle", State = "UnitCircle",
                 Clip = "sword and shield attack (3).fbx", Speed = 2.4f,
-                Windows = new SwingWindows(0.30f, 0.62f, 0.62f, 0.92f), Hit = new HitSettings(16f, 5f, 0f, 0.08f),
-                Burst = new AreaBurst(0.45f, 1.8f, 0.15f, new HitSettings(10f, 5f, 0f, 0.06f), 0f, 1.4f),
+                Windows = new SwingWindows(0.30f, 0.62f, 0.62f, 0.92f), Hit = new HitSettings(16f, 5f, 0f, 0.08f, HitReaction.KnockAway),
+                Burst = new AreaBurst(0.45f, 1.8f, 0.15f, new HitSettings(10f, 5f, 0f, 0.06f, HitReaction.KnockAway), 0f, 1.4f),
                 Trail = new Color(0.45f, 1f, 0.95f, 0.95f), Shake = 0.25f, ShakeSeconds = 0.2f, Fov = 3f,
                 BurstFx = "UnitCircleRing" },
         // Lv 5 — Area Under the Curve. The rising launcher, slower and heavier,
@@ -358,6 +362,7 @@ public static class SwordAbilitySetup
         p.FindPropertyRelative("knockback").floatValue = h.Knockback;
         p.FindPropertyRelative("launchSpeed").floatValue = h.LaunchSpeed;
         p.FindPropertyRelative("hitstop").floatValue = h.Hitstop;
+        p.FindPropertyRelative("reaction").enumValueIndex = (int)h.Reaction;
     }
 
     internal static void WriteBurst(SerializedProperty p, AreaBurst b)

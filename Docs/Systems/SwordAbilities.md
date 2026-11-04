@@ -46,13 +46,21 @@ How the chains behave:
     KH2), so every air hit you learn lengthens it. Mashing can't stall forever.
   - An air step may also set your vertical speed once as it starts (`airLift`): above zero is a
     Castle Crashers uppercut hop, below zero a slam (with `hangInAir` off). The shipped steps use 0.
+- **Air swings home on their target** (the Kingdom Hearts II feel). An air swing with a target in
+  reach carries you to it and to its height, so you stay on a launched body without steering. The
+  target is your lock-on, or with no lock the enemy a lock-on press would pick (a friendly is never
+  picked). See `AirHomingPlan` in §2.
 - **Enemies have weight.** Launched targets juggle by Castle Crashers weight class (Light forever,
   Medium ~17 air hits, Heavy 1-3); see [Juggle.md](Juggle.md).
+- **Each attack is a kind of blow** (`HitReaction`): flinch, launch, heavy or knock-away. The air
+  finishers knock away, which ends the juggle. Enemies break out of long combos. See
+  [Juggle.md](Juggle.md).
 - **The ground chain resets whenever a swing ends without a follow-up press.**
 - **Mashing never cuts a hit short.** A buffered press chains at the step's `comboOpen`, but never
   before its blade window has closed or its finisher ring has gone out.
-- **Swinging still never moves or stops you.** The only exception is a step's one-off lunge
-  impulse; Area Under the Curve steps in 2.5 m/s.
+- **On the ground, swinging still never moves or stops you.** The only exception is a step's
+  one-off lunge impulse; Area Under the Curve steps in 2.5 m/s. In the air, homing takes the place
+  of the lunge whenever a target is in reach.
 
 With the shipped curve (base 50 Lemmas, growth 1, 1.5 Lemmas per HP of damage), levels 2–5 cost
 50, 150, 300 and 500 Lemmas in total. That is roughly 34, 100, 200 and 333 HP of sword damage,
@@ -199,6 +207,25 @@ PlayerAbilities (movement unlocks) ──Unlocked──▶ ProgressionToast
     `MovementMotor.SuspendGravity`, which eases vertical speed to rest at
     `MovementConfig.anchorHaltRate` and clears the hang on landing.
   - A hold is two frames long, because the motor may tick its countdown before the refresh lands.
+- **`AirHomingPlan`:** how one air swing carries you to its target, solved once as the swing
+  starts and applied as events, never as a per-frame push.
+  - **Across:** `StopPlanar`, one impulse, then `StopPlanar` again after `TravelSeconds`. The second
+    stop matters: momentum sheds only 1.6 m/s² in the air, so a lone impulse sails past the target.
+    `MeleeCombat.TickAirHoming` runs the countdown ahead of the hitstop return, because hitstop
+    freezes the swing's clock, not your body.
+  - **Up or down:** one `SetVerticalVelocity` of `√(2·halt·Δh)`. The hover eases vertical speed to
+    rest at the halt rate (`ICombatImpulses.HangHaltRate`), which brings you to rest where the blade
+    reaches. Up goes all the way to the target's height; down stops `dropTolerance` above it.
+    `MeleeCombat` skips the hover's usual catch-the-fall on such a swing.
+  - **Which target:** the lock, or with no lock the best enemy in `range`
+    (`LockOnTargeting.TryGetAttackTarget`). Only targets in reach compete: the first playtest scored
+    the whole 25 m lock-on range, so a far dummy near screen centre stopped a swing homing on the
+    one beside it.
+  - **Facing:** a lock-on squares you up anyway. With no lock, `ICombatImpulses.FaceToward` asks
+    for it through `ChibiMovementAdapter`, which is now combat's registered `IFacingSource` and
+    answers only while a request is running.
+  - A step with an `airLift`, or with `hangInAir` off, keeps its own vertical speed and homes only
+    across.
 - **`XpLedger`:** what a hit is worth.
   - Only damage actually applied pays (health before minus after).
   - The defeat bonus is paid only for the blow that takes a target from above zero to zero.
@@ -268,9 +295,14 @@ The ruler sets `acceptOtherAbilities` off and lists its rows:
   speed, foot IK off). It never removes states. It finds every step under
   `ScriptableObjects/Combat`, subfolders included, so the ruler's `Steps/Ruler/` steps get their
   `Ruler_*` states by the same path.
-- The five base step assets mirror `WeaponSetup.AttackClips`' clip and speed (`Attack1–4`,
-  `AirAttack`), so the two scripts agree on those states. Hit windows live only on the step
-  assets; `WeaponSetup` no longer carries any.
+- The four base ground step assets mirror `WeaponSetup.AttackClips`' clip and speed (`Attack1–4`),
+  so the two scripts agree on those states. Hit windows live only on the step assets; `WeaponSetup`
+  no longer carries any.
+- **`Step_AirSlash` shares `Step_PlusC`'s `PlusC` state**, the same clip at the same speed, so
+  it needs no state or swing-twist bake of its own (`HitReactionTests` pins the match).
+  `WeaponSetup` still builds the `AirAttack` state playing `attack (4)`, and no step uses it. That
+  clip's tip reaches only 0.54 m ahead, against 1.33 m for `slash (5)`, and sat high enough to pass
+  over a standing dummy: 0 hits from every distance, with homing on or off.
 - `WeaponSetup` calls back into `SwordAbilitySetup`, so every rebuild of the Attack layer restores
   the ability states (see §5).
 - New states get their hip turn baked by `SwingTwistSetup.Bake`, which the setup menu calls.
@@ -411,6 +443,20 @@ Tune everything live in Play mode on the assets.
     `hangInAir` with it or the hover stops the slam.
   - How quickly a rising or falling jump is stopped is `MovementConfig.anchorHaltRate` (m/s²),
     shared with the Gravity Anchor.
+- **Air homing:** `airHoming` on `MeleeCombat`.
+  - `range` (m, from your chest in 3D; 0 = off): how far a swing can reach for a target.
+  - `maxSpeed` (m/s): how fast it closes. Past about 15 m/s it reads as a teleport.
+  - `stopGap` (m): how far short of the target's surface your centre stops. Keep it inside blade
+    reach, and above your own capsule (0.84 m with its skin), or you land on the target's shoulders.
+  - `maxHeightChange` (m): how much height one swing can change, up or down.
+  - `heightTolerance` (m): a target less than this far above you doesn't lift you.
+  - `dropTolerance` (m): how far above the target you may stay before a swing pulls you down, and
+    it pulls you only to this height above it. Asymmetric on purpose: with none, the first playtest
+    yanked the player about a metre down and back up between swings. At 1 m, Air Slash stayed too
+    high to reach a standing target.
+  - `chestHeight` (m): the point on you lined up with the target's chest.
+- **The kind of blow:** `hit.reaction` on the step (and `burst.hit.reaction`). Which body does what
+  with it is tuned on the target; see [Juggle.md](Juggle.md).
 - **Finisher rings:** the `burst` block.
   - `radius` (m) and `expandSeconds` (s): together these set how readable and jumpable the ring is.
   - `triggerAt`: line it up with the clip's impact frame.
@@ -470,7 +516,7 @@ the chain ends). Hitstop is per connecting hit.
 | ground 2 | Step_Slash2 | attack (3) | 2.5 | 0.693 | 0.35–0.62 | 0.243 | 0.430 | 12 | 2 | 0.05 | 0.15 | 0 | 1.2 | |
 | ground 3 | Step_Slash3 | slash | 2.4 | 0.625 | 0.34–0.62 | 0.213 | 0.388 | 14 | 3 | 0.07 | 0.15 | 0 | 1.8 | |
 | finisher | Step_Slash4 | slash (3) | 2.2 | 0.712 | 0.34–0.64 | 0.242 | 0.678 (end) | 20 (+12.8 up) | 8 | 0.10 | 0.25 | 0 | 0 | |
-| air | Step_AirSlash | attack (4) | 2.2 | 0.455 | 0.25–0.60 | 0.114 | 0.455 (end) | 12 | 3 | 0.05 | 0.15 | 0 | 0 | |
+| air | Step_AirSlash | slash (5) | 3.0 | 0.456 | 0.30–0.58 | 0.137 | 0.456 (end) | 12 | 3 | 0.05 | 0.15 | 0 | 0 | |
 | + C | Step_PlusC | slash (5) | 3.0 | 0.456 | 0.30–0.58 | 0.137 | 0.264 | 13 | 1.5 | 0.05 | 0.15 | 0 | 0 | |
 | Area Under the Curve | Step_AreaUnderCurve | slash (3) | 2.0 | 0.783 | 0.34–0.64 | 0.266 | 0.744 (end) | 20 | 8 | 0.10 | 0.30 | 4 | 4 | 3 m, 12 dmg |
 | **Ruler** ground 1 | Step_RulerCleave | Ruler_Cleave | 1.15 | 0.928 | 0.41–0.61 | 0.380 | 0.649 | 24 | 1.5 | 0.09 | 0.22 | 2 | 2.5 | |
@@ -487,9 +533,9 @@ the chain ends). Hitstop is per connecting hit.
 | Ruler ground, Lv 1 | 3 | 2.819 | 3.259 | 91 | 103 | 27.9 | 31.6 |
 | Compass ground, all learned | 5 | 2.154 | 2.554 | 69 | 81 | 27.0 | 31.7 |
 | Ruler ground, all learned | 4 | 3.539 | 4.079 | 117 | 133 | 28.7 | 32.6 |
-| Compass air, Lv 1 | 1 | 0.455 | 0.505 | 12 | 12 | 23.8 | 23.8 |
+| Compass air, Lv 1 | 1 | 0.456 | 0.506 | 12 | 12 | 23.7 | 23.7 |
 | Ruler air, Lv 1 | 1 | 0.825 | 0.915 | 24 | 24 | 26.2 | 26.2 |
-| Compass air, all learned | 3 | 1.283 | 1.533 | 42 | 52 | 27.4 | 33.9 |
+| Compass air, all learned | 3 | 1.275 | 1.525 | 42 | 52 | 27.5 | 34.1 |
 | Ruler air, all learned | 2 | 1.459 | 1.639 | 50 | 50 | 30.5 | 30.5 |
 
 **Why DPS stays close to 1×.** The ruler pays in commitment: a wind-up 1.5–3× as long before
@@ -782,8 +828,31 @@ A boss drop can grant an ability early; its level is the fallback.
   - Folding them into one asset-based registry is worth doing once movement abilities become
     assets too.
 - **No persistence:** level, Lemmas and learned abilities reset every session.
-- **No poise or stagger:** KH bosses break out of long combos (its "revenge value"). Longer chains
-  plus finisher rings will stunlock anything that respects knockback; Newton ignores it today.
+- **Bosses have no poise or stagger:** enemies that react to hits now break out of long combos
+  (`RevengeGauge`; see [Juggle.md](Juggle.md)), but only the training dummy uses it so far. Newton
+  and Hypatia ignore launches and knockback, so there's nothing to break out of. KH bosses have
+  a stagger state, and these don't.
+- **Air homing aims at where the target is now:** there's no prediction, so a fast-rising body can
+  outrun one swing, and the next re-aims. In the juggle the player still bobs a little between
+  swings (feet 1.30, 0.98, 1.52 m in the last run). It was about a metre each way with no
+  `dropTolerance`.
+- **Air homing's connect range is measured, not unlimited.** Against a standing dummy, one Air
+  Slash connected from 1.5, 2.5, 3 and 3.5 m and missed from 4.5 m. From there he arrives after its
+  blade window closes (0.26 s). So `range` (6 m) reaches further than a first swing can land.
+- **Other geometry still applies.** A diagonal approach can catch level geometry at jump height and
+  stand him on it (`PlatformRight` in TrainingStage). His controller's radius is 0.76 m plus 0.08 m
+  of skin, so a `stopGap` under about 0.84 m lands him on a target's shoulders, and the motor's
+  steep-slope slide eases him off.
+- **Changing a default in code may not reach a component that already exists.** After only a
+  default in `AirHomingSettings.Default` changed, `MeleeCombat` still loaded the old values, in a
+  worktree that had already imported the player (seen 2026-11-03: stale for six runs). The class
+  layout hadn't changed, and the cause looks like the imported asset baking the values. Tune on the
+  component in the Inspector, or check the value as loaded. `AirCombatScenario` logs it and applies
+  the code's default, so it always tests that.
+- **Played only by the harness.** `AirCombatScenario` drove the compass on a Medium dummy. No person
+  has played it, and the ruler's air chain, the boss fights and the Light and Heavy classes are untested.
+- **Air homing also runs against a boss in reach,** which can pull you back in when you were
+  jumping clear. Worth checking in the Newton and Hypatia fights.
 - **KH2's fallback rule isn't copied:** in KH2, a lone equipped finisher ignores its own condition.
   Here conditions are always honoured, and the default finisher covers the gap. This is
   deliberate: it keeps a press predictable.

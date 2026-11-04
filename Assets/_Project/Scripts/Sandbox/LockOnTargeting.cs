@@ -89,7 +89,9 @@ namespace Pickleball.Sandbox
 
         /// <summary>Where the camera and the character aim: the target's chest,
         /// not its feet.</summary>
-        public Vector3 AimPoint => Target != null ? Target.transform.position + _aimOffset : transform.position;
+        public Vector3 AimPoint => Target != null
+            ? Target.transform.position + _aimOffset + Target.BodyOffset
+            : transform.position;
 
         /// <summary>Approximate horizontal radius of the target, for framing.</summary>
         public float TargetRadius { get; private set; }
@@ -261,7 +263,9 @@ namespace Pickleball.Sandbox
 
             // Chest: a little above the middle of the body.
             Vector3 aim = b.center + Vector3.up * (b.extents.y * 0.2f);
-            aimOffset = aim - root;
+            // Relative to the body's rest place: AimPoint adds its current offset
+            // back, so locking on mid-juggle must not count that height twice.
+            aimOffset = aim - root - target.BodyOffset;
             radius = Mathf.Max(b.extents.x, b.extents.z);
             halfHeight = b.extents.y;
             return true;
@@ -288,6 +292,39 @@ namespace Pickleball.Sandbox
 
         // ----------------------------------------------------------- selection
 
+        /// <summary>
+        /// What an attack should close on, for a swing that homes: the locked target,
+        /// or with no lock the best enemy in reach, scored as a lock-on press would
+        /// score it. Only enemies in reach compete: a further one nearer the middle of
+        /// the screen must not stop a swing homing on the one beside you. A friendly
+        /// (one that pays no XP) is never homed on unless it is locked on purpose.
+        /// Scans the scene when not locked, so call it per swing, not per frame.
+        /// </summary>
+        /// <param name="reach">How far away an unlocked target may be, m. A locked one is
+        /// returned at any distance; the caller judges whether it can reach it.</param>
+        /// <param name="point">Chest of the target, world space.</param>
+        /// <param name="radius">Approximate horizontal radius of the target, m.</param>
+        public bool TryGetAttackTarget(float reach, out Vector3 point, out float radius)
+        {
+            if (IsLocked)
+            {
+                point = AimPoint;
+                radius = TargetRadius;
+                return true;
+            }
+            var best = FindBest(null, 0, reach, enemiesOnly: true);
+            if (best == null)
+            {
+                point = default;
+                radius = 0f;
+                return false;
+            }
+            point = CentreOf(best);
+            var col = best.GetComponentInChildren<Collider>();
+            radius = col != null ? Mathf.Max(col.bounds.extents.x, col.bounds.extents.z) : 0.6f;
+            return true;
+        }
+
         void GatherCandidates()
         {
             _candidates.Clear();
@@ -306,8 +343,14 @@ namespace Pickleball.Sandbox
         /// With side ±1 it is the nearest enemy to that side of
         /// <paramref name="from"/>, measured across the screen.
         /// </summary>
-        Health FindBest(Health from, int side)
+        /// <param name="from">The target being moved off, or null.</param>
+        /// <param name="side">0 for the best overall, or ±1 for that side of <paramref name="from"/>.</param>
+        /// <param name="maxRange">Furthest a candidate may be, m; below 0 means
+        /// <see cref="acquireRange"/>.</param>
+        /// <param name="enemiesOnly">Leave out friendlies, which pay no XP.</param>
+        Health FindBest(Health from, int side, float maxRange = -1f, bool enemiesOnly = false)
         {
+            float range = maxRange >= 0f ? maxRange : acquireRange;
             GatherCandidates();
             Vector3 eye = aimSource != null ? aimSource.position : transform.position;
             Vector3 aim = aimSource != null ? aimSource.forward : transform.forward;
@@ -319,9 +362,10 @@ namespace Pickleball.Sandbox
             foreach (var h in _candidates)
             {
                 if (h == from) continue;
+                if (enemiesOnly && !h.GrantsXp) continue;
                 Vector3 p = CentreOf(h);
                 float dist = Vector3.Distance(transform.position, p);
-                if (dist > acquireRange) continue;
+                if (dist > range) continue;
 
                 float angle = Vector3.Angle(aim, p - eye);
                 if (angle > acquireConeDegrees) continue;

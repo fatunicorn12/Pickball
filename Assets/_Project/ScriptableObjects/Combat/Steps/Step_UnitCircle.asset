@@ -28,6 +28,7 @@ MonoBehaviour:
     knockback: 5
     launchSpeed: 0
     hitstop: 0.08
+    reaction: 2
   lungeSpeed: 0
   burst:
     enabled: 1
@@ -41,6 +42,7 @@ MonoBehaviour:
       knockback: 5
       launchSpeed: 0
       hitstop: 0.06
+      reaction: 2
   presentation:
     trailColor: {r: 0.45, g: 1, b: 0.95, a: 0.95}
     shakeAmount: 0.25
