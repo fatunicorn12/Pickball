@@ -35,5 +35,21 @@ namespace Pickleball.Cutscene.Script
 
         /// <summary>The line's slot on the timeline: speech plus the gap.</summary>
         public static float SlotSeconds(int chars, float audioSeconds) => SpeechSeconds(chars, audioSeconds) + Gap;
+
+        /// <summary>
+        /// Shortest time a voiced line's subtitle stays up, in seconds, when no config says otherwise
+        /// (<c>CutscenePlaybackConfig.MinCardSeconds</c>). Real clips can be far shorter than a card
+        /// is readable (OC_S1_02 is 0.43 s).
+        /// </summary>
+        public const float DefaultMinCardSeconds = 1.0f;
+
+        /// <summary>
+        /// The voiced part of a line's slot: the clip's length, but never under
+        /// <paramref name="minCardSeconds"/>, so a very short clip still leaves its card up long enough
+        /// to read. The clip plays at its real length from the slot's start; the rest reads as a beat.
+        /// Placeholder lines are unaffected (their 1.5 s floor is already longer).
+        /// </summary>
+        public static float VoicedSlotSpeech(float audioSeconds, float minCardSeconds) =>
+            Mathf.Max(audioSeconds, Mathf.Max(0f, minCardSeconds));
     }
 }

@@ -146,7 +146,7 @@ namespace Pickleball.Cutscene.Cameras.Editor
                 SceneLayout layout = null;
                 try
                 {
-                    if (script != null) layout = TimelineLayout.Layout(s, OpeningTimingPlan.Scene(s), lines);
+                    if (script != null) layout = TimelineLayout.Layout(s, OpeningTimingPlan.Scene(s), lines, OpeningTimelineBuilder.MinCardSeconds());
                 }
                 catch (ArgumentException e)
                 {
@@ -480,9 +480,9 @@ namespace Pickleball.Cutscene.Cameras.Editor
                 dolly.PositionUnits = PathIndexUnit.Normalized;
                 dolly.CameraRotation = CinemachineSplineDolly.RotationMode.Default;
                 dolly.Damping.Enabled = false;
-                dolly.AutomaticDolly.Enabled = true;
-                if (!(dolly.AutomaticDolly.Method is SplineAutoDolly.NearestPointToTarget))
-                    dolly.AutomaticDolly.Method = new SplineAutoDolly.NearestPointToTarget();
+                // ShotRig sets the dolly's place each frame; the auto dolly's search moves in stairs.
+                dolly.AutomaticDolly.Enabled = false;
+                dolly.AutomaticDolly.Method = null;
             }
             else Remove<CinemachineSplineDolly>(go);
 

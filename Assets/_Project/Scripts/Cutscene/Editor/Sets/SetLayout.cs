@@ -177,12 +177,12 @@ namespace Pickleball.Cutscene.Editor.Sets
 
         /// <summary>
         /// Foreground trunk stations: path distance from Path_Track_A, metres. Spaced 4.5–5 m and
-        /// placed so that, at the walk's 1.04 m/s and the placeholder timing of scene 4, no trunk
-        /// crosses frame during S4_SH01's 0.8 s hold (8.2–9.0 s) or from OC_S4_07 to the end
-        /// (17.0–24.1 s). A trunk 1.5 m from a 35° lens is in frame for ±1.15 m of camera travel.
-        /// Re-check these when the real line audio changes the timing.
+        /// placed so that, at the walk's speed and the voiced timing of scene 4, no trunk crosses
+        /// frame during S4_SH01's hold before "What's a taxes?" or from OC_S4_07 to the end. A trunk
+        /// 1.5 m from a 35° lens is in frame for ±1.15 m of camera travel. Different voice takes
+        /// change the timing; <c>WalkLengthTests</c> fails if a trunk lands in one of those spans.
         /// </summary>
-        public static readonly float[] TrunkStations = { 2f, 6.5f, 11f, 16f, 26f };
+        public static readonly float[] TrunkStations = { 2f, 6.5f, 11f, 16f };
 
         // ── South crest (scenes 5-6) ─────────────────────────────────────────
         /// <summary>The crest's summit height, metres. The shot list's ≈ 10 raised to 11 so the eye

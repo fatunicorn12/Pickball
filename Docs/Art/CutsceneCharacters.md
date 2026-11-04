@@ -232,10 +232,47 @@ Neither rig has blendshapes, a jaw or eye bones. No facial rig was added.
   colour is a muted cream.
 - **Mouth flap** (`MouthFlap` on the actor root, `MouthFlapMath`, `MouthFlapConfig`): each
   LateUpdate while the voice plays, `GetOutputData` into a buffer allocated in OnEnable, RMS,
-  noise floor → full-open mapping, attack/release smoothing, then a nod about the actor's right
-  axis on top of the Animator's pose (the head bone, since neither rig has a jaw; a rig with a
-  humanoid Jaw gets the jaw). Undoes its own previous nod if nothing re-posed the bone. Inert
-  while nothing plays. MC: 6° at full open, attack 30/s, release 12/s; Birdy: 9°, attack 40/s.
+  noise floor → full-open mapping, attack/release smoothing → `Openness` (0..1). On a model with
+  painted mouths that is all it does (`nod` off). On a model without them (a swapped-in model) it
+  is the fallback: a nod about the actor's right axis on top of the Animator's pose (the head
+  bone, or a humanoid Jaw), undone each frame if nothing re-posed the bone. MC: 6° at full open,
+  attack 30/s, release 12/s; Birdy: 9°, attack 40/s.
+
+### Painted mouths (lip-sync)
+
+- **Shapes:** closed (the model's own mouth), half, open, painted onto copies of each atlas.
+  - **MC:** the closed frown line is skinned over and replaced by an oval opening a little below
+    it: half is a dark slit (1.4 × 0.5 cm), open a rounder mouth (1.6 × 1.0 cm) with a tongue in
+    its lower third.
+  - **Birdy's beak:** the beak has no hinge, so the gape is painted as an opening: a pink,
+    lens-shaped gap along the line between the mandibles, widest in the middle (8 mm half, 16 mm
+    open), dark only at the throat and edged with a thin dark rim. It sits just above the gape line,
+    on the lower face of the upper mandible, because that is what a level or high camera sees. A
+    first try (dark red, centred on the line) didn't read against the dark beak in a Unity render.
+- **Combining with the eyes: full combined atlases.** Eyes and mouth share one atlas, and a second
+  overlay layer would need a shader or material change, so every combination is its own texture:
+  eye variant × mouth shape = 2 × 3 per character, 4 of them new (`Chibi_Mouth_Half/Open`,
+  `Chibi_EyesClosed_Mouth_Half/Open`, `Birdy_Beak_Half/Open`, `Birdy_EyesDrop_Beak_Half/Open`).
+  They import exactly like the original (2048 on Android, compressed, sRGB), so a swap never
+  changes sharpness. Cost: 4 more 2048² textures per character on device, about 8 MB with mips at
+  ASTC 6×6, loaded with the actor.
+- **One writer.** `EyeSwap` owns the base map and holds the eye × mouth grid (`mouthShapes`,
+  `faceTextures`); `SetMouth(shape)` picks the column, `Show(eye)` (and the Timeline state track)
+  the row, so a closed-eye frame can still talk. Two components writing `_BaseMap` would have
+  undone each other.
+- **`MouthSwap`** (actor root, runs after `MouthFlap`): reads `MouthFlap.Openness` and picks a
+  shape with `MouthShapePicker`. Enter half at 0.18 and open at 0.55; fall back to half below 0.40
+  and to closed below 0.10. A shape stays at least 0.06 s once shown, and the first syllable after
+  silence opens at once. Tunables: `MC_MouthSwap.asset`, `Birdy_MouthSwap.asset` (seeded once).
+  On a ±0.05 noisy level straddling a threshold for 3 s it changes shape at most twice (test).
+  Silence → closed.
+- **Fallback.** `FacePaintSets` lists the painted sets by the material's original texture. A model
+  whose texture isn't listed (or lacks any of the four mouth textures) gets no `EyeSwap`, no
+  `MouthSwap`, and the flap's nod. Checked on Euler in `ActorPrefabTests` and in the swap test.
+- **Painting:** `Tools/Blender/cutscene_paint_eyes.py` with modes joined by `+`
+  (`chibi_closed+mc_mouth_open`), all from the original texture in one pass. MC's mouth texels go
+  through a front-frame z-buffer (`visible`) so hidden layers aren't painted; the beak's don't (that
+  filter dropped most of the beak's front texels; a hidden texel painted pink never shows).
 
 ## Swapping a model
 

@@ -17,6 +17,50 @@ namespace Pickleball.Tests.Cutscene.Cameras
         }
 
         [Test]
+        public void SegmentProgressIsExactAndClamped()
+        {
+            var a = new Vector3(1f, 0f, 0f);
+            var b = new Vector3(1f, 0f, 10f);
+            Assert.AreEqual(0.25f, CameraMath.SegmentProgress(a, b, new Vector3(5f, 3f, 2.5f)), 1e-5f);
+            Assert.AreEqual(0f, CameraMath.SegmentProgress(a, b, new Vector3(1f, 0f, -4f)));
+            Assert.AreEqual(1f, CameraMath.SegmentProgress(a, b, new Vector3(1f, 0f, 14f)));
+            Assert.AreEqual(0f, CameraMath.SegmentProgress(a, a, b));
+        }
+
+        [Test]
+        public void SegmentProgressMovesEvenlyWithAnEvenWalk()
+        {
+            var a = new Vector3(4f, 1f, -84f);
+            var b = new Vector3(1f, 9f, -60f);
+            float previous = CameraMath.SegmentProgress(a, b, a);
+            float first = CameraMath.SegmentProgress(a, b, a + (b - a) * 0.002f) - previous;
+            for (int i = 1; i <= 400; i++)
+            {
+                float now = CameraMath.SegmentProgress(a, b, a + (b - a) * (i * 0.002f));
+                Assert.AreEqual(first, now - previous, 1e-4f);
+                previous = now;
+            }
+        }
+
+        [Test]
+        public void StoppingDistanceSlowsFromFullSpeedToRest()
+        {
+            const float speed = 1f, ease = 1f, dt = 1f / 30f;
+            float firstStep = CameraMath.StoppingDistance(dt, speed, ease);
+            Assert.AreEqual(speed * dt, firstStep, 0.01f * dt * 10f);
+            Assert.AreEqual(0.5f, CameraMath.StoppingDistance(ease, speed, ease), 1e-5f);
+            Assert.AreEqual(0.5f, CameraMath.StoppingDistance(5f, speed, ease), 1e-5f);
+            Assert.AreEqual(0f, CameraMath.StoppingDistance(0.5f, speed, 0f));
+            float previousStep = float.MaxValue;
+            for (int i = 1; i <= 30; i++)
+            {
+                float step = CameraMath.StoppingDistance(i * dt, speed, ease) - CameraMath.StoppingDistance((i - 1) * dt, speed, ease);
+                Assert.Less(step, previousStep + 1e-6f);
+                previousStep = step;
+            }
+        }
+
+        [Test]
         public void TcuRigGivesFrac045()
         {
             // Birdy.Head + 4.15·HB at 30°: frac = 1 / (2 · 4.15 · tan 15°).

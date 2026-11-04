@@ -82,7 +82,9 @@ namespace Pickleball.Tests.Cutscene.Pipeline
                 Pickleball.Cutscene.Timeline.Plan.OpeningTimingPlan.Scene(3), specs);
 
             double placeholder = PipelineTestData.Layout(3).Duration;
-            double expected = placeholder + 0.1 - LineTiming.PlaceholderSpeech(line.DisplayText.Length);
+            // The 0.1 s clip's slot is the minimum card time (the clip still plays its 0.1 s).
+            double voiced = LineTiming.VoicedSlotSpeech(0.1f, LineTiming.DefaultMinCardSeconds);
+            double expected = placeholder + voiced - LineTiming.PlaceholderSpeech(line.DisplayText.Length);
             Assert.That(layout.Duration, Is.EqualTo(expected).Within(1e-4));
             Assert.That(layout.FindLine("OC_S3_07").Line.HasAudio, Is.True);
             Assert.That(layout.FindLine("OC_S3_08").Line.HasAudio, Is.False);

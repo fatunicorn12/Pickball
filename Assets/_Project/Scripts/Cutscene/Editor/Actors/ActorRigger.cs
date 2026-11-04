@@ -198,12 +198,25 @@ namespace Pickleball.Cutscene.Editor.Actors
             Record(actor);
 
             // ---- presentation components ------------------------------------------------------------
+            string eyeNote = ConfigureEyeSwap(animator, out EyeSwap face, out bool paintedMouths);
+            var swapConfig = SwapConfigFor(actorId);
+            bool useMouths = paintedMouths && swapConfig != null;
+
+            // The flap always measures the voice; it nods the head only when there are no painted
+            // mouths to show (the fallback for a swapped-in model).
             var flap = actorRoot.GetComponent<MouthFlap>();
             if (flap == null) flap = actorRoot.AddComponent<MouthFlap>();
-            flap.Configure(flapConfig, voice, jaw != null ? jaw : head, root);
+            flap.Configure(flapConfig, voice, jaw != null ? jaw : head, root, !useMouths);
             Record(flap);
 
-            string eyeNote = ConfigureEyeSwap(animator);
+            var mouthSwap = actorRoot.GetComponent<MouthSwap>();
+            if (useMouths)
+            {
+                if (mouthSwap == null) mouthSwap = actorRoot.AddComponent<MouthSwap>();
+                mouthSwap.Configure(swapConfig, flap, face);
+                Record(mouthSwap);
+            }
+            else if (mouthSwap != null) Object.DestroyImmediate(mouthSwap, true);
 
             string rotorNote = "no rotor";
             var cutsceneRotor = animator.GetComponent<CutsceneRotor>();
@@ -342,19 +355,22 @@ namespace Pickleball.Cutscene.Editor.Actors
             return src;
         }
 
-        private static string ConfigureEyeSwap(Animator animator)
+        /// <summary>
+        /// The face swap for a model whose texture has a painted set (<see cref="FacePaintSets"/>):
+        /// the eye variant plus, when all four mouth textures exist, the eye × mouth grid. Returns
+        /// the EyeSwap (null when the model has no painted face: it is removed) and whether it
+        /// has painted mouths.
+        /// </summary>
+        private static string ConfigureEyeSwap(Animator animator, out EyeSwap swapOut, out bool mouths)
         {
-            var variants = new List<(string original, string name, string texture)>
-            {
-                (CutsceneActorPaths.ChibiBaseColor, "Closed", CutsceneActorPaths.ChibiEyesClosed),
-                (CutsceneActorPaths.BirdyBaseColor, "Drop", CutsceneActorPaths.BirdyEyesDrop),
-            };
+            swapOut = null;
+            mouths = false;
             var swap = animator.GetComponent<EyeSwap>();
-            foreach (var (original, name, texture) in variants)
+            foreach (FacePaintSets.Set set in FacePaintSets.All)
             {
-                var orig = AssetDatabase.LoadAssetAtPath<Texture>(original);
-                var tex = AssetDatabase.LoadAssetAtPath<Texture>(texture);
-                if (orig == null || tex == null) continue;
+                var orig = AssetDatabase.LoadAssetAtPath<Texture>(set.Original);
+                var eyes = AssetDatabase.LoadAssetAtPath<Texture>(set.Eyes);
+                if (orig == null || eyes == null) continue;
                 var targets = new List<Renderer>();
                 foreach (var r in animator.GetComponentsInChildren<SkinnedMeshRenderer>(true))
                 {
@@ -362,13 +378,34 @@ namespace Pickleball.Cutscene.Editor.Actors
                     if (m != null && m.HasProperty("_BaseMap") && m.GetTexture("_BaseMap") == orig) targets.Add(r);
                 }
                 if (targets.Count == 0) continue;
+
+                // Grid row-major [eye][mouth]: mouth 0 entries stay empty (the original, the eye variant).
+                var grid = new Texture[2 * FacePaintSets.MouthShapes];
+                grid[1] = AssetDatabase.LoadAssetAtPath<Texture>(set.Mouths[0]);
+                grid[2] = AssetDatabase.LoadAssetAtPath<Texture>(set.Mouths[1]);
+                grid[4] = AssetDatabase.LoadAssetAtPath<Texture>(set.EyesMouths[0]);
+                grid[5] = AssetDatabase.LoadAssetAtPath<Texture>(set.EyesMouths[1]);
+                mouths = grid[1] != null && grid[2] != null && grid[4] != null && grid[5] != null;
+
                 if (swap == null) swap = animator.gameObject.AddComponent<EyeSwap>();
-                swap.Configure(targets.ToArray(), "_BaseMap", new[] { name }, new[] { tex });
+                if (mouths)
+                    swap.Configure(targets.ToArray(), "_BaseMap", new[] { set.EyeName }, new[] { eyes }, FacePaintSets.MouthShapes, grid);
+                else
+                    swap.Configure(targets.ToArray(), "_BaseMap", new[] { set.EyeName }, new[] { eyes });
                 Record(swap);
-                return $"eye swap '{name}' on {targets.Count} renderer(s)";
+                swapOut = swap;
+                return $"eye swap '{set.EyeName}'{(mouths ? " + 3 painted mouths" : "")} on {targets.Count} renderer(s)";
             }
             if (swap != null) Object.DestroyImmediate(swap, true);
-            return "no eye variant for this texture";
+            return "no painted face for this texture (head-nod mouth flap)";
+        }
+
+        /// <summary>The mouth-swap thresholds for a speaker (MC's for anyone but Birdy).</summary>
+        private static MouthSwapConfig SwapConfigFor(string actorId)
+        {
+            return AssetDatabase.LoadAssetAtPath<MouthSwapConfig>(actorId == CutsceneSpeakers.Birdy
+                ? CutsceneActorPaths.BirdyMouthSwap
+                : CutsceneActorPaths.McMouthSwap);
         }
 
         private static void Record(Object o)

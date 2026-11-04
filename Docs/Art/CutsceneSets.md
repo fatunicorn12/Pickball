@@ -74,7 +74,7 @@ sun); a later art pass should break it up.
 | Path_Track_A | (0, 1, −84) | (0, 0.05, −84) | The hill starts at z −85, so A is at its foot |
 | Path_Track_B | (−3, 8, −60) | (−3, 7.80, −60) | y from the ground |
 | Path_End | (−4, 9.5, −56) | (−4, 9.84, −56) | y from the ground (crest raised) |
-| Cam_Track_S4_Start/End | 3.2·H east, 0.75·H up | (5.08, 1.25, −83.36), (2.08, 9.00, −59.36) | Exactly as specified, perpendicular to A→B |
+| Cam_Track_S4_Start/End | 3.2·H east, 0.75·H up | (5.08, 1.25, −83.36), (1.08, 11.1, −55.36) | Abeam Path_Track_A and Path_End, perpendicular to A→B. The end moved out from abeam Path_Track_B when the voiced scene outran that stretch |
 | Crest_View | (−4, 10, −53) | (−4, 11, −53) | +1 m so the eye line (12.45 m) clears the north stoa roof to the Overlook's parapet |
 | Zip_Path | (8, 2, −30) | (8, 2, −30) | Unchanged |
 | Gnomon_Aim | (0, 8, 36) | (0, 9, 36) | The gnomon rises 16 m from the 1 m plaza; its middle is y 9 |
@@ -149,11 +149,12 @@ Unlit and unfogged; they draw over the void (the dome sorts before them).
   cameras inside it.
 - **Void disc** at y −0.05 (just under the meadow), r 40 m: it hides the Delta below.
 - **Scene 4 trunks:** foreground trunks stand 1.5 m from the camera line (3.62 m east of the path)
-  at path distances 2, 6.5, 11, 16 and 26 m from Path_Track_A. With the placeholder timing and
-  the 35° lens, none crosses frame during S4_SH01's 0.8 s hold (8.2–9.0 s) or from OC_S4_07 to
-  the end (17.0–24.1 s), assuming the dolly stays abeam MC walking 1.04 m/s from A at t = 0. A
-  trunk is in frame for ±1.15 m of dolly travel. **Re-check the stations (`SetLayout.TrunkStations`)
-  when real audio re-times scene 4.** From 16 m to the camera's stop there is no foreground trunk.
+  at path distances 2, 6.5, 11 and 16 m from Path_Track_A. With the voiced timing and the 35° lens,
+  none crosses frame during S4_SH01's hold (8.57–9.67 s) or from OC_S4_07 to the end
+  (19.39–28.15 s), with the dolly abeam MC walking from A at t = 0 (1.0 m/s along the ground). A
+  trunk is in frame for ±1.15 m of dolly travel. `WalkLengthTests` fails if new voice takes put a
+  trunk in those spans; move `SetLayout.TrunkStations` if it does. From 16 m to the camera's stop
+  there is no foreground trunk.
 - **Crest sightlines** (checked against `GreyboxReference` boxes in tests and by raycast in the
   greybox): from Crest_View's eye (y 12.45) the gnomon, Rim_Gaze, the black sun and the Overlook's
   north parapet are visible over the stoa. The Overlook's paving itself (y 0) stays hidden behind

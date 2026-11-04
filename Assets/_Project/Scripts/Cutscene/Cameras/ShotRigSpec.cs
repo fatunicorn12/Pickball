@@ -135,6 +135,10 @@ namespace Pickleball.Cutscene.Cameras
         [Tooltip("When the dolly stops while the walkers walk on (none: never).")]
         public TimeRef trackStop = TimeRef.End(1000f);
 
+        [Tooltip("How long the dolly takes to slow to a stop, seconds. Longer glides further past the stop; 0 stops dead, which reads as a jolt.")]
+        [Min(0f)]
+        public float trackStopEase = 1f;
+
         [Tooltip("The walkers' speed along the path, m/s, used to hold the dolly once it stops.")]
         [Min(0f)]
         public float walkSpeed;

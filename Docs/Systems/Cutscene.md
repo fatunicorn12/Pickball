@@ -54,11 +54,11 @@ Cutscenes** runs the whole chain:
 | 2 | 2 Build Sets | `CutsceneSetBuilder.Build` | builds the five set prefabs and their meshes, materials and look assets (`VoidLook`, `VoidPostFX` and `ResolveConfig` are created once, then left for tuning) |
 | 3 | 3 Import Script | `CutsceneScriptImporter.Import` | parses the script into `OpeningScript.asset` and binds audio by line id |
 | 4 | 4 Build Opening Scene | `OpeningSceneBuilder.Build` | regenerates `Scenes/Cutscene/OpeningPlayable.unity` from a fresh copy of AcademyGreybox: hides the greybox's floating region signs, places the sets from `CutsceneSetList`, places Birdy and the propeller, runs 4b, adds the `Cutscene` root, builds the six timelines, wires the player, the sequence and the pickup, and saves |
-| 4b | 4b Rig Scene Actors | `CutsceneActorSetup.RigSceneActors` | gives the gameplay Player a `CutsceneActor` (id `MC`) and re-rigs every placed actor: anchors, measured H/HB, voice, mouth flap, eye swap |
+| 4b | 4b Rig Scene Actors | `CutsceneActorSetup.RigSceneActors` | gives the gameplay Player a `CutsceneActor` (id `MC`) and re-rigs every placed actor: anchors, measured H/HB, voice, mouth flap, eye swap, painted mouths (`MouthSwap`; the head-nod flap when the model has none) |
 | — | Rebuild Timelines | `OpeningSceneBuilder.RebuildTimelines` | rebuilds the six timelines on the existing scene (after 4b or new audio) and saves |
 | 5 | 5 Build Subtitle HUD | `SubtitleHudBuilder` | the `CutsceneHUD` canvas, `SubtitleView` and skip indicator |
 | 6 | 6 Build Cameras | `CutsceneCameraBuilder` | merges `OpeningShotSeed` into `OpeningShotTable.asset`, builds 52 shot cameras and the camera tracks, adds the CinemachineBrain to the hand-off's cutscene-only list, saves |
-| check | Validate Framing | `FramingValidator` | samples every shot 10 times and flags: (a) subject outside the safe frame; (b) Birdy frac ≥ 0.30 outside an allowed TCU, (b') an allowed TCU's tight part with frac < 0.40 or eyes out (frac is the head's height on screen: Birdy's head-weighted skin, helmet included, projected through the camera; `HeadScreen`); (c) the lens within the near clip of a body; (d) the hand-offs: both are blends, so it checks each blend's end target (the orbit camera's resting pose G frames MC.Head and isn't blocked) and that S6_SH16's last frame shows the whole black sun; (e) the black sun's rim < 2° outside the frame before S6_SH02 (and inside the frame in S6_SH01), skipped while the void is up; (f) a grounded actor's Feet anchor off the ground by > 3 cm, or its nearest foot bone off by more than −max(4 cm, 2.5% H)/+max(8 cm, 5% H) (walk cycles: root only); (g) MC's and Birdy's body capsules intersecting; (h) Birdy's Feet less than 0.2·h above the ground while he should hover (S3_SH03 at 0.8 s to S6_SH16's zip-off); (i) a camera jump: sampled at 30 Hz, a step over 0.25 m or 10° between neighbouring 1/30 s samples within a shot; (j) a subject Head anchor in the subtitle band (bottom 22% of the frame, centre 60% of its width) while a card shows (inserts have no head subject). `FramingValidator.RenderAt` renders chosen shot times for edit-mode previews. Writes `Logs/CutsceneFramingReport.txt` |
+| check | Validate Framing | `FramingValidator` | samples every shot 10 times and flags: (a) subject outside the safe frame; (b) Birdy frac ≥ 0.30 outside an allowed TCU, (b') an allowed TCU's tight part with frac < 0.40 or eyes out (frac is the head's height on screen: Birdy's head-weighted skin, helmet included, projected through the camera; `HeadScreen`); (c) the lens within the near clip of a body; (d) the hand-offs: both are blends, so it checks each blend's end target (the orbit camera's resting pose G frames MC.Head and isn't blocked) and that S6_SH16's last frame shows the whole black sun; (e) the black sun's rim < 2° outside the frame before S6_SH02 (and inside the frame in S6_SH01), skipped while the void is up; (f) a grounded actor's Feet anchor off the ground by > 3 cm, or its nearest foot bone off by more than −max(4 cm, 2.5% H)/+max(8 cm, 5% H) (walk cycles: root only); (g) MC's and Birdy's body capsules intersecting; (h) Birdy's Feet less than 0.2·h above the ground while he should hover (S3_SH03 at 0.8 s to S6_SH16's zip-off); (i) a camera jump: sampled at 30 Hz, a step over 0.25 m or 10° between neighbouring 1/30 s samples within a shot, or a stutter on a camera without handheld noise: a step over 5 cm and 4× the median of its neighbours; (j) a subject Head anchor in the subtitle band (bottom 22% of the frame, centre 60% of its width) while a card shows (inserts have no head subject). `FramingValidator.RenderAt` renders chosen shot times for edit-mode previews. Writes `Logs/CutsceneFramingReport.txt` |
 
 Run order: **1, 2, 3, 4, 4b, Rebuild Timelines, 5, 6, then Validate Framing**. Reports go to
 `Logs/CutsceneBuildReport.txt`, `CutsceneTimelineReport.txt`, `CutsceneCameraBuildReport.txt` and
@@ -208,8 +208,17 @@ per shot), and `OpeningShotSeed` holds the camera rigs.
   from swallowing the lens. Birdy-frac caps can also push a camera back (`Cap`). Both pushes are
   continuous (see §5).
 - **Caps are in HB, the check is on screen.** `Cap` measures Birdy's HB at his head centre's depth.
-  On screen, with the helmet and a wide lens's near side, he reads about 1.28× that, so S2_SH05's
-  0.22 cap shows him at about 0.28. Validate Framing reports the on-screen value.
+  On screen, with the helmet and a wide lens's near side, he reads about 1.28× that. Validate
+  Framing reports the on-screen value. A cap moves the camera whenever Birdy moves, so S2_SH05, a
+  locked shot he lunges into, sets its distance directly (about 0.28 on screen) and has no cap.
+- **The scene-4 dolly is set directly.** `ShotRig` projects MC's Feet onto the straight camera
+  track each frame and writes `CameraPosition`. Cinemachine's nearest-point auto dolly searches in
+  coarse steps: on a 25 m track it held the camera nearly still for 8 frames, then jumped it 20 cm.
+  Feet stays on the blocking mark, so the stride's sway doesn't surge the camera either.
+  `trackStopEase` on the shot glides S4_SH03's stop over 1 s.
+- **The scene-4 walk runs to Path_End** so it outlasts the voiced scene. The walk clip loops, so a
+  walk that ends early leaves MC walking on the spot; `WalkLengthTests` catches that on the built
+  timeline.
 - **Blocking.** The marks track writes the actor root. No library clip moves the root (a test
   checks this). MC's marks sit at the Player's CharacterController resting height (`skinWidth`,
   8 cm), so the Player doesn't pop up after a hand-off.
@@ -236,7 +245,8 @@ per shot), and `OpeningShotSeed` holds the camera rigs.
 | Void whiteness | `ResolveConfig.voidWhite` (1 = old grey; at least ~5.3 after vignette = white) | live |
 | Void bloom, white balance, vignette | `VoidPostFX.asset` | live |
 | Construction lines, colour flood | `ResolveConfig.asset` | live |
-| Mouth flap | `MC_MouthFlap.asset`, `Birdy_MouthFlap.asset` | live |
+| Mouth flap (voice level, attack/release, fallback nod) | `MC_MouthFlap.asset`, `Birdy_MouthFlap.asset` | live |
+| Painted mouth thresholds, hysteresis, hold | `MC_MouthSwap.asset`, `Birdy_MouthSwap.asset` | live |
 | Rotor speeds | `PropellerConfig.asset` | live |
 
 After any change that moves a camera or an actor, run **Validate Framing**. Flags must be 0. It
@@ -272,8 +282,9 @@ the actors, grounding, hovering, overlap, the black sun, and both hand-off blend
    max(1.5 s, chars/15) + 0.3 s.
 3. Run **Rebuild Timelines**, then **6 Build Cameras**. Each shot re-times as audio + the same
    holds + the same action time. Then run **Validate Framing**.
-4. Re-check the scene-4 olive-trunk stations (`SetLayout.TrunkStations`): they are spaced for the
-   placeholder timing (`Docs/Art/CutsceneSets.md` §6).
+4. Run the cutscene tests. `WalkLengthTests` fails if the new lengths leave MC walking on the spot
+   in scene 4, or put an olive trunk across a hold (`SetLayout.TrunkStations`,
+   `Docs/Art/CutsceneSets.md` §6).
 
 ### Swap a model (checked with the Tripo guardian Euler as MC, review round 4)
 
@@ -362,10 +373,10 @@ plays on any Humanoid with no retarget step. These parts do **not** carry over t
   hidden while the loose prop flies.
 - **The loose `Propeller` mesh.** It is extracted from `Birdy.fbx` (`tripo_part_1`, in the Rotor
   frame) by `Tools/Blender/cutscene_extract_propeller.py`.
-- **`EyeSwap` variants.** `Chibi_EyesClosed`, `Birdy_EyesDrop` are painted on each model's own
-  texture atlas.
-- **The mouth flap.** It nods the head bone, or a humanoid Jaw if the rig has one; it needs
-  re-tuning per model.
+- **`EyeSwap` faces (eye variants and the painted mouths).** All six per character are painted on
+  that model's own atlas, so a replacement gets none: no `EyeSwap`, no `MouthSwap`.
+- **Lip-sync.** Without painted mouths the mouth flap falls back to nodding the head bone (or a
+  humanoid Jaw); it needs re-tuning per model.
 - **`B_HardLanding`.** It is baked from a Mixamo clip imported with its own Mixamo avatar (Copy
   From Other Avatar can't apply). The baked copy is a muscle clip and does retarget; only
   re-baking it needs that source.
@@ -437,8 +448,30 @@ plays on any Humanoid with no retarget step. These parts do **not** carry over t
     - X3 S6_SH16: MC ends holding his sword out, not in an idle stand.
     - S2_SH10: the crane passes about 1.5 m behind MC's head at 47.3 s (hair in the top of frame
       for about 0.3 s, no pop).
-- **No audio yet.** All 65 lines run on placeholder timing. Lip-sync (the mouth flap) and the
-  sound design in the shot list are untested.
+- **Voice is bound (64 of 65 lines).** Menu 3 bound every clip in
+  `Audio/Cutscene/Opening/` by line id; only `OC_S5_06` ("...") has none and keeps its placeholder
+  inside S5's 2.0 s hold. Rebuild Timelines retimed every shot as audio + the same holds:
+  - | Scene | Placeholder | Audio | Audio + 1.0 s minimum card |
+    |---|---|---|---|
+    | S1 | 32.83 | 37.41 | **37.98** |
+    | S2 | 51.00 | 53.57 | **53.57** |
+    | S3 | 57.40 | 57.26 | **57.78** |
+    | S4 | 24.10 | 27.83 | **28.15** |
+    | S5 | 27.33 | 29.22 | **29.22** |
+    | S6 | 79.10 | 76.86 | **77.17** |
+    | Total | 271.77 | 282.15 | **283.87** (block 1 91.55, block 2 192.32) |
+  - Every audio clip plays at its WAV's length from its line's start. A line's slot is
+    max(clip, `CutscenePlaybackConfig.minCardSeconds`, 1.0 s) and its subtitle covers the whole
+    slot; each card of a multi-card line gets at least the minimum where the slot allows it.
+    Four clips are shorter than 1.0 s (OC_S1_02 0.43, OC_S3_03 0.48, OC_S4_03 0.68, OC_S6_17
+    0.69 s): their cards now stay up 1.0 s, and everything after them moves back by the
+    difference (it reads as a beat). Placeholder timing is unchanged (its floor is 1.5 s).
+    `MinCardTimeTests`. Changing the minimum needs Rebuild Timelines and 6 Build Cameras.
+  - After the slot come the 0.3 s inter-line gap and the line's hold: [pause] 0.8, [beat] 0.6,
+    [long pause] 2.0, Birdy's scene-6 [pause] 1.0.
+  - Validate Framing after the retime: 0 flags, 0 warnings.
+  - Lip-sync is the painted mouths (`MouthSwap`, see `Docs/Art/CutsceneCharacters.md`), checked in
+    a Play recording of both blocks with audio. The shot list's sound design is still untested.
 - **The sword is always in MC's hand.** Gameplay has no sheath or back socket, and the weapon
   system is out of scope here. Birdy notices "that sword" on MC's back (S3_SH05/06); in S3_SH06
   the camera looks over MC's right shoulder at the blade resting on it from the turn-away pose.
