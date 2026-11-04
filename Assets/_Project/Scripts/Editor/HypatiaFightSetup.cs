@@ -575,14 +575,17 @@ public static class HypatiaFightSetup
 
         // Rings.
         var ringsGo = ViewObject(root, "CelestialRings", out var ringTemplate, out var ringPool);
-        var wall = HypatiaFightArt.Part("Wall", ringTemplate.transform, null, additive);
-        var column = HypatiaFightArt.Part("Column", ringTemplate.transform, null, additive);
-        NoShadows(wall, column);
+        var wall = HypatiaFightArt.Part("Wall", ringTemplate.transform, null, HypatiaFightCelestialArt.RingWallMat());
+        NoShadows(wall);
         var ringView = ringsGo.AddComponent<CelestialRingView>();
         Set(ringView, "emitter", emitter);
         Set(ringView, "ringTemplate", ringTemplate);
         Set(ringView, "poolRoot", ringPool);
         SetInt(ringView, "prewarm", Mathf.Max(1, config.MaxLiveRings));
+        Set(ringView, "sparks", HypatiaFightCelestialArt.RingSparks(ringsGo.transform));
+        var viewCamera = Camera.main;
+        if (viewCamera != null && viewCamera.TryGetComponent(out SandboxOrbitCamera ringCameraRig))
+            Set(ringView, "cameraRig", ringCameraRig);
 
         // Gap forecasts.
         var gapGo = ViewObject(root, "GapForecasts", out var wedgeTemplate, out var wedgePool);

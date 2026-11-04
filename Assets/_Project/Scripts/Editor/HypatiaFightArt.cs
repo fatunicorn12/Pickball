@@ -251,7 +251,8 @@ public static class HypatiaFightArt
 
     // ── Prefabs ─────────────────────────────────────────────────────────────
 
-    /// <summary>The parabola lob: an indigo orb with a silver band and a short trail.</summary>
+    /// <summary>The parabola lob: an indigo orb with a silver band, trailing gold
+    /// stars (gold is the parabola's colour on her dial).</summary>
     public static ConicLob BuildLobPrefab()
     {
         var root = ProjectileRoot("HypatiaLob");
@@ -265,13 +266,15 @@ public static class HypatiaFightArt
                         SilverMat());
         band.transform.localRotation = Quaternion.Euler(25f, 0f, 15f);
         Halo("Halo", root.transform, 1.8f, new Color(0.5f, 0.4f, 1f, 0.8f), Vector3.zero);
-        Trail(root, new Color(0.55f, 0.45f, 1f, 0.8f), 0.45f, 0.5f);
+        Trail(root, new Color(1f, 0.82f, 0.45f, 0.3f), 0.4f, 0.14f);
+        HypatiaFightCelestialArt.AddStarTrail(root, new Color(1f, 0.88f, 0.55f), new Color(1f, 0.7f, 0.3f), perMetre: 4.5f, spread: 0.35f);
         return Save(root, LobPrefabPath).GetComponent<ConicLob>();
     }
 
     /// <summary>
-    /// An orbiter: a silver moon with a cold halo and trail. Besides the slow
-    /// trigger on the root it has a SOLID sphere on a child ("Hitbox"), because
+    /// An orbiter: a moon lit by her, with a faint halo and a trail of cold stars.
+    /// The only orb that looks like a moon, because it is the only one you can bat
+    /// back. Besides the slow trigger on the root it has a SOLID sphere on a child ("Hitbox"), because
     /// the sword's overlap ignores triggers and the orbiter must be swingable
     /// (ConicOrbiter is an IDamageable). A child, not a second collider on the
     /// root: HypatiaProjectile reads "the" SphereCollider on its root and forces
@@ -293,14 +296,18 @@ public static class HypatiaFightArt
         so.FindProperty("hitbox").objectReferenceValue = hitbox;
         so.ApplyModifiedPropertiesWithoutUndo();
         var core = Primitive(PrimitiveType.Sphere, "Core", root.transform, Vector3.zero, Quaternion.identity,
-                             Vector3.one * 0.9f, Lit("OrbiterCore", Silver, 0.9f, 0.85f, Starlight * 0.6f));
+                             Vector3.one * 0.9f, SilverMat());
         NoShadows(core);
-        Halo("Halo", root.transform, 2.2f, new Color(0.6f, 0.8f, 1f, 0.7f), Vector3.zero);
-        Trail(root, new Color(0.62f, 0.85f, 1f, 0.7f), 0.6f, 0.7f);
+        HypatiaFightCelestialArt.MakeMoon(orbiter, core);
+        Halo("Halo", root.transform, 1.5f, new Color(0.55f, 0.72f, 1f, 0.16f), Vector3.zero);
+        Trail(root, new Color(0.62f, 0.85f, 1f, 0.28f), 0.45f, 0.14f);
+        HypatiaFightCelestialArt.AddStarTrail(root, new Color(0.72f, 0.86f, 1f), new Color(1f, 0.97f, 0.88f), perMetre: 3.5f, spread: 0.42f);
         return Save(root, OrbiterPrefabPath).GetComponent<ConicOrbiter>();
     }
 
-    /// <summary>The hyperbolic flyby: a hot brass core in a crimson halo with a long streak.</summary>
+    /// <summary>The hyperbolic flyby: a hot brass core in a crimson halo, with a
+    /// streak and crimson stars. It is fast, so the streak stays strong enough to
+    /// follow and the stars are spread thinner per metre.</summary>
     public static HyperbolicShot BuildShotPrefab()
     {
         var root = ProjectileRoot("HypatiaShot");
@@ -310,7 +317,8 @@ public static class HypatiaFightArt
                              Vector3.one * 0.8f, Lit("ShotCore", Brass, 0.7f, 0.8f, new Color(1f, 0.55f, 0.35f)));
         NoShadows(core);
         Halo("Halo", root.transform, 2.4f, new Color(Hyperbolic.r, Hyperbolic.g, Hyperbolic.b, 0.85f), Vector3.zero);
-        Trail(root, new Color(1f, 0.45f, 0.6f, 0.9f), 0.35f, 0.75f);
+        Trail(root, new Color(1f, 0.45f, 0.6f, 0.65f), 0.3f, 0.3f);
+        HypatiaFightCelestialArt.AddStarTrail(root, new Color(1f, 0.5f, 0.62f), new Color(1f, 0.78f, 0.7f), perMetre: 2.5f, spread: 0.35f);
         return Save(root, ShotPrefabPath).GetComponent<HyperbolicShot>();
     }
 

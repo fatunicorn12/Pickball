@@ -40,17 +40,20 @@ public static class HypatiaFightPulseArt
 
     static Material DustMat() => HypatiaFightArt.Particle("HypatiaPulseDust", PuffTexture(), Color.white, additive: false);
 
-    static Material ShaderMat(string name, string shaderFile)
+    static Material ShaderMat(string name, string shaderFile) => ShaderMaterial(name, $"{ShaderDir}/{shaderFile}");
+
+    /// <summary>A material on one of the fight's own shaders, given the generated
+    /// noise when the shader takes it.</summary>
+    public static Material ShaderMaterial(string name, string shaderPath)
     {
-        string path = $"{ShaderDir}/{shaderFile}";
-        var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+        var shader = AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
         if (shader == null)
         {
-            Debug.LogError($"[HypatiaFight] Missing shader {path}; the pulse will not draw.");
+            Debug.LogError($"[HypatiaFight] Missing shader {shaderPath}; {name} will not draw properly.");
             shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
         }
         var mat = HypatiaFightArt.LoadOrCreate($"{HypatiaFightArt.MatDir}/{name}.mat", shader);
-        mat.SetTexture("_Noise", NoiseTexture());
+        if (mat.HasProperty("_Noise")) mat.SetTexture("_Noise", NoiseTexture());
         EditorUtility.SetDirty(mat);
         return mat;
     }
@@ -67,8 +70,8 @@ public static class HypatiaFightPulseArt
         float[] b = TilingNoise.Generate(size, 37, 12, 4);
         var pixels = new Color32[size * size];
         for (int i = 0; i < pixels.Length; i++)
-            pixels[i] = new Color32(Byte(r[i]), Byte(g[i]), Byte(b[i]), 255);
-        return WriteTexture(NoiseTexturePath, size, pixels, srgb: false, TextureWrapMode.Repeat);
+            pixels[i] = new Color32(ToByte(r[i]), ToByte(g[i]), ToByte(b[i]), 255);
+        return WriteTexture(NoiseTexturePath, size, size, pixels, srgb: false, TextureWrapMode.Repeat);
     }
 
     /// <summary>One soft, broken-edged puff of dust: white, shaped entirely by alpha.</summary>
@@ -83,19 +86,20 @@ public static class HypatiaFightPulseArt
             float dx = (x + 0.5f) / size * 2f - 1f, dy = (y + 0.5f) / size * 2f - 1f;
             float falloff = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy));
             float a = Mathf.Clamp01(falloff * 1.5f - (1f - noise[y * size + x]) * 0.55f);
-            pixels[y * size + x] = new Color32(255, 255, 255, Byte(a * a * (3f - 2f * a)));
+            pixels[y * size + x] = new Color32(255, 255, 255, ToByte(a * a * (3f - 2f * a)));
         }
-        return WriteTexture(PuffTexturePath, size, pixels, srgb: true, TextureWrapMode.Clamp);
+        return WriteTexture(PuffTexturePath, size, size, pixels, srgb: true, TextureWrapMode.Clamp);
     }
 
-    static byte Byte(float v) => (byte)Mathf.RoundToInt(Mathf.Clamp01(v) * 255f);
+    /// <summary>A 0..1 value as a texture byte.</summary>
+    public static byte ToByte(float v) => (byte)Mathf.RoundToInt(Mathf.Clamp01(v) * 255f);
 
     /// <summary>Writes the PNG only when its bytes changed, so a rebuild with the
     /// same generator touches nothing.</summary>
-    static Texture2D WriteTexture(string path, int size, Color32[] pixels, bool srgb, TextureWrapMode wrap)
+    public static Texture2D WriteTexture(string path, int width, int height, Color32[] pixels, bool srgb, TextureWrapMode wrap)
     {
         ChibiSandboxSetup.EnsureFolderPublic(HypatiaFightArt.GenDir);
-        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false, !srgb);
+        var tex = new Texture2D(width, height, TextureFormat.RGBA32, false, !srgb);
         tex.SetPixels32(pixels);
         byte[] png = tex.EncodeToPNG();
         Object.DestroyImmediate(tex);

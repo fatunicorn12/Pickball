@@ -21,15 +21,19 @@ prefabs), `Editor/HypatiaFightModel.cs` (model import, controller). Tests:
   damage. That window is the fight's punish beat.
 - **Celestial Rings** expand from her at 4 m/s, one every 3.2 s (2.6 s in phase 2). Each has a
   30° gap; the gap turns 45° per ring, so the safe route is a spiral. A cyan wedge on the floor
-  shows the next gap for 1 s before the ring launches. Low rings (0.8 m) are jumped; every third
-  ring is **tall** (drawn 7 m with a column of light) and only the gap gets through. Phase-2
-  rings burn (fire colours, always tall).
+  shows the next gap for 1 s before the ring launches, and the same cyan marks the gap's edges on
+  the wall. Low rings (0.8 m) end in a crisp line at their real height, and are jumped; every
+  third ring is **tall**: a gold star-chart curtain with no top, dissolving upward into an aurora,
+  and only the gap gets through. Phase-2 rings burn (real flame, always tall).
 - **Conic Sections.** The needle swings to e on a dial marked 0, 1 and 2 and the dial shows
   "e = 0.62" for 1.2 s, tinted by kind:
   - **Ellipse** (e < 1, silver-blue, left of 1): 3–5 orbiters on Kepler orbits with her at a
     focus, each orbit traced faintly on the plate. They outlive the volley (12 s). **Current
     design: circles** (e = 0, so the dial reads "e = 0.00"): each orbiter keeps one radius
-    (2.5–11.5 m) and one steady speed, which makes it easy to read and to hit.
+    (2.5–11.5 m) and one steady speed, which makes it easy to read and to hit. They are drawn as
+    **moons lit by her**, so each passes through real phases as it circles, keeping one face to
+    her. Only orbiters are moons, because only they can be batted: a moon means "hit this". Every
+    conic leaves a trail of twinkling stars in its dial colour.
   - **Parabola** (e = 1 exactly, gold, on the 1 mark): a lob at your predicted position with a
     blast-sized landing ring that fills as it falls.
   - **Hyperbola** (e > 1, crimson, right of 1): the two asymptotes are drawn on the plate with
@@ -163,6 +167,17 @@ Particle colours are capped at 1 in the vertex stream, so HDR comes from the mat
 is deliberately **no hit-pause**: `DialogueDirector` is the only writer of `Time.timeScale`, and
 the shove lands on the frame the pulse fires, so a freeze would have to stop the whole game.
 
+**Ring, moon and star look.** Same recipe, built by `Editor/HypatiaFightCelestialArt.cs`.
+
+| What | Parts | Rule it must keep |
+|---|---|---|
+| Ring wall | `CelestialRingView` + `RingWall.shader` on the `ArcMesh.Wall` mesh; shared `Sparks` | `RingLook` (pure, tested): a low ring is drawn exactly as tall as it hits; the bright edges sit exactly where the gameplay gap ends. Gap edges stay the brightest thing on any ring. The wall fades near the camera, because rings expand straight through it |
+| Moon | `MoonLook` (on the prefab) + `Moon.shader` on the existing sphere; `MoonSurface` (pure, tested) baked to `MoonSurface.png` | The sphere stays, so the silhouette is the hitbox. Light comes from `_SunPosition` (the orbit's focus, plus Sun Height), not from scene lights. The dark side keeps earthshine and a rim, so it never vanishes against the sky |
+| Star trail | `StarTrail` (on all three projectile prefabs) + `StarTrail.shader` | Stars are emitted per metre, so a frozen projectile leaves none. The system detaches in `Start` and removes itself once its stars die, because projectiles are destroyed outright and a child's stars would vanish with them |
+
+The star shader's twinkle reads the particle's stable random from a custom vertex stream set in
+`AddStarTrail`; the two must stay in step.
+
 **Clocks.** Her clock is `HypatiaContext.BossDelta(dt) = dt × StatusReceiver.SpeedMultiplier`.
 On it: every brain timer (rings, conics, needle lead, burn interval, pulse interval), the
 recalibration window, the topple, the pulse's charge,
@@ -234,7 +249,8 @@ Everything gameplay is on `HypatiaConfig.asset`; every field has a tooltip with 
 | Scrolls | Enabled (off), Interval, Max Live, Drift, Lifetime, Height, Pickup Radius, Health Cost | optional collectibles in the fire |
 
 Presentation (on `HypatiaFightViews/*` and the boss's parts): ring, wedge, needle and window
-colours, column height, flicker rate, flame density, line widths; `Topple` (pitch °, blend
+colours, aurora height, gap edge colour and sparks, flicker rate, flame density, line widths;
+`MoonLook` on the orbiter prefab (Sun Height, batted spin and flare); `Topple` (pitch °, blend
 rate); `Pulse` (core sizes and colours, dial colour and spin, wave and dome colours, dome height,
 expand, fade and flash seconds, light intensities, shake and FOV punch). `HypatiaBarks` (on her root)
 has the lines, `minGap`, `attackChance` and `lineDuration`.
@@ -275,6 +291,13 @@ has the lines, `minGap`, `attackChance` and `lineDuration`.
   them. Unchanged by the VFX pass; noticeable mainly because the wave is now easier to see.
 - **The pulse has no sound yet**, and the mobile render settings lose its heat ripple (no opaque
   texture). The dial also floats if Pulse Reach is ever tuned past the plate (13 m).
+- **Moons between the camera and her are backlit**, so from the usual chase view many show thin
+  crescents. Intended (it is what makes the phases read), and the rim keeps them visible; raise
+  `_Earthshine` on `HypatiaMoon.mat` if they prove hard to spot in real play.
+- **Alexandria's Burning still uses the old look**: flat floor tints and glow-sprite flames, now
+  plain beside the burning rings. The lob and shot bodies are also still stock spheres.
+- **Overdraw:** tall rings are large additive surfaces and up to 6 can be live. Not measured on a
+  phone.
 
 - **Standing directly under her is ring-safe during recalibration.** Rings are born at 1.5 m
   (Ring Start Radius), so the hub inside that never meets a ring.
