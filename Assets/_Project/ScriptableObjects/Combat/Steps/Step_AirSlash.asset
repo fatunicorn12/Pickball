@@ -13,15 +13,15 @@ MonoBehaviour:
   m_Name: Step_AirSlash
   m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Combat.ComboStepDefinition
   displayName: Air Slash
-  animatorState: AirAttack
-  clip: {fileID: -203655887218126122, guid: 79466c9284317ec4282b507ab14b0178, type: 3}
-  playbackSpeed: 2.2
+  animatorState: PlusC
+  clip: {fileID: -203655887218126122, guid: 50ba4588ea0cfeb4baeaf3ddc634fc45, type: 3}
+  playbackSpeed: 3
   fallbackDuration: 0.6
   blendIn: 0.06
   windows:
-    activeStart: 0.25
-    activeEnd: 0.6
-    comboOpen: 0.6
+    activeStart: 0.3
+    activeEnd: 0.58
+    comboOpen: 0.58
     comboClose: 1
   hit:
     damage: 12

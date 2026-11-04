@@ -1,7 +1,7 @@
-# Enemy Juggle (Castle Crashers weight classes)
+# Enemy Juggle (Castle Crashers weight classes, Kingdom Hearts II reactions)
 
 Code: `Assets/_Project/Scripts/Sandbox/Juggle/` (namespace `Pickleball.Sandbox.Juggle`)
-Tests: `Assets/_Project/Tests/EditMode/Combat/JuggleStateTests.cs`
+Tests: `Assets/_Project/Tests/EditMode/Combat/JuggleStateTests.cs`, `HitReactionTests.cs`, `RevengeGaugeTests.cs`
 Used by: `Assets/_Project/Scripts/Sandbox/Training/TrainingDummy.cs`
 
 This doc covers the enemy's half of the air game. The player's half is in `SwordAbilities.md`:
@@ -25,6 +25,23 @@ Castle Crashers mostly limits juggles on the enemy's side, by weight. This syste
   can be juggled on the way down.
 - The training dummies are Medium. Bosses (Newton, Hypatia) ignore launches.
 
+Each attack also says what kind of blow it is (`HitReaction`, from the way KH2's attack data
+splits them):
+
+| Reaction | On the ground | In the air | Shipped on |
+|---|---|---|---|
+| **Flinch** | stuns | relaunches by the weight rule | every mid-chain hit |
+| **Launch** | pops it up | relaunches by the weight rule | Rising Finish, Area Under the Curve, the ruler's slam rings |
+| **Heavy** | stuns for `heavyStunScale` × as long | same, and relaunches by the weight rule | the ruler's two slams |
+| **Knock Away** | throws it clear on an arc | same; ends the juggle | Unit Circle (blade and ring), the ruler's Phase Shift |
+
+A thrown body takes no further reaction until it has landed and recovered (`recoverSeconds`). So
+a finisher's ring can't re-lift what its blade just threw, and a finisher buys a breather.
+
+**Enemies break out of long combos** (KH2's revenge value). Damage in one stretch fills a tally
+(`RevengeGauge`). At the limit the enemy shrugs the stun off and for `armorSeconds` takes hits
+without flinching, being lifted or being pushed. It still takes the damage.
+
 ## 2. Architecture
 
 All of it is plain C#, simulates only the vertical axis, and is driven by `dt`. Everything is
@@ -36,15 +53,24 @@ EditMode-tested.
     - In the air it applies `vy = max(vy, relaunch × weightScale × decay^n)` and counts the hit.
     - On the ground only a launcher lifts it, at `launchSpeed × weightScale`.
     - The `max` means a hit never slows a body that is already rising faster.
-  - `Tick(dt)` counts hitstun down and flies the body with exact constant-gravity steps, so the
-    hit where a juggle gives out doesn't depend on frame rate.
+  - `Hit(reaction, knockSpeed)` is the same with the kind of blow. A knock-away sets
+    `IsKnockedAway` and `KnockSpeed`, and sets its vertical speed outright. Any hit on a thrown or
+    recovering body changes nothing.
+  - `Tick(dt)` counts hitstun and recovery down and flies the body with exact constant-gravity
+    steps, so the hit where a juggle gives out doesn't depend on frame rate.
     - It returns `JuggleLanding.Landed`, or `LandedDefeated` when the body lands carrying a
       defeat.
-    - Landing resets n.
+    - Landing resets n, and turns a throw into `RecoverLeft`.
   - `Defeat()` returns true when the enemy should die now. When it is airborne and
     `defeatOnLanding` is set, the defeat is held until `LandedDefeated` instead.
-  - `CanAct` is false while the enemy is in hitstun or airborne. An enemy's AI should check it
-    before acting.
+  - `BreakOut()` drops the hitstun at once. A body in the air still has to land.
+  - `CanAct` is false while the enemy is in hitstun, airborne or recovering. An enemy's AI should
+    check it before acting.
+- **`RevengeGauge`:** one per enemy, and asked before the juggle. `Add(damage)` returns true on the
+  one hit that breaks it out. `IsArmored` says the body shouldn't react. `Tick(dt)` runs the armor
+  down and sheds the tally after a delay. It counts damage rather than hits, so a heavy weapon's
+  fewer, bigger swings fill it no faster than a light one's. **`RevengeSettings`** holds its
+  tuning; `For(JuggleWeight)` has the presets.
 - **`JuggleSettings`** (a serializable struct, inline on the enemy like `HitSettings` is on a
   step) holds the tuning and the rule's helpers:
   - `RelaunchFor(n)`: a relaunch under `minRelaunch` counts as 0, so the `max` then only stops the
@@ -56,16 +82,29 @@ EditMode-tested.
   - `For(JuggleWeight)`: the Light / Medium / Heavy presets.
 - **`JuggleWeight`** is the class label. **`JuggleLanding`** is what `Tick` reports.
 
+**How a hit reaches it:** `MeleeCombat` calls `IDamageable.TakeHit(HitImpact)`. `Health` raises
+`Impacted` with the reaction, and still raises the older `Knocked`. A receiver with no use for the
+reaction needn't implement the overload: a default interface method forwards it as the plain call,
+with only a launch surviving. Spells make the plain call, which `Health` turns into a Flinch or
+Launch impact, so they reach a dummy as before.
+
 **Wiring in `TrainingDummy`:**
-- `Health.Knocked` calls `Hit(launch)` and `Health.Died` calls `Defeat()`.
-- `Update` ticks the juggle, and the visual rides `Height`. The root and its collider stay
-  planted, so lock-on and the measuring grid still work.
+- `Health.Impacted` asks the gauge, then calls `Hit(reaction, flatSpeed)`. `Health.Died` calls
+  `Defeat()`.
+- `Update` ticks both. The visual rides `Height` plus the distance thrown, and walks back once
+  `CanAct` is true. The root stays planted, so the measuring grid still works.
+- **The body collider rides with the visual** (`CapsuleCollider.center`), and
+  `Health.BodyOffset` tells `LockOnTargeting.AimPoint` where the body went. Otherwise an air
+  swing that matched the visual's height would pass over a hitbox left on the ground.
 - A dummy knocked out in the air doesn't refill until it lands, then waits `refillDelay` more.
-- The `JuggleState` is built lazily (`TrainingDummy.Juggle`), because plain C# state comes back
-  null after a hot reload.
+- `JuggleState` and `RevengeGauge` are built lazily (`TrainingDummy.Juggle`, `.Revenge`), because
+  plain C# state comes back null after a hot reload.
+- `BrokeOut` is raised once per break-out. The dummy pulses its visual; an enemy's AI would start
+  its counterattack here.
 
 Dependencies point one way: the sword knows only `IDamageable`, and the juggle knows nothing
-about the sword.
+about the sword. `HitReaction` and `HitImpact` sit beside `IDamageable`, in `Pickleball.Sandbox`,
+for that reason.
 
 ## 3. How to tune
 
@@ -82,6 +121,19 @@ Tune the `juggle` block on each `TrainingDummy`. Edits apply on the next hit, li
   give out sooner.
 - `maxHeight` (m): how high air hits can carry it, measured from where it stands.
 - `hitstun` (s); `gravity` (m/s², lower is floatier); `defeatOnLanding`.
+- `heavyStunScale`: how much longer a Heavy blow stuns.
+- `knockAwayLift` (m/s, before `weightScale`), `knockAwayCarry` (share of the blow's speed) and
+  `recoverSeconds`: a knock-away's arc and how long it stays down.
+
+The `revenge` block on each `TrainingDummy`, also live:
+
+- `limit` (damage in one stretch, 0 = never): Light 220, Medium 150, Heavy 100. A compass with
+  every ability learned deals about 130 per ground-and-air loop.
+- `decayPerSecond` and `decayDelay` (s): how soon a pause forgives it (30 and 1 in every class).
+- `armorSeconds` (s): how long it ignores reactions after breaking out (2 in every class).
+
+Which reaction an attack deals is `reaction` in the step's `hit` block (and its `burst`'s). A Flinch
+with a `launchSpeed` above 0 counts as a Launch, so steps tuned before reactions existed need no edit.
 
 Preset numbers, as (launch, relaunch, weightScale, decay, minRelaunch, maxHeight, hitstun):
 
@@ -102,6 +154,15 @@ If you change a preset, update the counts pinned in `JuggleStateTests`.
 3. Call `Hit(launch)` from `Health.Knocked`. Call `Defeat()` from `Health.Died`; if it returns
    false, die when `Tick` reports `LandedDefeated`.
 4. Tick it every frame, move the body or visual by `Height`, and gate the enemy's AI on `CanAct`.
+5. For the reactions, subscribe to `Health.Impacted` instead of `Knocked` and pass
+   `Hit(impact.Reaction, flatKnockbackSpeed)`. Move along the knock direction by `KnockSpeed` per
+   second. If the root stays planted, set `Health.BodyOffset` and move the collider too.
+6. For break-outs, serialize a `RevengeSettings`, ask `RevengeGauge.Add(impact.Damage)` first, skip
+   the reaction while `IsArmored`, call `Juggle.BreakOut()` on the break, and start the
+   counterattack there.
+
+**Add a new kind of blow:** add it to `HitReaction`, handle it in `JuggleState.Hit`, and pin it in
+`HitReactionTests`. It's then a dropdown on every step.
 
 **A Stoveface-style "heavier the longer it's up":** this would mean adding a time term to
 `RelaunchFor` (decay per second airborne as well as per hit). Add a test that pins the new
@@ -114,9 +175,13 @@ counts.
 - **The decay rarely matters today.** How many air hits a player can land per jump is set by the
   player's air chain (one air combo per airtime), so a Medium dummy usually lands before it
   gives out. The decay starts to matter once there are longer air chains, spells or co-op.
-- **Vertical only.** Horizontal knockback still only rocks the dummy.
-- **The hit's own `launchSpeed` (`HitSettings`) is not used.** The target's weight decides how
-  high it goes.
+- **Only a knock-away moves it across.** Other horizontal knockback still only rocks the dummy.
+- **Dummies have no counterattack.** A break-out shows as the dummy pulsing and then not flinching.
+  There's no enemy AI to use `BrokeOut` yet, so the "enemy retaliates" half of KH2's revenge value
+  is still to come. Bosses don't use the gauge: they already ignore launches and knockback.
+- **The numbers are starting guesses,** not measured from KH2 and not tuned by hand.
+- **The hit's own `launchSpeed` (`HitSettings`) only marks a launcher.** The target's weight decides
+  how high it goes.
 - **Every dummy is Medium.** All four TrainingStage dummies get the default, because the scene
   predates the field. Giving each its own class (say, Light, Medium and Heavy on the floor,
   platform and top) would need a `TrainingStageSetup` change and a rebuild.

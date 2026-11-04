@@ -29,6 +29,7 @@ MonoBehaviour:
     knockback: 2.5
     launchSpeed: 0
     hitstop: 0.09
+    reaction: 2
   lungeSpeed: 0
   hangInAir: 1
   burst:

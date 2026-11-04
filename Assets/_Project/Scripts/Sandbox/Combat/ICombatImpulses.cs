@@ -34,5 +34,18 @@ namespace Pickleball.Sandbox.Combat
         /// <summary>Set the player's vertical speed outright, in m/s. Once per
         /// event (a swing starting, a hover opening), never per frame.</summary>
         void SetVerticalVelocity(float metresPerSecond);
+
+        /// <summary>The rate <see cref="SuspendGravity"/> eases vertical speed to rest,
+        /// in m/s². Lets combat pick a vertical speed that stops at a chosen height.</summary>
+        float HangHaltRate { get; }
+
+        /// <summary>End the player's own horizontal travel and carried momentum
+        /// outright. Once, on an event: an air homing swing arriving at its target.</summary>
+        void StopPlanar();
+
+        /// <summary>Turn the body to face <paramref name="point"/> for the next
+        /// <paramref name="seconds"/>, urgently, even while he is moving. For a swing
+        /// that must land on a target he hasn't locked; a lock-on faces it anyway.</summary>
+        void FaceToward(Vector3 point, float seconds);
     }
 }

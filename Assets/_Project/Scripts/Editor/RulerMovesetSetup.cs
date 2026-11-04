@@ -121,7 +121,7 @@ public static class RulerMovesetSetup
         // Finisher: the leap slam, landing a ground shock ring where the blade strikes.
         new() { Asset = "Step_RulerSlam", Display = "Plumb Line", State = "Ruler_Slam", Take = "Ruler_Slam",
                 Speed = 1.1f, BlendIn = 0.14f, Lunge = 5f, FullBody = true,
-                Windows = new SwingWindows(0.43f, 0.57f, 0.74f, 0.87f), Hit = new HitSettings(40f, 9f, 0f, 0.16f),
+                Windows = new SwingWindows(0.43f, 0.57f, 0.74f, 0.87f), Hit = new HitSettings(40f, 9f, 0f, 0.16f, HitReaction.Heavy),
                 Burst = new AreaBurst(0.53f, 2.6f, 0.3f, new HitSettings(12f, 6f, 3f, 0.1f), 1.0f, 0.6f),
                 Trail = RulerTrail, Shake = 0.45f, ShakeSeconds = 0.35f, Fov = 6f, BurstFx = "ShockRing" },
         // Air: one committed spin, both strikes of the whirl under one window.
@@ -137,15 +137,16 @@ public static class RulerMovesetSetup
                 Speed = 1.3f, Lunge = 2f, FullBody = true,
                 Windows = new SwingWindows(0.41f, 0.61f, 0.70f, 1f), Hit = new HitSettings(22f, 1.2f, 0f, 0.08f),
                 Trail = new Color(1f, 0.85f, 0.35f, 0.95f), Shake = 0.2f, ShakeSeconds = 0.2f, Fov = 1.5f, HitFx = "PlusPop" },
-        // Phase Shift: a second air hit, the overhead down-chop.
+        // Phase Shift: a second air hit, the overhead down-chop. The ruler declines
+        // Unit Circle, so this ends its air chain and is the blow that ends a juggle.
         new() { Asset = "Step_RulerPhaseShift", Display = "Phase Shift", State = "Ruler_PhaseShift", Take = "Ruler_Chop",
                 Speed = 1.3f,
-                Windows = new SwingWindows(0.36f, 0.54f, 0.58f, 1f), Hit = new HitSettings(26f, 2.5f, 0f, 0.09f),
+                Windows = new SwingWindows(0.36f, 0.54f, 0.58f, 1f), Hit = new HitSettings(26f, 2.5f, 0f, 0.09f, HitReaction.KnockAway),
                 Trail = new Color(0.75f, 0.5f, 1f, 0.95f), Shake = 0.25f, ShakeSeconds = 0.22f, Fov = 2f },
         // Area Under the Curve: the slam, slower, with the Riemann ring at 3.6 m.
         new() { Asset = "Step_RulerAreaUnderCurve", Display = "Area Under the Curve", State = "Ruler_AreaUnderCurve",
                 Take = "Ruler_Slam", Speed = 1.0f, BlendIn = 0.14f, Lunge = 5.5f, FullBody = true,
-                Windows = new SwingWindows(0.43f, 0.57f, 0.74f, 0.87f), Hit = new HitSettings(44f, 10f, 0f, 0.18f),
+                Windows = new SwingWindows(0.43f, 0.57f, 0.74f, 0.87f), Hit = new HitSettings(44f, 10f, 0f, 0.18f, HitReaction.Heavy),
                 Burst = new AreaBurst(0.53f, 3.6f, 0.4f, new HitSettings(16f, 7f, 3f, 0.1f), 1.0f, 0.6f),
                 Trail = new Color(0.55f, 1f, 0.45f, 0.95f), Shake = 0.5f, ShakeSeconds = 0.38f, Fov = 7f,
                 BurstFx = "RiemannRing" },

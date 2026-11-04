@@ -29,18 +29,33 @@ namespace Pickleball.Sandbox.Combat
                  "past ~0.12 s it starts to feel like lag.")]
         [Range(0f, 0.3f)] [SerializeField] private float hitstop;
 
+        [Tooltip("What kind of blow this is. Flinch stuns; Launch pops a grounded target up; " +
+                 "Knock Away ends a juggle by throwing the target clear, and it recovers on the " +
+                 "ground; Heavy is a long stagger on the spot. A Flinch with Launch Speed above " +
+                 "zero counts as a Launch. The target decides what each one means for its body.")]
+        [SerializeField] private HitReaction reaction;
+
         public float Damage => damage;
         public float Knockback => knockback;
         public float LaunchSpeed => launchSpeed;
         public float Hitstop => hitstop;
-        public bool IsLauncher => launchSpeed > 0f;
 
-        public HitSettings(float damage, float knockback, float launchSpeed = 0f, float hitstop = 0.05f)
+        /// <summary>The blow this hit deals. Steps tuned before reactions existed
+        /// say Flinch with a launch speed, and those are launchers.</summary>
+        public HitReaction Reaction => reaction == HitReaction.Flinch && launchSpeed > 0f
+            ? HitReaction.Launch
+            : reaction;
+
+        public bool IsLauncher => Reaction == HitReaction.Launch;
+
+        public HitSettings(float damage, float knockback, float launchSpeed = 0f, float hitstop = 0.05f,
+                           HitReaction reaction = HitReaction.Flinch)
         {
             this.damage = Mathf.Max(0f, damage);
             this.knockback = Mathf.Max(0f, knockback);
             this.launchSpeed = Mathf.Max(0f, launchSpeed);
             this.hitstop = Mathf.Clamp(hitstop, 0f, 0.3f);
+            this.reaction = reaction;
         }
 
         /// <summary>World-space push for a target, given the direction the hit

@@ -17,6 +17,13 @@ namespace Pickleball.Sandbox
         /// a spell from a blade. Defaults to <see cref="DamageKind.Physical"/>.</param>
         void TakeHit(float amount, Vector3 hitPoint, Vector3 knockback, bool launch,
                      DamageKind kind = DamageKind.Physical);
+
+        /// <summary>The same hit with its full <see cref="HitReaction"/>. Receivers
+        /// with no use for the reaction need not implement this: by default it
+        /// arrives as the plain call above, with only a launch surviving.</summary>
+        void TakeHit(HitImpact impact)
+            => TakeHit(impact.Damage, impact.Point, impact.Knockback,
+                       impact.Reaction == HitReaction.Launch, impact.Kind);
     }
 
     /// <summary>What dealt a hit. Only the receiver interprets it — e.g. Newton's
