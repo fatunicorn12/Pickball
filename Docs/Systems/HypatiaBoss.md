@@ -55,8 +55,11 @@ prefabs), `Editor/HypatiaFightModel.cs` (model import, controller). Tests:
   a topple; one due then waits until it ends. It keeps the player from camping under her between
   punish beats.
 - **Alexandria's Burning** (phase 2, at 50% health): the floor burns from the rim inward, one
-  band every 15 s. A band smoulders (flickering red) for 2 s, then burns (flames, 8 HP/s,
-  grey/recoverable, only below 1.2 m). The 6 m hub never burns.
+  band every 15 s. A band warns for 2 s: it all tints red at once and a burn front creeps in from
+  its outer edge, reaching the inner edge exactly as it ignites. Then it burns (flames, 8 HP/s,
+  grey/recoverable, only below 1.2 m): char with molten veins, embers and scraps of burning pages,
+  with a hot line on the edge of the ground that is still safe. The 6 m hub never burns. When the
+  fight ends the fire dies, the veins cool and the bands stay as ash.
 - **Slows.** She and everything she throws are slowable (Freeze Zone, and the planned
   Stationary Point). Freezing her freezes her timers, the needle, her hover and her animator;
   what she has already thrown keeps its own clock.
@@ -178,6 +181,27 @@ the shove lands on the frame the pulse fires, so a freeze would have to stop the
 The star shader's twinkle reads the particle's stable random from a custom vertex stream set in
 `AddStarTrail`; the two must stay in step.
 
+**Floor fire look.** `BandFireView` applies `BandLook` (pure, tested); `Editor/HypatiaFightFireArt.cs`
+builds the parts from `BandFire.shader` and `FireFlame.shader`.
+
+| What | Parts | Rule it must keep |
+|---|---|---|
+| Floor | Overlay annulus, `BandFire.shader` | The mesh is exactly the band, so nothing bleeds onto safe ground. Char must stay the main colour, or the player and floor telegraphs get lost |
+| Burn front | Same shader, `_Warning` | Read from `ArenaBurn.GetSmoulderRemaining`, never a timer of its own, so it arrives exactly at ignition and holds if she is frozen |
+| Safe boundary | Same shader, `_Frontier` | Hottest only on the boundary of the safe ground (`BandLook.IsFrontier`); old seams stay dim |
+| Flames | `Flames` particles, `FireFlame.shader`, upright quads | Emission stops Flame Edge Margin short of the inner edge (`BandLook.RadiusThickness`), so none stands over safe ground. Fades near the camera |
+| Embers, pages | `Embers`, `Pages` particles | Small details, kept sparse; embers also burst on ignition |
+| Light, kick | `FireLight`, `SandboxOrbitCamera.Shake` | Light grows per burning band; a small kick on ignition |
+
+There is deliberately **no smoke**: dark smoke cannot be seen against her night sky, so it was only
+overdraw (tried and cut). The flame shader's randomness and age come from custom vertex streams set
+in `HypatiaFightFireArt.Flames`; the two must stay in step.
+
+**Materials keep their values.** A material that already exists does not pick up a changed shader
+default, so a look that matters must be set from the builder (as `HypatiaFightFireArt` does) or by
+a property block (as the views do). The pulse's shader defaults were aligned to its materials for
+this reason.
+
 **Clocks.** Her clock is `HypatiaContext.BossDelta(dt) = dt × StatusReceiver.SpeedMultiplier`.
 On it: every brain timer (rings, conics, needle lead, burn interval, pulse interval), the
 recalibration window, the topple, the pulse's charge,
@@ -249,7 +273,8 @@ Everything gameplay is on `HypatiaConfig.asset`; every field has a tooltip with 
 | Scrolls | Enabled (off), Interval, Max Live, Drift, Lifetime, Height, Pickup Radius, Health Cost | optional collectibles in the fire |
 
 Presentation (on `HypatiaFightViews/*` and the boss's parts): ring, wedge, needle and window
-colours, aurora height, gap edge colour and sparks, flicker rate, flame density, line widths;
+colours, aurora height, gap edge colour and sparks, line widths; `BandFire` (flame, ember and page
+density, flame edge margin, ignition flash and kick, light per band, ash seconds);
 `MoonLook` on the orbiter prefab (Sun Height, batted spin and flare); `Topple` (pitch °, blend
 rate); `Pulse` (core sizes and colours, dial colour and spin, wave and dome colours, dome height,
 expand, fade and flash seconds, light intensities, shake and FOV punch). `HypatiaBarks` (on her root)
@@ -294,8 +319,12 @@ has the lines, `minGap`, `attackChance` and `lineDuration`.
 - **Moons between the camera and her are backlit**, so from the usual chase view many show thin
   crescents. Intended (it is what makes the phases read), and the rim keeps them visible; raise
   `_Earthshine` on `HypatiaMoon.mat` if they prove hard to spot in real play.
-- **Alexandria's Burning still uses the old look**: flat floor tints and glow-sprite flames, now
-  plain beside the burning rings. The lob and shot bodies are also still stock spheres.
+- **The lob and shot bodies are still stock spheres**, now the plainest things in the fight.
+- **Fire overdraw:** up to three bands of large additive flames (about 100 live per band). Not
+  measured on a phone; Flames Per Square Metre and Max Flame Rate are the knobs.
+- **Flames are drawn taller than they hurt:** the fire rule stops at 1.2 m but the tallest flame's
+  quad reaches about 1.8 m, so a player jumping over one can look like they are inside it while
+  taking no damage.
 - **Overdraw:** tall rings are large additive surfaces and up to 6 can be live. Not measured on a
   phone.
 

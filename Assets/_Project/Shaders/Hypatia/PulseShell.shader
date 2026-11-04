@@ -9,7 +9,7 @@ Shader "Pickball/Hypatia/Pulse Shell"
         [HDR] _Color ("Rim Colour", Color) = (0.25, 0.38, 1, 1)
         _Fade ("Fade", Range(0, 1)) = 0
         _Scroll ("Noise Scroll", Float) = 0
-        _RimPower ("Rim Tightness", Float) = 5
+        _RimPower ("Rim Tightness", Float) = 3
     }
 
     SubShader

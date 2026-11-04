@@ -64,9 +64,6 @@ public static class HypatiaFightArt
     /// <summary>Additive, untextured, vertex-coloured: ring walls, wedges, lines.</summary>
     public static Material AdditiveMat() => Particle("HypatiaAdditive", null, Color.white, additive: true);
 
-    /// <summary>Alpha-blended, untextured: the band overlays (ash must darken, not glow).</summary>
-    public static Material AlphaMat() => Particle("HypatiaAlpha", null, Color.white, additive: false);
-
     /// <summary>Soft additive glow (NewtonFightArt's Glow texture, read only).</summary>
     public static Material GlowMat() => Particle("HypatiaGlow", SharedTexture("Glow.png"), Color.white, additive: true);
 
@@ -397,59 +394,6 @@ public static class HypatiaFightArt
         var shape = ps.shape;
         shape.shapeType = ParticleSystemShapeType.Sphere;
         shape.radius = radius * 0.3f;
-        var r = go.GetComponent<ParticleSystemRenderer>();
-        r.sharedMaterial = GlowMat();
-        r.shadowCastingMode = ShadowCastingMode.Off;
-        r.receiveShadows = false;
-        return ps;
-    }
-
-    /// <summary>
-    /// Flames for one burning band: a flat circle emitter (shape fitted to the
-    /// annulus at runtime by BandFireView), particles rising and fading from
-    /// yellow to red. Not playing until the band ignites.
-    /// </summary>
-    public static ParticleSystem BandFlames(Transform parent, string name)
-    {
-        var go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        go.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
-        var ps = go.AddComponent<ParticleSystem>();
-        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-        var main = ps.main;
-        main.loop = true;
-        main.playOnAwake = false;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.2f);
-        main.startSpeed = 0f;
-        main.startSize = new ParticleSystem.MinMaxCurve(0.6f, 1.3f);
-        main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.8f, 0.35f), Ember);
-        main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.maxParticles = 1000;
-        var emission = ps.emission;
-        emission.rateOverTime = 0f;
-        var shape = ps.shape;
-        shape.shapeType = ParticleSystemShapeType.Circle;
-        shape.radius = 1f;
-        shape.radiusThickness = 1f;
-        var velocity = ps.velocityOverLifetime;
-        velocity.enabled = true;
-        velocity.space = ParticleSystemSimulationSpace.Local;
-        // All three axes in the same curve mode (TwoConstants): mixing modes
-        // makes the particle system log an error every frame.
-        velocity.x = new ParticleSystem.MinMaxCurve(-0.15f, 0.15f);
-        velocity.y = new ParticleSystem.MinMaxCurve(-0.15f, 0.15f);
-        velocity.z = new ParticleSystem.MinMaxCurve(1.2f, 2.8f);
-        var colour = ps.colorOverLifetime;
-        colour.enabled = true;
-        var gradient = new Gradient();
-        gradient.SetKeys(
-            new[] { new GradientColorKey(new Color(1f, 0.85f, 0.4f), 0f), new GradientColorKey(Ember, 0.45f),
-                    new GradientColorKey(new Color(0.5f, 0.08f, 0.04f), 1f) },
-            new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.9f, 0.15f), new GradientAlphaKey(0f, 1f) });
-        colour.color = new ParticleSystem.MinMaxGradient(gradient);
-        var size = ps.sizeOverLifetime;
-        size.enabled = true;
-        size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.6f, 1f, 1.2f));
         var r = go.GetComponent<ParticleSystemRenderer>();
         r.sharedMaterial = GlowMat();
         r.shadowCastingMode = ShadowCastingMode.Off;

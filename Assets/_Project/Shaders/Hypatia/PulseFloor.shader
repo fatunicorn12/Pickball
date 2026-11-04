@@ -26,8 +26,8 @@ Shader "Pickball/Hypatia/Pulse Floor"
         _Seed ("Noise Seed", Float) = 0
         [HDR] _BrassColor ("Dial Colour", Color) = (2.6, 1.7, 0.6, 1)
         [HDR] _WaveColor ("Wave Colour", Color) = (0.7, 1.25, 3.4, 1)
-        _EdgeWidth ("Front Width (m)", Float) = 0.17
-        _TrailLength ("Trail Length (m)", Float) = 2.6
+        _EdgeWidth ("Front Width (m)", Float) = 0.3
+        _TrailLength ("Trail Length (m)", Float) = 3.2
     }
 
     SubShader
