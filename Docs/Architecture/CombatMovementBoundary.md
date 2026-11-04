@@ -94,7 +94,7 @@ the adapter uses `ChibiLocomotion`'s existing public API.
 interface method that forwards to the plain `TakeHit`, so a receiver that doesn't implement it (a
 Hypatia orbiter, a test stub) gets exactly the call it always got. `Health` implements it and raises
 `Impacted` alongside the older `Knocked`, and only a body that subscribes reacts. Today that's
-`TrainingDummy`. Bosses ignore `Impacted`, so they pick up no juggle, knock-away or break-out.
+`TrainingDummy` and `Enemy`. Bosses ignore `Impacted`, so they pick up no juggle, knock-away or break-out.
 
 ## Pad and key layout contract
 

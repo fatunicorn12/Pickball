@@ -613,3 +613,27 @@ MonoBehaviour:
     emissionColor: {r: 0, g: 0, b: 0, a: 1}
     colliderShape: 0
     castShadows: 1
+  - id: EN-02
+    assetName: AlienCreature
+    category: 5
+    rig: 0
+    source: EN-02
+    sizeAxis: 0
+    targetSize: 1.6
+    sizeTolerance: 0.05
+    pivot: 0
+    modelRotation: {x: 0, y: 180, z: 0}
+    generateMeshLods: 1
+    triangleBudget: 5000
+    triangleCap: 15000
+    textureMaxSize: 1024
+    textureSaturation: 1
+    textureGain: 1
+    gradientBottom: {r: 1, g: 1, b: 1, a: 1}
+    gradientTop: {r: 1, g: 1, b: 1, a: 1}
+    baseColor: {r: 1, g: 1, b: 1, a: 1}
+    smoothness: 0.25
+    metallic: 0
+    emissionColor: {r: 0, g: 0, b: 0, a: 1}
+    colliderShape: 0
+    castShadows: 1

@@ -237,6 +237,16 @@ namespace Pickleball.Sandbox
             Changed?.Invoke(this);
         }
 
+        /// <summary>Change the maximum and refill to it. For an owner whose hit points
+        /// come from a config (enemies). Safe in either order against this object's own
+        /// Awake, because it refills too.</summary>
+        public void SetMaxHealth(float max)
+        {
+            if (!IsFinite(max) || max <= 0f) return;
+            maxHealth = max;
+            ResetToFull();
+        }
+
         /// <summary>Weapon entry point. The sword's knockback and launch are for
         /// the receiver to interpret — a boss ignores being launched, a crate
         /// does not — so they are passed on rather than applied here.</summary>
