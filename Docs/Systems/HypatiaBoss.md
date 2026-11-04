@@ -43,11 +43,13 @@ prefabs), `Editor/HypatiaFightModel.cs` (model import, controller). Tests:
   cancelled, and every other orbiter shatters so one volley cannot chain a second topple.
   Swing any other way and the ball flies off along the swing and vanishes after 1.2 s. A
   batted ball never hurts the player. Spells do not bat by default.
-- **Knockback Pulse.** Every 10 s (first at 6 s) she glows for 0.8 s, then a ring races out to
-  10 m. Anyone inside it, at any height (it cannot be jumped), takes 5 (grey) and is shoved
-  straight away from her, hard enough to slide to 10.5 m on the ground. It never charges or
-  fires during the recalibration window or a topple; one due then waits until it ends. It
-  keeps the player from camping under her between punish beats.
+- **Knockback Pulse.** Every 10 s (first at 6 s) she gathers light for 0.8 s while a brass dial
+  lights up on the plate at exactly 10 m with a clock hand sweeping it once: when the hand comes
+  round, it fires. A flash, then a shockwave races out to the dial's rim. Anyone inside it, at any
+  height (it cannot be jumped), takes 5 (grey) and is shoved straight away from her, hard enough
+  to slide to 10.5 m on the ground. It never charges or fires during the recalibration window or
+  a topple; one due then waits until it ends. It keeps the player from camping under her between
+  punish beats.
 - **Alexandria's Burning** (phase 2, at 50% health): the floor burns from the rim inward, one
   band every 15 s. A band smoulders (flickering red) for 2 s, then burns (flames, 8 HP/s,
   grey/recoverable, only below 1.2 m). The 6 m hub never burns.
@@ -92,7 +94,7 @@ HypatiaFightViews           one child per presentation component (below)
 | ConicCaster | `LobAimed`, `LobLanded`, `Stopped` | LobMarkerView |
 | ConicCaster | `OrbiterSpawned`, `OrbiterRetired`, `OrbiterBatted(o, towardHer)`, `Stopped` | OrbitPathView (drops the line on batting) |
 | ConicCaster | `OrbiterShattered` (topple), `OrbiterStruckBoss(at)` (`IConicAttack`) | brain (topple); no view yet |
-| KnockbackPulse | `PulseCharging(s)`, `PulseFired(reach)`, `PulseCancelled`, `PulseHitPlayer(push, dmg)` | PulseView (charge glow, ring + low dome to Pulse Reach) |
+| KnockbackPulse | `PulseCharging(s)`, `PulseFired(reach)`, `PulseCancelled`, `PulseHitPlayer(push, dmg)` | PulseView (see **Pulse look** below) |
 | ConicCaster | `AsymptotesTelegraphed`, `ShotReleased`, `ShotFinished`, `Stopped` | AsymptoteTelegraphView |
 | ArenaBurn | `BandSmouldering`, `BandIgnited`, `Extinguished` (`PlayerBurning` unused) | BandFireView |
 | ScrollKeeper | `ScrollSpawned`, `ScrollCollected`, `ScrollDespawning` | none: the scroll prefab draws itself |
@@ -140,6 +142,26 @@ impulse v slides v²/(2k). The pulse pushes with v = √(2k·max(0, R − d)) + 
 | `HypatiaConfig.pulseAssumedGroundDrag` (11 m/s²) | `MovementConfig.momentumGroundDrag` | `PulseDragCouplingTests` (loads both assets) |
 
 In the air the drag is 1.6 m/s², so a player pulsed mid-jump flies further, up to the wall.
+
+**Pulse look.** The fight's first attack with real VFX, and the pattern for the others: many
+simple layers, custom shaders fed by generated noise, and no compute. `PulseView` applies the
+curves in `PulseLook` (pure, tested) to these parts under `HypatiaFightViews/Pulse`, built by
+`Editor/HypatiaFightPulseArt.cs` from `Shaders/Hypatia/`:
+
+| Layer | Part | Shader / source | When |
+|---|---|---|---|
+| Dial, clock hand, shockwave | `Floor` quad | `PulseFloor` | charge and release |
+| Core rays, tightening ring, flash | `Body/PulseGlow` quad (`LockOnIgnore`) | `PulseCore` | charge and flash |
+| Motes rushing in | `Gather` particles | URP Particles, HDR tint | charge, on her clock |
+| Glowing dome rim | `Dome` | `PulseShell` (fresnel, eroded) | release |
+| Heat ripple | `Dome/Ripple` | `PulseRipple` (opaque texture) | release, PC settings only |
+| Sparks, dust | `Sparks`, `Dust` particles | URP Particles; `PulsePuff.png` | release |
+| Light on the plate | `FlashLight` | point light | builds on charge, peaks at flash |
+| Camera kick, FOV punch | `SandboxOrbitCamera.Shake`, `PunchFov` | `PulseLook.ShakeAmount` | release; harder if it hits |
+
+Particle colours are capped at 1 in the vertex stream, so HDR comes from the material tint. There
+is deliberately **no hit-pause**: `DialogueDirector` is the only writer of `Time.timeScale`, and
+the shove lands on the frame the pulse fires, so a freeze would have to stop the whole game.
 
 **Clocks.** Her clock is `HypatiaContext.BossDelta(dt) = dt × StatusReceiver.SpeedMultiplier`.
 On it: every brain timer (rings, conics, needle lead, burn interval, pulse interval), the
@@ -213,8 +235,8 @@ Everything gameplay is on `HypatiaConfig.asset`; every field has a tooltip with 
 
 Presentation (on `HypatiaFightViews/*` and the boss's parts): ring, wedge, needle and window
 colours, column height, flicker rate, flame density, line widths; `Topple` (pitch °, blend
-rate); `Pulse` (charge glow size/colour, ring and dome colours, dome height, expand and fade
-seconds). `HypatiaBarks` (on her root)
+rate); `Pulse` (core sizes and colours, dial colour and spin, wave and dome colours, dome height,
+expand, fade and flash seconds, light intensities, shake and FOV punch). `HypatiaBarks` (on her root)
 has the lines, `minGap`, `attackChance` and `lineDuration`.
 
 ## 4. How to extend: add an attack in 6 steps
@@ -248,6 +270,11 @@ has the lines, `minGap`, `attackChance` and `lineDuration`.
 - **The pulse respects the player's hit grace.** If another hit landed just before, the 5 is
   refused (the push still applies). Seen once in play.
 - **A pulse mid-air pushes much further** (air drag 1.6 m/s²), up to the perimeter wall.
+- **The shove lands before the wave arrives.** The push is instant on release, but the drawn wave
+  takes 0.25 s to reach 10 m, so a player near the rim moves slightly before it visibly touches
+  them. Unchanged by the VFX pass; noticeable mainly because the wave is now easier to see.
+- **The pulse has no sound yet**, and the mobile render settings lose its heat ripple (no opaque
+  texture). The dial also floats if Pulse Reach is ever tuned past the plate (13 m).
 
 - **Standing directly under her is ring-safe during recalibration.** Rings are born at 1.5 m
   (Ring Start Radius), so the hub inside that never meets a ring.

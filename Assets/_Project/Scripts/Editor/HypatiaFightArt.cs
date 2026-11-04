@@ -73,11 +73,6 @@ public static class HypatiaFightArt
     public static Material MarkerFillMat() =>
         Particle("HypatiaMarkerFill", SharedTexture("Disc.png"), new Color(0.35f, 0.25f, 1f, 0.45f), additive: false);
 
-    /// <summary>The knockback pulse's shockwave ring (its own asset, so tuning its
-    /// tint never touches the lob markers or the window ring).</summary>
-    public static Material PulseRingMat() =>
-        Particle("HypatiaPulseRing", SharedTexture("TargetRing.png"), new Color(0.8f, 0.9f, 1f, 1f), additive: true);
-
     public static Material MarkerRingMat() =>
         Particle("HypatiaMarkerRing", SharedTexture("TargetRing.png"), new Color(0.8f, 0.85f, 1f, 1f), additive: true);
 
@@ -107,7 +102,7 @@ public static class HypatiaFightArt
     /// <summary>URP Particles/Unlit, transparent, two-sided. Blend state written
     /// by hand: a material made from script never passes through the URP
     /// inspector that would normally derive it (same recipe as NewtonFightArt).</summary>
-    static Material Particle(string name, Texture texture, Color tint, bool additive)
+    public static Material Particle(string name, Texture texture, Color tint, bool additive)
     {
         var mat = LoadOrCreate($"{MatDir}/{name}.mat", Shader.Find("Universal Render Pipeline/Particles/Unlit"));
         mat.SetTexture("_BaseMap", texture);
@@ -128,7 +123,7 @@ public static class HypatiaFightArt
         return mat;
     }
 
-    static Material LoadOrCreate(string path, Shader shader)
+    public static Material LoadOrCreate(string path, Shader shader)
     {
         ChibiSandboxSetup.EnsureFolderPublic(Path.GetDirectoryName(path)!.Replace('\\', '/'));
         var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
@@ -146,7 +141,7 @@ public static class HypatiaFightArt
 
     /// <summary>A texture NewtonFightArt generated, loaded read-only; null (plain
     /// white) when Setup Newton Fight has never run.</summary>
-    static Texture2D SharedTexture(string file) =>
+    public static Texture2D SharedTexture(string file) =>
         AssetDatabase.LoadAssetAtPath<Texture2D>($"{NewtonFightArt.VfxDir}/{file}");
 
     /// <summary>One dash and one gap, tiled along the hyperbola's path. Written

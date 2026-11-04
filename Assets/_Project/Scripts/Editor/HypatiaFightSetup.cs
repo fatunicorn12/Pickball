@@ -406,11 +406,8 @@ public static class HypatiaFightSetup
         // Scenery that hovers with her: kept out of lock-on's aim and size.
         HypatiaFightArt.Halo("Halo", body, 2.6f, new Color(0.62f, 0.68f, 1f, 0.3f), new Vector3(0f, 0.95f, -0.3f))
             .AddComponent<LockOnIgnore>();
-        // The knockback pulse's charge glow (PulseView swells it); hidden at rest.
-        var pulseGlow = HypatiaFightArt.Halo("PulseGlow", body, 0.6f, new Color(0.75f, 0.85f, 1f, 0.9f),
-                                             new Vector3(0f, 0.95f, 0.2f));
-        pulseGlow.AddComponent<LockOnIgnore>();
-        pulseGlow.SetActive(false);
+        // The knockback pulse's charge and flash (PulseView drives it); hidden at rest.
+        HypatiaFightPulseArt.CoreQuad("PulseGlow", body, new Vector3(0f, 0.95f, 0.2f));
 
         // Health as Newton's (NewtonFightSetup): no grey regain pool on the boss,
         // and she grants sword XP like him (per damage dealt plus the defeat bonus).
@@ -703,27 +700,38 @@ public static class HypatiaFightSetup
         Set(topple, "model", model);
         Set(topple, "animator", model != null ? model.GetComponent<Animator>() : null);
 
-        // Knockback pulse: the charge glow on her body, a ring and a low dome on
-        // the plate (world space, under this root; PulseView moves them to her).
+        // Knockback pulse: the core on her body; the floor quad, dome, particles and
+        // light in world space under this root (PulseView moves them to her). None
+        // of those sit under her Health, so lock-on never measures them.
         var pulseGo = new GameObject("Pulse");
         pulseGo.transform.SetParent(root, false);
-        var pulseRing = HypatiaFightArt.Primitive(PrimitiveType.Quad, "Ring", pulseGo.transform, Vector3.zero,
-                                                  Quaternion.Euler(90f, 0f, 0f), Vector3.one,
-                                                  HypatiaFightArt.PulseRingMat());
-        NoShadows(pulseRing);
-        pulseRing.SetActive(false);
+        var pulseFloor = HypatiaFightArt.Primitive(PrimitiveType.Quad, "Floor", pulseGo.transform, Vector3.zero,
+                                                   Quaternion.Euler(90f, 0f, 0f), Vector3.one,
+                                                   HypatiaFightPulseArt.FloorMat());
+        NoShadows(pulseFloor);
+        pulseFloor.SetActive(false);
         var dome = HypatiaFightArt.Primitive(PrimitiveType.Sphere, "Dome", pulseGo.transform, Vector3.zero,
-                                             Quaternion.identity, Vector3.one, additive);
+                                             Quaternion.identity, Vector3.one, HypatiaFightPulseArt.ShellMat());
         NoShadows(dome);
+        var ripple = HypatiaFightArt.Primitive(PrimitiveType.Sphere, "Ripple", dome.transform, Vector3.zero,
+                                               Quaternion.identity, Vector3.one, HypatiaFightPulseArt.RippleMat());
+        NoShadows(ripple);
         dome.SetActive(false);
         var pulseView = pulseGo.AddComponent<PulseView>();
         Set(pulseView, "pulse", boss.GetComponent<KnockbackPulse>());
         Set(pulseView, "boss", boss);
-        Set(pulseView, "chargeGlow", body.Find("PulseGlow").GetComponent<Renderer>());
-        Set(pulseView, "ring", pulseRing.transform);
-        Set(pulseView, "ringRenderer", pulseRing.GetComponent<Renderer>());
+        Set(pulseView, "core", body.Find("PulseGlow").GetComponent<Renderer>());
+        Set(pulseView, "gather", HypatiaFightPulseArt.Gather(pulseGo.transform));
+        Set(pulseView, "floorQuad", pulseFloor.GetComponent<Renderer>());
         Set(pulseView, "dome", dome.transform);
         Set(pulseView, "domeRenderer", dome.GetComponent<Renderer>());
+        Set(pulseView, "rippleRenderer", ripple.GetComponent<Renderer>());
+        Set(pulseView, "sparks", HypatiaFightPulseArt.Sparks(pulseGo.transform));
+        Set(pulseView, "dust", HypatiaFightPulseArt.Dust(pulseGo.transform));
+        Set(pulseView, "flashLight", HypatiaFightPulseArt.FlashLight(pulseGo.transform));
+        var mainCamera = Camera.main;
+        if (mainCamera != null && mainCamera.TryGetComponent(out SandboxOrbitCamera orbitCamera))
+            Set(pulseView, "cameraRig", orbitCamera);
     }
 
     static GameObject ViewObject(Transform root, string name, out GameObject template, out Transform pool)
