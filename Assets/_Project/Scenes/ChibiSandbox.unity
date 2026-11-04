@@ -54083,6 +54083,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 3883458126653099587, guid: cbcbcf9b829536745a0def211ea4e083, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1195753252314885933}
+    - targetCorrespondingSourceObject: {fileID: 3883458126653099587, guid: cbcbcf9b829536745a0def211ea4e083, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1195753252314885934}
     - targetCorrespondingSourceObject: {fileID: 1093931610088010614, guid: cbcbcf9b829536745a0def211ea4e083, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2085243038}
@@ -54482,6 +54485,9 @@ MonoBehaviour:
   padPreviousBinding: <Gamepad>/dpad/up
   padNextBinding: <Gamepad>/dpad/down
   padCycleOnlyWhileAiming: 1
+  scrollWheel: 1
+  invertScroll: 0
+  scrollStepSeconds: 0.08
 --- !u!114 &1195753252314885928
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -54602,6 +54608,21 @@ MonoBehaviour:
   carryLayer: Carry
   fadeOutDuring: 0c0000000d000000080000000900000003000000
   suppressSeconds: 0.1
+--- !u!114 &1195753252314885934
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1291333408}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dc039c838471b2d4a82475c856ea10d2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Combat.Presentation.CombatVoice
+  combat: {fileID: 1195753252314885896}
+  bank: {fileID: 11400000, guid: e62c52a7d57f035409cfef63196a5342, type: 2}
+  health: {fileID: 1195753252314885902}
 --- !u!1001 &2685157860003053257
 PrefabInstance:
   m_ObjectHideFlags: 0
