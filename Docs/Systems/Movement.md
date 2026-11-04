@@ -337,21 +337,21 @@ hygiene as before. `MovementSetup.AddMovementStates` then adds:
 - Foot IK is off on every new state. The driver also sets `ChibiFootIK.Suppressed` during the
   belly slide.
 
-**Clips.** Dive and BellySlide have real clips. The rest are placeholders until more of the
+**Clips.** JumpDouble, SideFlip, Dive and BellySlide have real clips. The rest are placeholders until more of the
 Mixamo set in `Pickball-mixamo-inbox` is imported:
 
 | State | Clip |
 |---|---|
 | SkidTurn | placeholder: Run To Stop's braking plant, played at 2× |
-| JumpDouble | placeholder: Running Jump |
+| JumpDouble | `Big Jump.fbx` frames 15–21, holding the last until the hand-off to Fall (about 0.68 s from sprint): a leap with the body pitched 25° to 62° forward, trailing legs and the cape streaming behind. It replaces Running Jump, which the first jump already plays at run speed, so the two read the same. Past frame 21 the take pitches into a roll. |
 | TripleJump | placeholder: the trimmed front flip |
-| SideFlip | placeholder: the trimmed front flip played backwards |
+| SideFlip | `Back Flip.fbx`, authored by `Tools/Blender/chibi_backflip.py`: arms drive up, a tight tuck, exactly 360° backward in the hips, then feet first for the floor. The left hand takes the shin; the right stays out to the side, because a blade held at the shin runs through the head and thigh. Frame 36 of 40 is touchdown at the shared `flipAirborneSeconds`, so a level landing is at about 90% and goes straight to Land, without the 0.12 s blend toward Fall that the 97% exit would start just before the floor. |
 | Rollout | placeholder: the trimmed front flip |
 | SpinJump | placeholder: Falling Idle, with the model spun about Y in code |
 | Dive | `Run To Dive.fbx` frames 15–20, holding the last: body flat, both hands straight ahead and together, legs scissored. Past about frame 22 the take pitches into a roll. |
 | BellySlide | `Belly Slide Pose Wide.fbx`, an authored two-frame pose held for the whole slide: arms ahead in a shallow V (17° out, 6° up), torso flat, head up, legs together with the knees bent. The V puts the hands beside the big head rather than under it. An arms-together version was tried first, and its hands sat under the head, mostly hidden from the side. The model is lowered 0.45 m (`bellySlideOffset`), which puts its lowest point about 1 cm above the floor. |
 
-Both are Mixamo X Bot clips. Their `.meta` files carry the canonical X Bot reference skeleton
+All four are on the Mixamo X Bot skeleton. Their `.meta` files carry the canonical X Bot reference skeleton
 from the clip audit: every `mixamorig:*` rotation in `humanDescription.skeleton` is the same as
 in `Run To Dive.fbx.meta`. With each file's own frame-0 reference instead, the knees and feet
 play 30–40° off on the chibi. `SetupClips` rewrites only `clipAnimations`, so a re-run keeps the
@@ -429,13 +429,14 @@ Setup Movement. A full re-run rebuilds the controller, so the sword-ability stat
 Sword Abilities** again afterwards. To swap one state's clip without a rebuild, set that
 `AnimatorState.motion` through the AnimatorController API in your own Editor. If the clip
 carries its own pose, set that move's pitch to 0. For a new flip clip, set
-`flipAirborneSeconds` to its airborne length.
+`flipAirborneSeconds` to its airborne length, or, since every flip shares that value, author the
+clip to it as `Back Flip.fbx` does.
 
 ## 5. Known limitations and open questions
 
-- **Placeholder animation.** The spin, skid and jump variants are still stock clips, tilted or
-  spun in code. Of the 14 Mixamo clips downloaded, only Run To Dive is imported, plus the
-  authored Belly Slide Pose. The per-clip import and motion-matching recipes are in the
+- **Placeholder animation.** The spin, the skid, the triple jump and the rollout are still stock
+  clips, tilted or spun in code. Of the 14 Mixamo clips downloaded, only Run To Dive and Big Jump
+  are imported, plus the authored Belly Slide Pose and Back Flip. The per-clip import and motion-matching recipes are in the
   side-session notes. The remaining roles need per-role exceptions in `SetupClips`: Body
   orientation for the turning roles, and a per-role Y bake for grounded and prone roles.
 - **From the chase camera the dive and slide arms don't show.** The cape covers the shoulders
