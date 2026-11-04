@@ -74,7 +74,9 @@ scripts:
     as a separate step (see `Docs/Systems/Cutscene.md` §2.2).
 
 Setup Chibi Sandbox already runs the player-level setups as part of its build:
-- `MovementSetup.WirePlayer` and `EnsureConfigs`
+- `MovementSetup.WirePlayer` and `EnsureConfigs`. `WirePlayer` also calls `SideFlipSparksSetup.Wire`.
+  Run **Setup Side Flip Sparks** on its own to update just that child: it edits `Chibi.prefab`
+  alone, so no scene needs rebuilding and the Animator is left as it is.
 - `WeaponSetup.PrepareAssets` and `AttachToPlayer`, which in turn call `SwingTwistSetup.Bake`,
   `WeaponClearanceSetup.Attach` and `SwordAbilitySetup.AttachToPlayer`. The last one's
   `WireAttackStatesFromAssets` also runs `FullBodySwingSetup.Wire`, so every Attack-layer rebuild

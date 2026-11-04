@@ -153,6 +153,8 @@ public static class MovementSetup
         eso.FindProperty("board").objectReferenceValue = board;
         eso.ApplyModifiedPropertiesWithoutUndo();
 
+        SideFlipSparksSetup.Wire(player, anim);
+
         EditorUtility.SetDirty(player);
     }
 
