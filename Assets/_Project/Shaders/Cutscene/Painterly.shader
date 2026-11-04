@@ -247,6 +247,8 @@ Shader "Pickball/Cutscene/Painterly"
             #pragma multi_compile_fragment _ _GBUFFER_NORMALS_OCT
             #pragma multi_compile_instancing
 
+            #include "CutsceneVoid.hlsl"
+
             struct Attributes
             {
                 float4 positionOS : POSITION;
@@ -258,6 +260,7 @@ Shader "Pickball/Cutscene/Painterly"
             {
                 float4 positionCS : SV_POSITION;
                 float3 normalWS : TEXCOORD0;
+                float3 positionWS : TEXCOORD1;
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -266,7 +269,8 @@ Shader "Pickball/Cutscene/Painterly"
                 Varyings output;
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionCS = TransformWorldToHClip(output.positionWS);
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
                 return output;
             }
@@ -274,12 +278,15 @@ Shader "Pickball/Cutscene/Painterly"
             half4 Frag(Varyings input) : SV_Target
             {
                 float3 normalWS = normalize(input.normalWS);
+                // Alpha marks a surface the void still hides, so the screen outline treats it as
+                // empty sky. Without this the outline inks the hidden set onto the white void.
+                half hidden = CutsceneVoidAmount(CutsceneVoidDistance(input.positionWS, _CutsceneVoidParams.w));
                 #if defined(_GBUFFER_NORMALS_OCT)
                     float2 octNormalWS = PackNormalOctQuadEncode(normalWS);
                     half3 packedNormalWS = PackFloat2To888(saturate(octNormalWS * 0.5 + 0.5));
-                    return half4(packedNormalWS, 0.0);
+                    return half4(packedNormalWS, hidden);
                 #else
-                    return half4(normalWS, 0.0);
+                    return half4(normalWS, hidden);
                 #endif
             }
             ENDHLSL

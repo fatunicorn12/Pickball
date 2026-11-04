@@ -1,0 +1,20 @@
+{
+    "name": "Pickleball.Editor.Outline",
+    "rootNamespace": "Pickleball.EditorTools.Outline",
+    "references": [
+        "Pickleball.Rendering",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -129,6 +129,48 @@ Shader "Pickball/Hypatia/Moon"
             }
             ENDHLSL
         }
+
+        // SSAO and the screen outline read depth and normals from this pass. Without it the moon is
+        // missing from both, and outlines of whatever is behind it draw across its face.
+        Pass
+        {
+            Name "DepthNormals"
+            Tags { "LightMode" = "DepthNormals" }
+            ZWrite On
+
+            HLSLPROGRAM
+            #pragma target 3.0
+            #pragma vertex NormalsVert
+            #pragma fragment NormalsFrag
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            struct NormalsAttributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+            };
+
+            struct NormalsVaryings
+            {
+                float4 positionCS : SV_POSITION;
+                float3 normalWS : TEXCOORD0;
+            };
+
+            NormalsVaryings NormalsVert(NormalsAttributes input)
+            {
+                NormalsVaryings output;
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                return output;
+            }
+
+            half4 NormalsFrag(NormalsVaryings input) : SV_Target
+            {
+                return half4(normalize(input.normalWS), 0.0);
+            }
+            ENDHLSL
+        }
     }
 
     FallBack Off
