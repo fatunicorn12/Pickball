@@ -700,7 +700,7 @@ AnimatorState:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: SideFlip
-  m_Speed: -1
+  m_Speed: 1
   m_CycleOffset: 0
   m_Transitions:
   - {fileID: -3832544820645153233}
@@ -715,7 +715,7 @@ AnimatorState:
   m_MirrorParameterActive: 0
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
-  m_Motion: {fileID: 4061839508520268033, guid: 9102586125c73f4458c1f300ca3caede, type: 3}
+  m_Motion: {fileID: -203655887218126122, guid: 29b1f284e64c46998603af097aaf1b5d, type: 3}
   m_Tag: 
   m_SpeedParameter: FlipSpeed
   m_MirrorParameter: 
@@ -800,7 +800,7 @@ AnimatorState:
   m_MirrorParameterActive: 0
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
-  m_Motion: {fileID: -203655887218126122, guid: 5f0e11bb3c28b5e4f99fa6eb278ee162, type: 3}
+  m_Motion: {fileID: -203655887218126122, guid: 9830faed8cd44b98926663a5c04c82c7, type: 3}
   m_Tag: 
   m_SpeedParameter: 
   m_MirrorParameter: 

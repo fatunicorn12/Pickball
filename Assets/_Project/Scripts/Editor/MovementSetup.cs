@@ -230,8 +230,8 @@ public static class MovementSetup
         Go(dbl, land, 0.08f).AddCondition(AnimatorConditionMode.If, 0, "Grounded");
 
         // The flips are the trimmed air front flip, time-scaled to the airtime
-        // by the driver (FlipSpeed). The side somersault plays it BACKWARDS — a
-        // back flip out of the plant — until a real side flip arrives.
+        // by the driver (FlipSpeed). The side somersault has its own authored
+        // backflip; without that file it plays the front flip BACKWARDS.
         var tripleClip = Clip("tripleJump");
         var sideClip = Clip("sideFlip");
         var rollClip = Clip("rollout");
