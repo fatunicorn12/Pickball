@@ -204,9 +204,10 @@ public static class HypatiaFightSetup
         foreach (string asset in new[]
                  {
                      HypatiaFightModel.ModelPath, HypatiaFightModel.IdleClipPath, HypatiaFightModel.ToppleClipPath,
+                     HypatiaFightModel.ClothConfigPath,
                      $"{NewtonFightArt.VfxDir}/Glow.png", $"{NewtonFightArt.VfxDir}/Disc.png",
                      $"{NewtonFightArt.VfxDir}/TargetRing.png",
-                 })
+                 }.Concat(HypatiaFightModel.FightClipPaths))
             sb.Append(AssetDatabase.GetAssetDependencyHash(asset).ToString());
         return FingerprintPrefix + Hex(sha.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString())));
     }
@@ -394,14 +395,19 @@ public static class HypatiaFightSetup
         animator.applyRootMotion = false;
         animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
 
+        // Spring chains for the gown and veil (the rig's Cloth_* bones); needs the avatar above.
+        ClothSetup.Apply(model);
+
         var glowGo = new GameObject("Glow");
         glowGo.transform.SetParent(body, false);
-        glowGo.transform.localPosition = new Vector3(0f, 1.1f, 0.6f);
+        // Tuned for her pale gown, which clips to white if lit harder or from closer. Warm so the gold
+        // stays gold; RecalibrationView owns its intensity. The halo behind her is the visible glow.
+        glowGo.transform.localPosition = new Vector3(0f, 1.1f, 1.4f);
         var glow = glowGo.AddComponent<Light>();
         glow.type = LightType.Point;
-        glow.color = new Color(0.6f, 0.65f, 1f);
+        glow.color = new Color(1f, 0.87f, 0.68f);
         glow.range = 7f;
-        glow.intensity = 3f;
+        glow.intensity = 1f;
         glow.shadows = LightShadows.None;
         // Scenery that hovers with her: kept out of lock-on's aim and size.
         HypatiaFightArt.Halo("Halo", body, 2.6f, new Color(0.62f, 0.68f, 1f, 0.3f), new Vector3(0f, 0.95f, -0.3f))
@@ -712,6 +718,17 @@ public static class HypatiaFightSetup
         Set(topple, "boss", boss);
         Set(topple, "model", model);
         Set(topple, "animator", model != null ? model.GetComponent<Animator>() : null);
+
+        // Her attack, Phase Two and death clips.
+        var animGo = new GameObject("Animation");
+        animGo.transform.SetParent(root, false);
+        var anim = animGo.AddComponent<HypatiaAnimationView>();
+        Set(anim, "boss", boss);
+        Set(anim, "rings", emitter);
+        Set(anim, "pulse", boss.GetComponent<KnockbackPulse>());
+        Set(anim, "burn", burn);
+        Set(anim, "animator", model != null ? model.GetComponent<Animator>() : null);
+        Set(anim, "halo", body.Find("Halo"));
 
         // Knockback pulse: the core on her body; the floor quad, dome, particles and
         // light in world space under this root (PulseView moves them to her). None

@@ -144,6 +144,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         IConicAttack _conics;
         IArenaBurn _burn;
         IPulseAttack _pulse;
+        CapsuleCollider _hurtbox;
         Health _subscribedPlayerHealth;
         IConicAttack _subscribedConics;
         RecalibrationWindow _subscribedWindow;
@@ -178,9 +179,10 @@ namespace Pickleball.Sandbox.Boss.Hypatia
 
             CharacterController playerController =
                 player != null ? player.GetComponent<CharacterController>() : null;
-            CapsuleCollider hurtbox = body != null ? body.GetComponent<CapsuleCollider>() : null;
+            _hurtbox = body != null ? body.GetComponent<CapsuleCollider>() : null;
+            if (_defeated && _hurtbox != null) _hurtbox.enabled = false;
             Context = new HypatiaContext(config, transform, arenaCentre, player, playerHealth,
-                                         playerController, ReadTimeScale, _health, hurtbox);
+                                         playerController, ReadTimeScale, _health, _hurtbox);
             // A reload (or a disable/enable) mid phase 2 must not drop the attacks
             // back to phase 1 behaviour.
             if (_phase >= 2) Context.EnterPhaseTwo();
@@ -283,7 +285,12 @@ namespace Pickleball.Sandbox.Boss.Hypatia
 
             float bossDt = Context.BossDelta(dt);
             if (animator != null) animator.speed = Context.BossTimeScale;
-            if (_defeated) return;
+            if (_defeated)
+            {
+                // She comes down to the plate instead of dying in mid-air.
+                UpdateBody(bossDt);
+                return;
+            }
 
             // Real dt: her slow does not slow the player.
             if (player != null) Context.PlayerVelocity.Sample(player.position, dt);
@@ -605,6 +612,9 @@ namespace Pickleball.Sandbox.Boss.Hypatia
             _defeated = true;
             StopFighting();
             if (_health != null) _health.IncomingDamageFilterByKind = null;
+            // The capsule stays upright where she stood while her body falls away from it: left on,
+            // it is an invisible pillar, and it comes down onto anyone standing under her.
+            if (_hurtbox != null) _hurtbox.enabled = false;
             Defeated?.Invoke();
             Say(HypatiaBarks.Occasion.Death);
         }
@@ -654,26 +664,27 @@ namespace Pickleball.Sandbox.Boss.Hypatia
         }
 
         /// <summary>Hover toward the state's height (toppled, recalibrating or
-        /// normal) with exponential smoothing, bob on top (not while toppled: she
-        /// is down on the plate), and turn the root to face the player (not while
-        /// toppled), all on her clock. The root never translates: she does not walk.</summary>
+        /// normal) with exponential smoothing, bob on top (not while down on the
+        /// plate, toppled or dead), and turn the root to face the player (not while
+        /// down), all on her clock. The root never translates: she does not walk.</summary>
         void UpdateBody(float bossDt)
         {
-            bool toppled = IsToppled;
+            bool down = IsToppled || _defeated;
             if (_bodyMovable)
             {
-                float target = toppled ? config.ToppleHoverHeight
+                float target = _defeated ? config.DefeatedHoverHeight
+                             : down ? config.ToppleHoverHeight
                              : IsRecalibrating ? config.RecalibrationHoverHeight
                              : config.HoverHeight;
                 float settle = 1f - Mathf.Exp(-config.HoverSettleRate * bossDt);
                 _hoverHeight += (target - _hoverHeight) * settle;
-                _bobWeight += ((toppled ? 0f : 1f) - _bobWeight) * settle;
+                _bobWeight += ((down ? 0f : 1f) - _bobWeight) * settle;
                 _bobCycle = Mathf.Repeat(_bobCycle + bossDt / Mathf.Max(0.1f, config.HoverBobPeriod), 1f);
                 float y = _hoverHeight + _bobWeight * config.HoverBobAmplitude * Mathf.Sin(_bobCycle * 2f * Mathf.PI);
                 body.localPosition = new Vector3(_bodyBase.x, Mathf.Max(0f, y), _bodyBase.z);
             }
 
-            if (toppled || player == null || !(bossDt > 0f)) return;
+            if (down || player == null || !(bossDt > 0f)) return;
             Vector3 look = player.position - transform.position;
             look.y = 0f;
             if (look.sqrMagnitude < 0.01f) return;
