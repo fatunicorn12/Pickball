@@ -166,6 +166,7 @@ public static class TrainingStageSetup
 
         ApplyLighting();
         InventorySetup.AttachToPlayer(player.gameObject);   // re-wire the copied inventory to this scene
+        CombatVoiceSetup.AttachToPlayer(player.gameObject);   // and the combat voice, if the copy predates it
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, ScenePath);

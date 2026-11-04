@@ -1,0 +1,64 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5628da0998018d449d779c45a41871b, type: 3}
+  m_Name: CombatVoiceBank
+  m_EditorClassIdentifier: Pickleball.Runtime::Pickleball.Sandbox.Combat.CombatVoiceBank
+  light:
+    clips:
+    - {fileID: 8300000, guid: a9762496bc18a3b48ae4b7be328ff5ab, type: 3}
+    - {fileID: 8300000, guid: 266df5c3b1b546e4ab260838f3b085aa, type: 3}
+    - {fileID: 8300000, guid: 35dcc7c5d0e60244d8a4c1c41747d763, type: 3}
+    - {fileID: 8300000, guid: 6f693b9e80f725b46b86e218f712e40c, type: 3}
+    - {fileID: 8300000, guid: 898fce7243885a8489d40f87a16666f5, type: 3}
+    - {fileID: 8300000, guid: 58707d8861a623543bebe62daf0fe2a6, type: 3}
+    volume: 1
+  medium:
+    clips:
+    - {fileID: 8300000, guid: 1ffef19a90517f84ab95f86f3cbd2df5, type: 3}
+    - {fileID: 8300000, guid: db6dac12f26bebb4092325849ff2ec9d, type: 3}
+    - {fileID: 8300000, guid: 43d1c6069d4ff1744b02a38758bc0cc0, type: 3}
+    - {fileID: 8300000, guid: 70a7ec19c3bb06749802b5a14a465302, type: 3}
+    - {fileID: 8300000, guid: 983578156e587c84da74b7ce74c76911, type: 3}
+    - {fileID: 8300000, guid: af0738973b96e6444ae4c77cb8c74419, type: 3}
+    - {fileID: 8300000, guid: 6522879130d820a4c9e69cbaecfd1bce, type: 3}
+    - {fileID: 8300000, guid: f3439879f4249bf4c832b57a29b1b0a8, type: 3}
+    volume: 1
+  heavy:
+    clips:
+    - {fileID: 8300000, guid: 11d3777ea941c0542b96f3562de646c4, type: 3}
+    - {fileID: 8300000, guid: ed354df6f4e13494d947aa5faf3d4402, type: 3}
+    - {fileID: 8300000, guid: d0330e71ce5211f488914e4a1e5a1e6a, type: 3}
+    - {fileID: 8300000, guid: 987a7c631a2f9f646a9799a0eacdd84d, type: 3}
+    - {fileID: 8300000, guid: ab766c299b3d79149a6d9adc012731af, type: 3}
+    - {fileID: 8300000, guid: f70e1c6d347639c4f998214477bdd4e0, type: 3}
+    - {fileID: 8300000, guid: f2e803407edcf6346b90d2d4f18e89da, type: 3}
+    - {fileID: 8300000, guid: a151092f36a95c64dbdb813ab9f703af, type: 3}
+    volume: 1
+  finisher:
+    clips:
+    - {fileID: 8300000, guid: b78d3815516d20e4999fc99b102e669a, type: 3}
+    - {fileID: 8300000, guid: 174c8678a659770429218e04d3c6ca67, type: 3}
+    - {fileID: 8300000, guid: 0a128e1cc54f9ac45a2b0971b29006a9, type: 3}
+    - {fileID: 8300000, guid: 63419d589e6fb0840b774de9a109d3b6, type: 3}
+    - {fileID: 8300000, guid: 07cbc8ba451138c4aa7731a8504d3de8, type: 3}
+    - {fileID: 8300000, guid: ca2586479c267d74bbecbfebb4af20ba, type: 3}
+    - {fileID: 8300000, guid: 6170e577cbb5d6f4da63e808b5fa71f9, type: 3}
+    - {fileID: 8300000, guid: 4b00f758bbeffc841a4ba8cbf1baa6b2, type: 3}
+    volume: 1
+  hurt:
+    clips:
+    - {fileID: 8300000, guid: 25d13463c69a2504ebaa5897dd9c5df6, type: 3}
+    - {fileID: 8300000, guid: b51c88538fbfcd64d8672301be125b0d, type: 3}
+    volume: 1
+  hurtMinIntervalSeconds: 0.4
+  pitchVariation: 0.03
+  handoffFadeSeconds: 0.03
