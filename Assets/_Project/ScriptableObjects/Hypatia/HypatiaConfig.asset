@@ -97,7 +97,8 @@ MonoBehaviour:
   battedHomingTimeout: 2.5
   battedOrbiterDamage: 20
   toppleDuration: 7
-  toppleHoverHeight: 0
+  toppleHoverHeight: 0.15
+  defeatedHoverHeight: 0.03
   toppleDamageMultiplier: 2
   firstPulseDelay: 6
   pulseInterval: 10

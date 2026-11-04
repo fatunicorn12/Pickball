@@ -37,8 +37,9 @@ namespace Pickleball.Sandbox.Boss.Hypatia.Presentation
         [SerializeField] private Renderer windowRingRenderer;
 
         [Header("Look")]
-        [Tooltip("Glow light intensity outside the window.")]
-        [SerializeField, Min(0f)] private float glowIntensity = 3f;
+        [Tooltip("Glow light intensity outside the window. She is lit from close up and her gown is " +
+                 "pale, so much above this clips the gold to flat white.")]
+        [SerializeField, Min(0f)] private float glowIntensity = 1f;
         [Tooltip("Fraction (0-1) of the glow left in the window.")]
         [SerializeField, Range(0f, 1f)] private float dimmedFraction = 0.2f;
         [Tooltip("Halo colour outside the window.")]

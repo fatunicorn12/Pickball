@@ -313,9 +313,15 @@ namespace Pickleball.Sandbox.Boss.Hypatia
                  "paused for it; what she already threw keeps going.")]
         [SerializeField, Min(0f)] private float toppleDuration = 7f;
 
-        [Tooltip("Height of her feet while toppled, m. 0 = down on the plate, where " +
-                 "every ground combo reaches her.")]
-        [SerializeField, Min(0f)] private float toppleHoverHeight;
+        [Tooltip("Height of her feet while toppled, m, where every ground combo reaches her. " +
+                 "A little above 0: ToppleView pitches her forward about her feet, which swings " +
+                 "her toes and hem below that height. Raise it if a new model clips the plate.")]
+        [SerializeField, Min(0f)] private float toppleHoverHeight = 0.15f;
+
+        [Tooltip("Height of her feet once defeated, m. She comes down to the plate and her death " +
+                 "clip plays out there. The clip is grounded on her model, so this only has to " +
+                 "clear what the clip cannot see: her cloth chains. Raise it if a new model clips the plate.")]
+        [SerializeField, Min(0f)] private float defeatedHoverHeight = 0.03f;
 
         [Tooltip("Damage multiplier on her while toppled. Replaces the recalibration " +
                  "multiplier rather than stacking with it (a topple closes the window).")]
@@ -506,6 +512,7 @@ namespace Pickleball.Sandbox.Boss.Hypatia
 
         public float ToppleDuration => toppleDuration;
         public float ToppleHoverHeight => toppleHoverHeight;
+        public float DefeatedHoverHeight => defeatedHoverHeight;
         public float ToppleDamageMultiplier => toppleDamageMultiplier;
 
         public float FirstPulseDelay => firstPulseDelay;

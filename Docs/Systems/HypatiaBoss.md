@@ -77,8 +77,9 @@ HypatiaBoss (root, plate centre, turns to face the player)
 ├─ HypatiaBarks             IBarkSource
 ├─ HypatiaBoss              the brain: WHEN; attacks own HOW
 ├─ Body                     hover/bob/sink (brain moves local Y); CapsuleCollider hurtbox
-│  ├─ HypatiaModel          Humanoid, Hypatia.controller (Idle, ToppleHit, ToppledHold);
-│  │                        ToppleView pitches this, not Body, so the hurtbox stays upright
+│  ├─ HypatiaModel          Humanoid, Hypatia.controller (base: Idle, ToppleHit, ToppledHold, Death;
+│  │                        UpperBody: attacks, Phase Two); ToppleView pitches this, not Body,
+│  │                        so the hurtbox stays upright
 │  ├─ Glow (Light), Halo     Halo carries LockOnIgnore
 │  ├─ PulseGlow             charge glow (PulseView), LockOnIgnore
 ├─ Astrolabe                mater, limb, ticks e=0..2, NeedlePivot, Readout (faces player); LockOnIgnore
@@ -95,15 +96,16 @@ HypatiaFightViews           one child per presentation component (below)
 |---|---|---|
 | HypatiaBoss | `ConicTelegraphed(kind, e, lead)` | AstrolabeNeedle |
 | HypatiaBoss | `RecalibrationStarted(duration)` / `RecalibrationEnded` | AstrolabeNeedle (rest), RecalibrationView (polls `IsRecalibrating`, `RecalibrationRemaining`) |
-| HypatiaBoss | `PhaseTwoStarted`, `Defeated` | AstrolabeNeedle (rest on defeat); HUD reads Health |
-| HypatiaBoss | `Toppled(duration)` / `Recovered`; `IsToppled`, `ToppleRemaining` | ToppleView (pitch + `Toppled` animator bool), AstrolabeNeedle (rest) |
-| CelestialRingEmitter | `GapForecast`, `RingLaunched`, `RingRetired`, `RingHitPlayer`; `TryGetRing`, `TryGetForecast`, `TryGetRingById` | GapForecastView, CelestialRingView (reads `TryGetRing` every frame) |
+| HypatiaBoss | `PhaseTwoStarted`, `Defeated` | AstrolabeNeedle (rest on defeat), HypatiaAnimationView; HUD reads Health |
+| HypatiaBoss | `ConicTelegraphed` | also HypatiaAnimationView |
+| HypatiaBoss | `Toppled(duration)` / `Recovered`; `IsToppled`, `ToppleRemaining` | ToppleView (pitch + `Toppled` animator bool), AstrolabeNeedle (rest), HypatiaAnimationView |
+| CelestialRingEmitter | `GapForecast`, `RingLaunched`, `RingRetired`, `RingHitPlayer`; `TryGetRing`, `TryGetForecast`, `TryGetRingById` | GapForecastView, CelestialRingView (reads `TryGetRing` every frame), HypatiaAnimationView (`GapForecast`) |
 | ConicCaster | `LobAimed`, `LobLanded`, `Stopped` | LobMarkerView |
 | ConicCaster | `OrbiterSpawned`, `OrbiterRetired`, `OrbiterBatted(o, towardHer)`, `Stopped` | OrbitPathView (drops the line on batting) |
 | ConicCaster | `OrbiterShattered` (topple), `OrbiterStruckBoss(at)` (`IConicAttack`) | brain (topple); no view yet |
-| KnockbackPulse | `PulseCharging(s)`, `PulseFired(reach)`, `PulseCancelled`, `PulseHitPlayer(push, dmg)` | PulseView (see **Pulse look** below) |
+| KnockbackPulse | `PulseCharging(s)`, `PulseFired(reach)`, `PulseCancelled`, `PulseHitPlayer(push, dmg)` | PulseView (see **Pulse look** below), HypatiaAnimationView (`PulseCharging`, `PulseCancelled`) |
 | ConicCaster | `AsymptotesTelegraphed`, `ShotReleased`, `ShotFinished`, `Stopped` | AsymptoteTelegraphView |
-| ArenaBurn | `BandSmouldering`, `BandIgnited`, `Extinguished` (`PlayerBurning` unused) | BandFireView |
+| ArenaBurn | `BandSmouldering`, `BandIgnited`, `Extinguished` (`PlayerBurning` unused) | BandFireView, HypatiaAnimationView (`BandSmouldering`) |
 | ScrollKeeper | `ScrollSpawned`, `ScrollCollected`, `ScrollDespawning` | none: the scroll prefab draws itself |
 | HypatiaBarks | `Spoke` (`IBarkSource`) | BarkView on FightHUD |
 | Health | `Changed`, `Hurt` | HealthBarView ("Hypatia — The Astrolabe", notch at Phase Two At), DamageNumbers |
@@ -135,7 +137,7 @@ needle, drops a charging pulse (due again on recovery), calls `IConicAttack.Shat
 (orbiting AND batted-in-flight ones, and the rest of a volley still spawning), raises
 `Toppled` and barks (`Occasion.Toppled`, always plays). While toppled, rings, conics, the burn
 interval and the pulse timer do not tick (a volley already in flight is still closed out, but
-opens no window); her hover target is Topple Hover Height (0), her bob fades out and she stops
+opens no window); her hover target is Topple Hover Height (0.15 m, because the pitch swings her toes and hem below it), her bob fades out and she stops
 turning. Damage: `ScaleIncomingDamage(amount, toppled, recalibrating, …)`: topple wins, never
 multiplies with the window. Her death or the player's ends a topple (`Recovered` is raised).
 
@@ -197,6 +199,53 @@ There is deliberately **no smoke**: dark smoke cannot be seen against her night 
 overdraw (tried and cut). The flame shader's randomness and age come from custom vertex streams set
 in `HypatiaFightFireArt.Flames`; the two must stay in step.
 
+**Her animation.** `HypatiaAnimationView` only subscribes, so gameplay timing is the same with or
+without it; it needed no new gameplay event. `HypatiaAnimationDirector` (pure, tested) makes every
+decision. Clips are `.anim` copies in `Animation/Hypatia/Clips/`, so no source FBX importer changes:
+Humanoid, not looping, root baked in place, no root motion.
+
+| Attack | State (layer) | Clip's source | Started by | Release pose lands on |
+|---|---|---|---|---|
+| Celestial Rings | `Rings` (UpperBody) | `Chibi/SwordShield/sword and shield slash (3)` | `GapForecast` | `RingLaunched` |
+| Conic: Ellipse | `ConicEllipse` (UpperBody) | UAL1 `Swim_Fwd_Loop`, neck and head nod scaled to 40% | `ConicTelegraphed` | first `OrbiterSpawned` |
+| Conic: Parabola | `ConicParabola` (UpperBody) | UAL2 `OverhandThrow` | `ConicTelegraphed` | first lob launch |
+| Conic: Hyperbola | `ConicHyperbola` (UpperBody) | `Newton/Cast2` | `ConicTelegraphed` (needle + asymptote lead) | `ShotReleased` |
+| Knockback Pulse | `Pulse` (UpperBody) | `Chibi/SwordShield/sword and shield attack` | `PulseCharging`; `PulseCancelled` stops it | `PulseFired` |
+| Alexandria's Burning | `Burning` (UpperBody) | hand-keyed in muscle space (`HypatiaClips.Burning`) | `BandSmouldering` | `BandIgnited` |
+| Phase Two | `PhaseTwo` (UpperBody) | `Newton/Cast`, neck and head nod scaled to 45% | `PhaseTwoStarted` | none |
+| Death | `Death` (base) | `Chibi/SwordShield/sword and shield death (2)`, lifted clear of the plate (`HypatiaClips.BakeDeath`) | `Defeated` | none; holds its last pose |
+
+Burning and Death are baked by **Tools ▸ Pickleball ▸ Bake Hypatia Clips**
+(`Scripts/Cutscene/Editor/Actors/HypatiaClips.cs`), which setup does not run: re-bake by hand if her
+model changes shape. Death starts from `Clips/Source/Hypatia_DeathSource.anim`, because the repo's FBX
+of it is a Generic import.
+
+Topple keeps its placeholder (`ToppleHit`, `ToppledHold`, the `Toppled` bool from `ToppleView`); the
+view only clears the upper layer. The upper layer's mask (`HypatiaUpperBody.mask`) leaves root and
+legs to the base layer, because she hovers and rings fire often, and a dress skinned to the legs
+should not be thrown around each time. Phase Two is upper-body too: the repo's only full-body
+power-up plants a wide fighter's stance, which is wrong for her.
+
+- **Overlaps.** One clip at a time: Death > Topple > Phase Two > Burning > Pulse > Conic > Rings. A clip
+  is never restarted, and a request that would overlap an equal or higher one is skipped, not queued.
+  A higher clip replaces a lower one when it starts, not when asked for. Topple and Death always
+  interrupt. A Phase Two that a topple refuses plays on recovery.
+- **Timing.** `Plan` fits a clip to its lead by changing speed within the clip's limits, then by waiting
+  (lead too long) or skipping the anticipation (too short). `ConicReleaseLead` adds the caster's own
+  waits to the needle lead and must stay in step with `ConicCaster`. Everything runs on her clock.
+- **Death.** She crumples and falls forward, so she lands with her head toward the player: a backward
+  fall put her feet toward the camera, which then looked up her skirt. The brain carries her down to
+  Defeated Hover Height (0.03 m) with no bob or turning, so the fall plays out on the plate. Her
+  hurtbox goes off as she dies, or it would stand as an invisible pillar where she was. Her halo
+  stands just behind her, so the view shrinks it away first.
+- **Clearance.** The death clip is lifted wherever a vertex would go below the plate; the topple pitches
+  her about her feet, so it hovers instead. Measured frame by frame in a real fight on the toga, with
+  her cloth chains running: see the Migration note below for the numbers.
+
+**Her glow.** A warm point light 1.4 m in front of her at intensity 1 (`Setup`, and
+`RecalibrationView.glowIntensity`), not the old cold light at 0.6 m and 3: her gown is pale, and that
+one clipped 75-83% of her torso to flat white. The halo behind her is what reads as a glow.
+
 **Materials keep their values.** A material that already exists does not pick up a changed shader
 default, so a look that matters must be set from the builder (as `HypatiaFightFireArt` does) or by
 a property block (as the views do). The pulse's shader defaults were aligned to its materials for
@@ -225,23 +274,36 @@ never overwrites it. **Migration (circles, this change):** because of that, the 
 was moved to the circle design by hand, once, through the Editor (SerializedObject + save):
 Ellipse Eccentricity Min/Max 0.35/0.75 → 0/0, and the new Orbit Eccentricity Jitter = 0 (it was
 a hard-coded ±0.1 in `ConicCaster`). New code defaults are the same, so a freshly created asset
-matches. Any other copy of the asset needs the same edit. Presentation colours and sizes are serialized on the view components with
+matches. Any other copy of the asset needs the same edit. **Migration (toga clearance):** the same way,
+Topple Hover Height 0 → 0.15 and the new Defeated Hover Height = 0.03, with the same code defaults.
+Lowest vertex over a real fight with her cloth chains running, on the toga before its closed-hem re-delivery: 27 mm above the plate in the topple, 52 mm through the whole death. Any model change can move these: re-measure. Presentation colours and sizes are serialized on the view components with
 defaults in code; the scene is regenerated, so change those defaults in code.
 
 **Setup.** `Tools ▸ Pickleball ▸ Setup Hypatia Fight` (see `Docs/Architecture/EditorSetup.md`):
 1. Creates the config if missing. Configures the FBX compare-before-write: Humanoid (Create
    From This Model; a failed avatar is an error, never a Generic fallback), import scale for
-   1.7 m (measured from bounds, currently 1.566), material remap to `HypatiaPrincess.mat`
-   (URP Lit, created once), texture max size 2048.
+   1.7 m (measured from bounds, currently 1.658), material remap to `HypatiaToga.mat`
+   (URP Lit, created once), texture max size 2048. The avatar is mapped by bone name
+   (`HypatiaFightModel.EnsureHumanMap`), because Unity's auto-mapper takes the rig's
+   `Cloth_Skirt_*` bones for her legs. The arms in its reference pose are straightened
+   (`EnforceArmTPose`), because she is bound about 43° below horizontal and every clip would
+   inherit that droop. `ClothSetup.Apply` then simulates the rig's 7 `Cloth_*` chains, with
+   `ScriptableObjects/Cloth/HypatiaTogaCloth.asset` (created once).
+   The model comes from `Tools/Blender/hypatia_toga_prepare.py` then `hypatia_toga_cloth.py`.
+   The gown is skinned to the spine, hips and those chains, never the legs, so it hangs as one
+   long tube; set `SANDALS_RIDE_HEM = False` there to put the sandals back on the foot bones.
 2. Fingerprints its inputs (ChibiSandbox.unity bytes, every Hypatia script, BarkView, this
-   builder, the config's values, the model, Newton's idle clip and the shared VFX textures). If
+   builder, the config's values, the model, Newton's idle clip, her fight clips and the shared
+   VFX textures). If
    it matches `Art/Characters/Hypatia/Generated/HypatiaFight.fingerprint.txt`, it stops: a second
    run is a no-op. **Setup Hypatia Fight (Force Rebuild)** ignores the fingerprint.
 3. Otherwise rebuilds materials and meshes (`Generated/`), the four prefabs
    (`Prefabs/Hypatia/`; the orbiter with its solid `Hitbox` child wired),
    `Animation/Hypatia/Hypatia.controller` (an Idle state on Newton's Humanoid idle, created
    once; a `Toppled` bool with ToppleHit on Newton's `Hit.fbx` then ToppledHold on the idle,
-   added once if missing), then byte-copies ChibiSandbox over `HypatiaFight.unity` (the GUID
+   added once if missing; a Death state, and an UpperBody layer with its mask, an Empty rest
+   state and one state per attack, each added once and re-pointed only if its clip changed), then
+   byte-copies ChibiSandbox over `HypatiaFight.unity` (the GUID
    is kept), strips Newton, the academy, Birdy, tether anchors and the skateboard/tether pickups
    (double-jump and dash pickups move beside the spawn), builds the Rete, Hypatia, the views,
    rebinds the copied FightHUD (boss bar, notch, damage numbers, bark line) and sets a night
@@ -265,7 +327,7 @@ Everything gameplay is on `HypatiaConfig.asset`; every field has a tooltip with 
 | Parabola | Flight Time, Marker Lead, Gravity, Lead Fraction, Max Lead, Count P1/P2, Stagger, Blast Radius, Damage | how predictive and how punishing the lob is |
 | Ellipse | Count Min/Max, Max Live, e Min/Max (0/0 = circles), Orbit Eccentricity Jitter (0), Periapsis Min, Apoapsis Max, Period Min/Max, Lifetime, Stagger, Height, Radius, Damage, Rehit Delay | how crowded the orbits get; e > 0 brings back the periapsis whip |
 | Batting | Spells Bat Orbiters (off), Batting Cone 60°, Batted Speed 16, Batted Turn Rate 540 °/s, Batted Miss Lifetime 1.2, Batted Homing Timeout 2.5, Batted Orbiter Damage 20 | how forgiving the bat-back is |
-| Topple | Topple Duration 7, Topple Hover Height 0, Topple Damage Multiplier 2 | the size of the reward |
+| Topple | Topple Duration 7, Topple Hover Height 0.15, Topple Damage Multiplier 2, Defeated Hover Height 0.03 | the size of the reward; how high she lies once dead |
 | Knockback Pulse | First Pulse Delay 6, Pulse Interval 10, Charge Time 0.8, Reach 10, Damage 5, Target Radius 10.5, Extra Speed 0, Assumed Ground Drag 11 (a copy: see the coupling) | how hard she clears space |
 | Hyperbola | e Min/Max, Periapsis, Asymptote Lead, Speed, Reach, Exit At Player, Height, Radius, Damage | how sharp and fast the flyby is |
 | Recalibration | Duration 2.5, Damage Multiplier 2, Normal Multiplier 1 | the punish beat |
@@ -277,8 +339,12 @@ colours, aurora height, gap edge colour and sparks, line widths; `BandFire` (fla
 density, flame edge margin, ignition flash and kick, light per band, ash seconds);
 `MoonLook` on the orbiter prefab (Sun Height, batted spin and flare); `Topple` (pitch °, blend
 rate); `Pulse` (core sizes and colours, dial colour and spin, wave and dome colours, dome height,
-expand, fade and flash seconds, light intensities, shake and FOV punch). `HypatiaBarks` (on her root)
-has the lines, `minGap`, `attackChance` and `lineDuration`.
+expand, fade and flash seconds, light intensities, shake and FOV punch); `Animation` (each clip's
+release time, speed limits and fade, rest and interrupt fades, halo shrink rate). `HypatiaBarks` (on
+her root) has the lines, `minGap`, `attackChance` and `lineDuration`.
+
+Swapping a clip: replace its `.anim` or point the state at a new clip, then re-measure its release time
+on `HypatiaFightViews/Animation`, or its release pose drifts off the gameplay moment.
 
 ## 4. How to extend: add an attack in 6 steps
 
@@ -350,9 +416,18 @@ has the lines, `minGap`, `attackChance` and `lineDuration`.
   Gravity Anchor higher, so a tall ring hits at any height and only the gap gets through.
 - **Heads-up for the 4D Stationary Point:** `FreezeZone` now queries trigger colliders (for her
   projectiles), which also reaches any trigger-only targets the Stationary Point uses.
-- **Placeholder look.** Primitives and procedural rings; her only animation is Newton's idle,
-  retargeted (no cast, hit or death clips). The perimeter is an invisible 40 m wall at the rim;
-  the decorative lip sits outside it.
+- **Placeholder look.** Primitives and procedural rings. The perimeter is an invisible 40 m wall at
+  the rim; the decorative lip sits outside it.
+- **Her clips are repurposed stand-ins, chosen from what is licensed in the repo.** The ring and pulse
+  clips are sword-and-shield moves with no sword, and the ellipse is a swimming stroke. Burning is
+  hand-keyed, so it is clear but not mocap. Better spell clips are listed in
+  `Pickball-mixamo-inbox/hypatia/SHORTLIST.md`, and need the user's Adobe login to download.
+- **Moonlight tints her under-dress.** The cream reads a dusty mauve under the cold moon and ambient
+  (median about 140,116,116 in play). Not lilac enough to rework the scene lighting for it.
+- **The pulse's flash hides its burst.** At release `PulseView` whites out the frame around her, so the
+  player sees the gather and the follow-through but not the burst itself.
+- **Clips are skipped by design.** Rings fire often, so some rings show no clip, and a pulse can cut a
+  needle-delayed hyperbola off before its shot (seen in a batch fight). The attack still fires.
 - **`ArenaBurn.PlayerBurning`** has no listener; the HUD shows fire damage only through the
   health bar and damage numbers.
 - **Editor-only quirk**: rebuilding renders the copied HUD, and TMP may then hold its dynamic
