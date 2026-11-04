@@ -84,6 +84,22 @@ namespace Pickleball.Sandbox.Movement.Presentation
         [Tooltip("Corkscrew spin speed of the model during the spin jump, °/s.")]
         [SerializeField] private float spinYawSpeed = 1080f;
 
+        [Header("Side flip sparks (the skid's jump window)")]
+        [Tooltip("How far past the further foot's furthest bone the sparks start, m, along the " +
+                 "way he was running. The bones stop short of the shoe, so this reaches its edge.")]
+        [SerializeField, Min(0f)] private float sparkEdgeOutset = 0.1f;
+        [Tooltip("Height of the sparks above his feet's floor level, m. Too low and the floor " +
+                 "hides the first of each spark's flight.")]
+        [SerializeField, Min(0f)] private float sparkFloorLift = 0.04f;
+        [Tooltip("Sparks thrown the moment the window opens. Higher reads as a harder plant.")]
+        [SerializeField, Min(0)] private int sparkBurst = 18;
+        [Tooltip("Sparks per second for the rest of the window. The default skid is 0.22 s, so " +
+                 "280 adds about 60. Higher reads as a denser shower.")]
+        [SerializeField, Min(0f)] private float sparkRate = 280f;
+        [Tooltip("How far the spray tilts up off the floor, °. Low skims the ground and hides " +
+                 "behind him from a chase camera; high fountains up past his body.")]
+        [SerializeField, Range(0f, 90f)] private float sparkSprayAngle = 50f;
+
         public float ModelYOffset => modelYOffset;
         public float SkateRideHeight => skateRideHeight;
         public float RideLiftRate => rideLiftRate;
@@ -105,6 +121,11 @@ namespace Pickleball.Sandbox.Movement.Presentation
         public Vector3 BellySlideOffset => bellySlideOffset;
         public float PoseBlendRate => poseBlendRate;
         public float SpinYawSpeed => spinYawSpeed;
+        public float SparkEdgeOutset => sparkEdgeOutset;
+        public float SparkFloorLift => sparkFloorLift;
+        public int SparkBurst => sparkBurst;
+        public float SparkRate => sparkRate;
+        public float SparkSprayAngle => sparkSprayAngle;
 
         /// <summary>The fastest clip at the top of the ground tree, m/s.</summary>
         public float TopClipStride => sprintClipStride > 0.01f ? sprintClipStride : runClipStride;

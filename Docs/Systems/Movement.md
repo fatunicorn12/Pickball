@@ -17,6 +17,8 @@ little and scaled to a 1.7 m character:
   round and pushes off the other way in 0.14 s, keeping 92% of his speed and his sprint.
   Sunshine's own skid throws your speed away. This one keeps it (asked for as the top priority).
   Jumping during the skid gives Sunshine's **side somersault**, a tall jump out the new way.
+  **Sparks** fly from the outer edge of his further foot for exactly that window, so you can see
+  when the flip is available.
 - **Floaty, high jumps.**
   - Chain: a single (2 m standing), then a double (2.8 m) if he re-jumps within 0.2 s of landing,
     then a **triple** flip (4.5 m) if he lands moving at least 5 m/s (`tripleMinSpeed`). In
@@ -232,9 +234,10 @@ PlayerMovementInput ──Read()──▶ MovementMotor ──MoveChanged / Tric
 | `MovementConfig` | `MovementConfig.cs` | Every gameplay tunable, read live every frame. |
 | `MovementAnimatorDriver` | `Presentation/MovementAnimatorDriver.cs` | Listens to `MoveChanged` and sets the Animator: triggers, continuous params, and the int `Move` / `JumpKind`. Owns the model offset, ride lift and procedural poses (slide offset, spin, optional pitch). |
 | `MovementEffects` | `Presentation/MovementEffects.cs` | Listens to `MoveChanged`: the feather puff, `DashEffects.Play`, `TetherSystem.Attach/Detach`, `SkateboardMount.SetRidden`. |
-| `MovementAnimationConfig` | `Presentation/MovementAnimationConfig.cs` | Presentation tunables (strides, clip timing, poses). |
+| `SideFlipSparks` | `Presentation/SideFlipSparks.cs` | Listens to `MoveChanged` and emits sparks for the whole of `SkidTurn`, the side flip's window. Takes its spot once, as the skid starts (`Logic/FurtherFootEdge`), and holds it, so the body's 180° swing doesn't drag the sparks round. On a child of the player, built by **Setup Side Flip Sparks**. |
+| `MovementAnimationConfig` | `Presentation/MovementAnimationConfig.cs` | Presentation tunables (strides, clip timing, poses, spark count and placement). |
 | `ChibiLocomotion` | `Sandbox/ChibiLocomotion.cs` | Facade with the stable API, plus player glue: lock-on and attack facing, head look-at. |
-| `Logic/*` | `Logic/*.cs` | Pure, tested rules: `JumpMath`, `GravityProfile`, `SprintRamp`, `SkidRule`, `JumpChain`, `SpinGesture`, `ForceFieldChannel`, `FixedDuration` (the dash's exact reach). |
+| `Logic/*` | `Logic/*.cs` | Pure, tested rules: `JumpMath`, `GravityProfile`, `SprintRamp`, `SkidRule`, `JumpChain`, `SpinGesture`, `ForceFieldChannel`, `FixedDuration` (the dash's exact reach), `FurtherFootEdge` (where a skid's sparks start). |
 
 ### The frame
 
@@ -280,7 +283,7 @@ Rollout 5`.
 
 | Event | Raised by | Listened to by |
 |---|---|---|
-| `IMovementState.MoveChanged(from, to)` | `MovementMotor.Switch` | `MovementAnimatorDriver`, `MovementEffects`; later the sword abilities (dive and spin slashes) |
+| `IMovementState.MoveChanged(from, to)` | `MovementMotor.Switch` | `MovementAnimatorDriver`, `MovementEffects`, `SideFlipSparks`; later the sword abilities (dive and spin slashes) |
 | `MovementMotor.TrickPerformed` | Ground / Sprint / RunStop on F / Y | `MovementAnimatorDriver` (Flip trigger) |
 
 Cross-system channels (`Scripts/Events/EventChannels.cs`) are not used yet. Movement events stay
@@ -388,6 +391,10 @@ Presentation lives on `MovementAnimationConfig.asset`:
   flat. They were 60° and 82° on the placeholders; set them back if a clip is missing.
   `bellySlideOffset` lowers the sliding model onto the floor. `spinYawSpeed` spins the spin jump.
   Leave `proceduralPoses` on: it drives the slide offset and the spin.
+- **Side flip sparks:** `sparkBurst`, `sparkRate`, `sparkSprayAngle`, `sparkEdgeOutset`,
+  `sparkFloorLift`. How long they run is `skidDuration` on `MovementConfig`, because they run for
+  the whole skid. The spark's look (speed, size, colour) is in `SideFlipSparksSetup.cs`; hand edits
+  to the particle system are lost when `Chibi.prefab` is regenerated.
 
 ## 4. How to extend
 
@@ -453,6 +460,9 @@ carries its own pose, set that move's pitch to 0. For a new flip clip, set
   once.
 - **Air control is vector steering.** It approximates Sunshine's "no turning in the air, plus a
   strafe". Air turns are wider than before.
+- **Side flip sparks sit at his root's height, not the floor's.** The spot is at the height of his
+  feet's floor level under his body, with no raycast at the foot itself. On a steep slope or a
+  bump the sparks can start slightly above or inside the ground.
 - **Not yet in:** backflip (crouch + jump), wall kick and ground pound.
 - **Ground snapping reaches only `groundSnapDistance` (0.35 m).** Sunshine keeps Mario grounded
   over drops up to 1.06 m; a bigger step down here is a short Fall.
