@@ -178,6 +178,7 @@ Measured by the import (prefab space, metres). "Unit" sizes are rescaled by game
 | GD-06 | Galois | 10,144 (10,000 / 15,000) | 1.86 × 2.00 × 0.67 | 2048 | Blender-preset rig | Good: Humanoid, 52 bones; a few stray hair flecks above the head |
 | GD-07 | Riemann | 9,472 (10,000 / 15,000) | 2.00 × 2.20 × 0.81 | 2048 | Blender-preset rig | Good: Humanoid, 51 bones (right middle distal unmapped); spectacles, watch chain |
 | EN-01 | FibonacciRabbit | 2,394 (2,500 / 3,000) | 0.25 × 0.56 × 0.45, turned 90° to face +Z | 512 | Blender-preset rig, imported without a rig | Good: chubby cream rabbit, gold spiral on its side; static mesh for a procedural hop |
+| EN-02 | AlienCreature | 10,890 (5,000 / 15,000) | 1.73 × 1.60 × 0.47, turned 180° to face +Z | 1024 | Static mesh, supplied by hand; over budget, Mesh LODs 10,890 to 63 | Good: dark blue, two eye stalks, four curved arms, yellow star on its chest; the basic enemy (`Docs/Systems/Enemies.md`), moved by `EnemyWaddleView` |
 
 ## Known limitations
 

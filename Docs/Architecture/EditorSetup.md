@@ -73,6 +73,10 @@ scripts:
     timelines and cameras. Re-run it after AcademyGreybox changes, then run **Validate Framing**
     as a separate step (see `Docs/Systems/Cutscene.md` §2.2).
 
+**Enemies ▸ Build Alien Enemy** is order-free: it needs the alien imported (Tripo row EN-02) and touches
+no scene. **Enemies ▸ Build Enemy Trial Scene** copies TrainingStage, so re-run it after a TrainingStage
+rebuild. Its output stays out of commits. See `Docs/Systems/Enemies.md`.
+
 Setup Chibi Sandbox already runs the player-level setups as part of its build:
 - `MovementSetup.WirePlayer` and `EnsureConfigs`. `WirePlayer` also calls `SideFlipSparksSetup.Wire`.
   Run **Setup Side Flip Sparks** on its own to update just that child: it edits `Chibi.prefab`

@@ -161,6 +161,16 @@ namespace Pickleball.EditorTools.Tripo
                 triangleBudget: 2500, triangleCap: 3000, textureMaxSize: 512,
                 TripoColliderShape.None, castShadows: true, smoothness: 0.2f,
                 modelRotation: new Vector3(0f, 90f, 0f));
+
+            // The basic enemy's alien (EN-02), supplied by hand: 10.9k triangles, so over
+            // the budget of a type meant to appear in groups. Mesh LODs take most of that
+            // back at a distance; regenerate lower if crowds cost too much. Static mesh,
+            // no rig: EnemyWaddleView moves the whole body. Exported facing -Z: turned 180°.
+            yield return new TripoAssetSpec("EN-02", "AlienCreature", TripoCategory.Enemies,
+                TripoSizeAxis.Height, 1.6f, TripoPivot.BottomCentre,
+                triangleBudget: 5000, triangleCap: 15000, textureMaxSize: 1024,
+                TripoColliderShape.None, castShadows: true, smoothness: 0.25f,
+                modelRotation: new Vector3(0f, 180f, 0f), generateMeshLods: true);
         }
 
         static TripoAssetSpec Guardian(string id, string name, float height) =>
