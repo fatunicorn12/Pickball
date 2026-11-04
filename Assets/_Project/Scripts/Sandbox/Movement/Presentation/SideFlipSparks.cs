@@ -8,7 +8,8 @@ namespace Pickleball.Sandbox.Movement.Presentation
     /// exactly as long as Jump would give a side flip. That window is the whole
     /// of <see cref="MoveKind.SkidTurn"/>, so this follows
     /// <see cref="IMovementState.MoveChanged"/> rather than keeping a timer of its
-    /// own that could drift from the move.
+    /// own that could drift from the move. Sparks are never on screen once the
+    /// window has lapsed; see <see cref="End"/>.
     ///
     /// The spot is taken once, as the skid starts, and then held still. The body
     /// swings 180° over its feet in the first few frames of a skid, so following a
@@ -65,7 +66,17 @@ namespace Pickleball.Sandbox.Movement.Presentation
         void OnMoveChanged(MoveKind from, MoveKind to)
         {
             if (to == MoveKind.SkidTurn) Begin();
-            else if (from == MoveKind.SkidTurn) _emitting = false;
+            else if (from == MoveKind.SkidTurn) End(to);
+        }
+
+        /// <summary>A visible spark means Jump gives a side flip, so if the window
+        /// lapses the sparks go with it; left to finish their flight they would stay
+        /// on screen for longer than the window lasted, over ordinary jumps. Taking
+        /// the flip keeps them: that promise has been kept, and they can land.</summary>
+        void End(MoveKind to)
+        {
+            _emitting = false;
+            if (to != MoveKind.Jump && _sparks != null) _sparks.Clear();
         }
 
         /// <summary>The motor raises this before it moves him or the Animator poses
