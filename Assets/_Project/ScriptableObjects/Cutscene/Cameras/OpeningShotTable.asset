@@ -114,6 +114,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -242,6 +243,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -370,6 +372,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -482,6 +485,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -601,6 +605,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -713,6 +718,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -891,6 +897,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -1056,6 +1063,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -1175,6 +1183,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -1289,6 +1298,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -1408,6 +1418,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -1452,7 +1463,7 @@ MonoBehaviour:
         side: 0
         yaw: 0
         h: {x: 0, y: 0, z: 0.45}
-        hb: {x: -2.250607, y: 0.2, z: -0.60304844}
+        hb: {x: -3.0426664, y: 0.2, z: -0.8152801}
         m: {x: 0, y: 0, z: 0}
         level: 7
         levelMarker: 
@@ -1505,7 +1516,7 @@ MonoBehaviour:
       beat: 99
       at: 0
     lensEase: 1
-    fracCap: 0.22
+    fracCap: 0
     followTarget: 0
     followRelativeMarker: 
     followDamping: {x: 0, y: 0, z: 0}
@@ -1522,6 +1533,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -1635,6 +1647,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -1747,6 +1760,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -1859,6 +1873,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -1979,6 +1994,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -2194,6 +2210,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -2306,6 +2323,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -2426,6 +2444,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -2538,6 +2557,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -2651,6 +2671,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -2780,6 +2801,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -2913,6 +2935,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -3025,6 +3048,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -3137,6 +3161,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -3249,6 +3274,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -3384,6 +3410,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -3496,6 +3523,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -3616,6 +3644,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -3760,6 +3789,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -3856,9 +3886,10 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 1.04
     walkFrom: Path_Track_A
-    walkTo: Path_Track_B
+    walkTo: Path_End
     gameplayDistanceScale: 1
     gameplayFrom:
       beat: 0
@@ -3976,6 +4007,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -4079,9 +4111,10 @@ MonoBehaviour:
     trackStop:
       beat: 4
       at: 0
+    trackStopEase: 1
     walkSpeed: 1.04
     walkFrom: Path_Track_A
-    walkTo: Path_Track_B
+    walkTo: Path_End
     gameplayDistanceScale: 1
     gameplayFrom:
       beat: 0
@@ -4266,6 +4299,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -4379,6 +4413,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -4493,6 +4528,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -4613,6 +4649,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -4773,6 +4810,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -4885,6 +4923,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -5022,6 +5061,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -5167,6 +5207,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -5337,6 +5378,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -5456,6 +5498,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -5569,6 +5612,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -5703,6 +5747,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -5832,6 +5877,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -5966,6 +6012,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -6095,6 +6142,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -6239,6 +6287,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -6351,6 +6400,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -6503,6 +6553,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -6670,6 +6721,7 @@ MonoBehaviour:
     trackStop:
       beat: 99
       at: 1000
+    trackStopEase: 1
     walkSpeed: 0
     walkFrom: 
     walkTo: 
@@ -6702,4 +6754,4 @@ MonoBehaviour:
   aspect: 1.7777778
   safeFrame: 0.9
   tcuFlagFraction: 0.3
-  seedVersion: 45
+  seedVersion: 47

@@ -478,7 +478,7 @@ namespace Pickleball.Cutscene.Editor.Sets
                 Marker(root, CutsceneMarkerIds.PathTrackA, a, Facing(a, b)),
                 Marker(root, CutsceneMarkerIds.PathTrackB, b, Facing(b, pathEnd)),
                 Marker(root, CutsceneMarkerIds.CamTrackS4Start, SetLayout.CamTrackAbeam(a), Quaternion.LookRotation(-SetLayout.TrackRight)),
-                Marker(root, CutsceneMarkerIds.CamTrackS4End, SetLayout.CamTrackAbeam(b), Quaternion.LookRotation(-SetLayout.TrackRight)),
+                Marker(root, CutsceneMarkerIds.CamTrackS4End, SetLayout.CamTrackAbeam(pathEnd), Quaternion.LookRotation(-SetLayout.TrackRight)),
                 Marker(root, CutsceneMarkerIds.PathEnd, pathEnd, Facing(pathEnd, SetLayout.Ground(SetLayout.CrestViewXZ))),
             };
             Finish(root, SetLayout.OlivePathId, markers);

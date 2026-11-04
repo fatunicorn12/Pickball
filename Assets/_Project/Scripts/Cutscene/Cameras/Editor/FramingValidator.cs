@@ -67,6 +67,15 @@ namespace Pickleball.Cutscene.Cameras.Editor
         /// <summary>(i) A turn larger than this between two 1/30 s samples is a jump, degrees.</summary>
         public const float JumpMaxTurn = 10f;
 
+        /// <summary>(i) A step shorter than this between two 1/30 s samples can't read as a stutter, metres.</summary>
+        public const float StutterMinStep = 0.05f;
+
+        /// <summary>(i) A step this many times its neighbours' median is a stutter.</summary>
+        public const float StutterRatio = 4f;
+
+        /// <summary>(i) How many samples each side count as a step's neighbours.</summary>
+        public const int StutterHalfWindow = 4;
+
         /// <summary>(j) The subtitle band: the bottom of the frame, as a fraction of its height.</summary>
         public const float SubtitleBandHeight = 0.22f;
 
@@ -370,7 +379,8 @@ namespace Pickleball.Cutscene.Cameras.Editor
         static string Name(ICinemachineCamera cam) => cam != null ? cam.Name : "(none)";
 
         /// <summary>
-        /// (i) Samples the shot at <see cref="JumpSampleRate"/> Hz and flags a step of more than
+        /// (i) Samples the shot at <see cref="JumpSampleRate"/> Hz and flags a stutter (a step far
+        /// longer than its neighbours, on any camera without handheld noise) and a step of more than
         /// <see cref="JumpMaxStep"/> m or <see cref="JumpMaxTurn"/>° between neighbouring samples
         /// (review round 3: S2_SH10's crane popped twice when the lens-clearance push flipped).
         /// (j) While a subtitle card shows, flags a subject Head anchor inside the card band (bottom
@@ -386,6 +396,7 @@ namespace Pickleball.Cutscene.Cameras.Editor
             bool havePrev = false;
             Pose prev = default;
             int jumps = 0, inBand = 0;
+            var steps = new List<float>(n);
             string firstJump = null, firstBand = null;
             for (int k = 0; k < n; k++)
             {
@@ -396,6 +407,7 @@ namespace Pickleball.Cutscene.Cameras.Editor
                 {
                     float step = Vector3.Distance(prev.position, pose.position);
                     float turn = Quaternion.Angle(prev.rotation, pose.rotation);
+                    steps.Add(step);
                     if (step > JumpMaxStep || turn > JumpMaxTurn)
                     {
                         jumps++;
@@ -430,6 +442,17 @@ namespace Pickleball.Cutscene.Cameras.Editor
             }
             if (jumps > 0)
                 report.Flag($"(i) {slot.ShotId}: the camera jumps in {jumps} of {n - 1} 1/30 s steps, first at {firstJump} (max {JumpMaxStep} m / {JumpMaxTurn}°).");
+            // Handheld noise is meant to be uneven, so only steady cameras are held to this.
+            int stutters = spec.noiseAmplitude > 0f
+                ? 0 : FramingChecks.CountStutters(steps, StutterMinStep, StutterRatio, StutterHalfWindow);
+            if (stutters > 0)
+            {
+                float worst = 0f;
+                int worstAt = 0;
+                for (int i = 0; i < steps.Count; i++)
+                    if (steps[i] > worst) { worst = steps[i]; worstAt = i; }
+                report.Flag($"(i) {slot.ShotId}: the camera stutters in {stutters} of {steps.Count} 1/30 s steps (over {StutterMinStep} m and {StutterRatio}x its neighbours), worst {worst:0.00} m at {(worstAt + 1) / JumpSampleRate:0.00}s.");
+            }
             if (inBand > 0)
                 report.Flag($"(j) {slot.ShotId}: a subject head is under the subtitle card in {inBand} samples, first at {firstBand}.");
         }

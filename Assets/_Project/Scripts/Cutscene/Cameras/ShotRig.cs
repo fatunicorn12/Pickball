@@ -55,7 +55,7 @@ namespace Pickleball.Cutscene.Cameras
         [SerializeField] private float[] beatStarts = new float[0];
 
         [Header("Proxies")]
-        [Tooltip("Track body only: the transform the spline dolly stays abeam of (moved to MC.Mid each frame).")]
+        [Tooltip("Track body only: the camera's follow target, moved each frame to the point on MC's walk the dolly stays abeam of.")]
         [SerializeField] private Transform trackTarget;
 
         RigScene _scene;
@@ -383,17 +383,25 @@ namespace Pickleball.Cutscene.Cameras
         void DriveTrack(ShotRigSpec spec, float t)
         {
             if (_dolly == null || trackTarget == null) return;
-            Vector3 mid = _scene.MC.Mid;
+            // Feet is on the blocking mark, so the stride's sway doesn't surge the camera back and forth.
+            Vector3 abeam = _scene.MC.Feet;
             float stop = spec.trackStop.Resolve(beatStarts, shotDuration);
             if (t > stop && spec.walkSpeed > 0f &&
                 _scene.Markers.TryGetMarker(spec.walkFrom, out var a, out _) &&
                 _scene.Markers.TryGetMarker(spec.walkTo, out var b, out _))
             {
-                // Hold the dolly where it was at the stop: take back the distance walked since.
+                // Glide to a stop: take back the distance walked since, less the slowdown's own travel.
                 Vector3 dir = (b - a).normalized;
-                mid -= dir * (spec.walkSpeed * (t - stop));
+                float elapsed = t - stop;
+                abeam -= dir * (spec.walkSpeed * elapsed - CameraMath.StoppingDistance(elapsed, spec.walkSpeed, spec.trackStopEase));
             }
-            trackTarget.position = mid;
+            trackTarget.position = abeam;
+
+            // Set the dolly's place directly. Cinemachine's nearest-point auto dolly searches the
+            // spline in coarse steps, which held the camera nearly still for 8 frames, then jumped it 20 cm.
+            if (_scene.Markers.TryGetMarker(spec.trackStart, out var trackFrom, out _) &&
+                _scene.Markers.TryGetMarker(spec.trackEnd, out var trackTo, out _))
+                _dolly.CameraPosition = CameraMath.SegmentProgress(trackFrom, trackTo, abeam);
         }
 
         /// <summary>

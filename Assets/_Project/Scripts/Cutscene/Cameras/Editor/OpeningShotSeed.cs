@@ -21,7 +21,7 @@ namespace Pickleball.Cutscene.Cameras.Editor
     public static class OpeningShotSeed
     {
         /// <summary>Bump when the seed changes: the setup menu then reseeds the table (tuning is lost).</summary>
-        public const int Version = 45;
+        public const int Version = 47;
 
         /// <summary>Degrees off Birdy's forward for medium shots on his face while MC stands in front of
         /// him: the shot list's straight-on axis runs through MC.</summary>
@@ -199,17 +199,17 @@ namespace Pickleball.Cutscene.Cameras.Editor
             var leanCam = lean;
             // On MC's left (his free hand), not his right: from the right his sword blade crossed
             // Birdy's beak and chest (review round 3).
-            leanCam.hb = new Vector3(-Mathf.Sin(75f * Mathf.Deg2Rad) * 2.33f, 0.2f, -Mathf.Cos(75f * Mathf.Deg2Rad) * 2.33f);
-            // The cap is in HB at the head centre's depth; on screen (helmet top to chin, the wide
-            // lens's near side) Birdy reads about 1.28x that, so 0.22 here is about 0.28 on screen
-            // (review round 4 measured 0.36 with 0.29).
+            // Far enough that Birdy reads about 0.28 of the frame on screen once he lands. A frac cap
+            // used to set this distance, but it backed the camera away as he lunged, a visible jolt
+            // in a shot that is meant to be locked.
+            const float leanDistance = 3.15f;
+            leanCam.hb = new Vector3(-Mathf.Sin(75f * Mathf.Deg2Rad) * leanDistance, 0.2f, -Mathf.Cos(75f * Mathf.Deg2Rad) * leanDistance);
             leanCam.level = B.BirdyHead;
             var leanEyes = lean;
             leanEyes.level = B.BirdyEyes;
             l.Add(Shot("S2_SH05", 75f)
                 .Locked(leanCam)
                 .Aim(leanEyes, 0.5f, 0.52f)
-                .Cap(0.22f)
                 .Subject(B.BirdyHead, S(0.25f), End())
                 .Note("Camera 2.33·HB from Birdy_Lean's head point but 75° east of Birdy's forward: straight on, 2.33·HB is more than the 0.45·H between Birdy and MC and puts the lens inside MC.").Build());
 
@@ -396,7 +396,7 @@ namespace Pickleball.Cutscene.Cameras.Editor
         {
             // Beats [W1.5, OC_S4_01, OC_S4_02, OC_S4_03, H0.8]
             l.Add(Shot("S4_SH01", 35f)
-                .Track(M.CamTrackS4Start, M.CamTrackS4End, End(1000f), OpeningTimingPlan.PathWalkSpeed, M.PathTrackA, M.PathTrackB)
+                .Track(M.CamTrackS4Start, M.CamTrackS4End, End(1000f), OpeningTimingPlan.PathWalkSpeed, M.PathTrackA, M.PathEnd)
                 .Aim(At(B.PairMid), 0.45f, 0.55f)
                 .Subject(B.MCHead).Subject(B.BirdyHead).Build());
 
@@ -410,7 +410,7 @@ namespace Pickleball.Cutscene.Cameras.Editor
 
             // Beats [OC_S4_06, OC_S4_07, H0.6, OC_S4_08, H1.0, W1.0]. Stops after "Never mind.".
             l.Add(Shot("S4_SH03", 35f)
-                .Track(M.CamTrackS4Start, M.CamTrackS4End, Bt(4), OpeningTimingPlan.PathWalkSpeed, M.PathTrackA, M.PathTrackB)
+                .Track(M.CamTrackS4Start, M.CamTrackS4End, Bt(4), OpeningTimingPlan.PathWalkSpeed, M.PathTrackA, M.PathEnd)
                 .Aim(At(B.PairMid), 0.45f, 0.55f)
                 .Subject(B.MCHead).Subject(B.BirdyHead).Build());
         }

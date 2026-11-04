@@ -58,7 +58,7 @@ Cutscenes** runs the whole chain:
 | — | Rebuild Timelines | `OpeningSceneBuilder.RebuildTimelines` | rebuilds the six timelines on the existing scene (after 4b or new audio) and saves |
 | 5 | 5 Build Subtitle HUD | `SubtitleHudBuilder` | the `CutsceneHUD` canvas, `SubtitleView` and skip indicator |
 | 6 | 6 Build Cameras | `CutsceneCameraBuilder` | merges `OpeningShotSeed` into `OpeningShotTable.asset`, builds 52 shot cameras and the camera tracks, adds the CinemachineBrain to the hand-off's cutscene-only list, saves |
-| check | Validate Framing | `FramingValidator` | samples every shot 10 times and flags: (a) subject outside the safe frame; (b) Birdy frac ≥ 0.30 outside an allowed TCU, (b') an allowed TCU's tight part with frac < 0.40 or eyes out (frac is the head's height on screen: Birdy's head-weighted skin, helmet included, projected through the camera; `HeadScreen`); (c) the lens within the near clip of a body; (d) the hand-offs: both are blends, so it checks each blend's end target (the orbit camera's resting pose G frames MC.Head and isn't blocked) and that S6_SH16's last frame shows the whole black sun; (e) the black sun's rim < 2° outside the frame before S6_SH02 (and inside the frame in S6_SH01), skipped while the void is up; (f) a grounded actor's Feet anchor off the ground by > 3 cm, or its nearest foot bone off by more than −max(4 cm, 2.5% H)/+max(8 cm, 5% H) (walk cycles: root only); (g) MC's and Birdy's body capsules intersecting; (h) Birdy's Feet less than 0.2·h above the ground while he should hover (S3_SH03 at 0.8 s to S6_SH16's zip-off); (i) a camera jump: sampled at 30 Hz, a step over 0.25 m or 10° between neighbouring 1/30 s samples within a shot; (j) a subject Head anchor in the subtitle band (bottom 22% of the frame, centre 60% of its width) while a card shows (inserts have no head subject). `FramingValidator.RenderAt` renders chosen shot times for edit-mode previews. Writes `Logs/CutsceneFramingReport.txt` |
+| check | Validate Framing | `FramingValidator` | samples every shot 10 times and flags: (a) subject outside the safe frame; (b) Birdy frac ≥ 0.30 outside an allowed TCU, (b') an allowed TCU's tight part with frac < 0.40 or eyes out (frac is the head's height on screen: Birdy's head-weighted skin, helmet included, projected through the camera; `HeadScreen`); (c) the lens within the near clip of a body; (d) the hand-offs: both are blends, so it checks each blend's end target (the orbit camera's resting pose G frames MC.Head and isn't blocked) and that S6_SH16's last frame shows the whole black sun; (e) the black sun's rim < 2° outside the frame before S6_SH02 (and inside the frame in S6_SH01), skipped while the void is up; (f) a grounded actor's Feet anchor off the ground by > 3 cm, or its nearest foot bone off by more than −max(4 cm, 2.5% H)/+max(8 cm, 5% H) (walk cycles: root only); (g) MC's and Birdy's body capsules intersecting; (h) Birdy's Feet less than 0.2·h above the ground while he should hover (S3_SH03 at 0.8 s to S6_SH16's zip-off); (i) a camera jump: sampled at 30 Hz, a step over 0.25 m or 10° between neighbouring 1/30 s samples within a shot, or a stutter on a camera without handheld noise: a step over 5 cm and 4× the median of its neighbours; (j) a subject Head anchor in the subtitle band (bottom 22% of the frame, centre 60% of its width) while a card shows (inserts have no head subject). `FramingValidator.RenderAt` renders chosen shot times for edit-mode previews. Writes `Logs/CutsceneFramingReport.txt` |
 
 Run order: **1, 2, 3, 4, 4b, Rebuild Timelines, 5, 6, then Validate Framing**. Reports go to
 `Logs/CutsceneBuildReport.txt`, `CutsceneTimelineReport.txt`, `CutsceneCameraBuildReport.txt` and
@@ -208,8 +208,17 @@ per shot), and `OpeningShotSeed` holds the camera rigs.
   from swallowing the lens. Birdy-frac caps can also push a camera back (`Cap`). Both pushes are
   continuous (see §5).
 - **Caps are in HB, the check is on screen.** `Cap` measures Birdy's HB at his head centre's depth.
-  On screen, with the helmet and a wide lens's near side, he reads about 1.28× that, so S2_SH05's
-  0.22 cap shows him at about 0.28. Validate Framing reports the on-screen value.
+  On screen, with the helmet and a wide lens's near side, he reads about 1.28× that. Validate
+  Framing reports the on-screen value. A cap moves the camera whenever Birdy moves, so S2_SH05, a
+  locked shot he lunges into, sets its distance directly (about 0.28 on screen) and has no cap.
+- **The scene-4 dolly is set directly.** `ShotRig` projects MC's Feet onto the straight camera
+  track each frame and writes `CameraPosition`. Cinemachine's nearest-point auto dolly searches in
+  coarse steps: on a 25 m track it held the camera nearly still for 8 frames, then jumped it 20 cm.
+  Feet stays on the blocking mark, so the stride's sway doesn't surge the camera either.
+  `trackStopEase` on the shot glides S4_SH03's stop over 1 s.
+- **The scene-4 walk runs to Path_End** so it outlasts the voiced scene. The walk clip loops, so a
+  walk that ends early leaves MC walking on the spot; `WalkLengthTests` catches that on the built
+  timeline.
 - **Blocking.** The marks track writes the actor root. No library clip moves the root (a test
   checks this). MC's marks sit at the Player's CharacterController resting height (`skinWidth`,
   8 cm), so the Player doesn't pop up after a hand-off.
@@ -273,8 +282,9 @@ the actors, grounding, hovering, overlap, the black sun, and both hand-off blend
    max(1.5 s, chars/15) + 0.3 s.
 3. Run **Rebuild Timelines**, then **6 Build Cameras**. Each shot re-times as audio + the same
    holds + the same action time. Then run **Validate Framing**.
-4. Re-check the scene-4 olive-trunk stations (`SetLayout.TrunkStations`): they are spaced for the
-   placeholder timing (`Docs/Art/CutsceneSets.md` §6).
+4. Run the cutscene tests. `WalkLengthTests` fails if the new lengths leave MC walking on the spot
+   in scene 4, or put an olive trunk across a hold (`SetLayout.TrunkStations`,
+   `Docs/Art/CutsceneSets.md` §6).
 
 ### Swap a model (checked with the Tripo guardian Euler as MC, review round 4)
 

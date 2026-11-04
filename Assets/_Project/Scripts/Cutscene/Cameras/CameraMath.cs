@@ -32,6 +32,30 @@ namespace Pickleball.Cutscene.Cameras
             return Ease(ease, (t - from) / (to - from));
         }
 
+        /// <summary>
+        /// How far along the straight line from <paramref name="a"/> to <paramref name="b"/> the point
+        /// nearest <paramref name="p"/> lies, 0..1. Exact, so a dolly driven by it moves as smoothly as
+        /// what it tracks.
+        /// </summary>
+        public static float SegmentProgress(Vector3 a, Vector3 b, Vector3 p)
+        {
+            Vector3 ab = b - a;
+            float lengthSquared = ab.sqrMagnitude;
+            return lengthSquared > 1e-8f ? Mathf.Clamp01(Vector3.Dot(p - a, ab) / lengthSquared) : 0f;
+        }
+
+        /// <summary>
+        /// How far a camera moving at <paramref name="speed"/> has travelled
+        /// <paramref name="elapsed"/> seconds into a steady slowdown lasting
+        /// <paramref name="easeSeconds"/>. Its speed starts unchanged and reaches 0 at the end.
+        /// </summary>
+        public static float StoppingDistance(float elapsed, float speed, float easeSeconds)
+        {
+            if (easeSeconds <= 0f) return 0f;
+            float t = Mathf.Clamp(elapsed, 0f, easeSeconds);
+            return speed * (t - t * t / (2f * easeSeconds));
+        }
+
         /// <summary>Yaw in degrees of a direction, flattened (0 = +Z, 90 = +X); 0 for vertical.</summary>
         public static float YawOf(Vector3 forward)
         {

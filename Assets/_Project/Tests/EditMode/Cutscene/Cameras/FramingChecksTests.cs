@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NUnit.Framework;
 using Pickleball.Cutscene.Cameras;
 using UnityEngine;
@@ -61,6 +62,32 @@ namespace Pickleball.Tests.Cutscene.Cameras
         {
             Assert.AreEqual(0f, FramingChecks.NoiseMargin(0f, 40f));
             Assert.Greater(FramingChecks.NoiseMargin(1f, 40f), FramingChecks.NoiseMargin(0.5f, 40f));
+        }
+
+        [Test]
+        public void TheOldDollyStaircaseCountsAsStutter()
+        {
+            // As measured on S4_SH01: seven 1 cm steps, then a 20 cm jump, over and over.
+            var steps = new List<float>();
+            for (int i = 0; i < 40; i++) steps.Add(i % 8 == 0 ? 0.2f : 0.01f);
+            Assert.AreEqual(5, FramingChecks.CountStutters(steps, 0.05f, 4f, 4));
+        }
+
+        [Test]
+        public void SmoothMovesDoNotCountAsStutter()
+        {
+            var even = new List<float>();
+            var eased = new List<float>();
+            var fromRest = new List<float>();
+            for (int i = 0; i < 90; i++)
+            {
+                even.Add(0.35f);
+                eased.Add(0.3f * Mathf.Sin(i / 89f * Mathf.PI));
+                fromRest.Add(i < 30 ? 0f : Mathf.Min(0.3f, (i - 30) * 0.01f));
+            }
+            Assert.AreEqual(0, FramingChecks.CountStutters(even, 0.05f, 4f, 4));
+            Assert.AreEqual(0, FramingChecks.CountStutters(eased, 0.05f, 4f, 4));
+            Assert.AreEqual(0, FramingChecks.CountStutters(fromRest, 0.05f, 4f, 4));
         }
     }
 }

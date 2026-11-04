@@ -339,17 +339,20 @@ namespace Pickleball.Cutscene.Timeline.Plan
 
         static List<ShotPlan> Scene4()
         {
-            const string a = CutsceneMarkerIds.PathTrackA, b = CutsceneMarkerIds.PathTrackB;
+            // The walk runs to Path_End, not Path_Track_B: with the real voices the scene outlasts the
+            // A to B stretch by about 4 s, and MC would walk on the spot for the rest of it.
+            const string a = CutsceneMarkerIds.PathTrackA, e = CutsceneMarkerIds.PathEnd;
             return new List<ShotPlan>
             {
                 Shot("S4_SH01", 4, 35f, PlanActors.AtMCHead, 3.2f,
                         "Side-on tracking dolly abeam MC.Mid: medium-wide profile two-shot, walking left to right, trunks in the foreground.")
                     .Wordless(1.5f).Line("OC_S4_01").Line("OC_S4_02").Line("OC_S4_03").Hold(0.8f)
                     .Act(MC, "walk").Act(B, "putter hover")
-                    .Place(MC, On(a, b))
-                    .Walk(MC, On(b, b), PathWalkSpeed)
-                    // Birdy putters on MC's far (west) side, ahead and across, at hover height.
-                    .Place(B, At(AtMC, -0.5f, 0f, 0.55f, b, true))
+                    .Place(MC, On(a, e))
+                    .Walk(MC, On(e, e), PathWalkSpeed)
+                    // Birdy putters on MC's far (west) side, ahead and across, at hover height. A little
+                    // higher than usual: the ground ahead of MC rises as the path steepens to the crest.
+                    .Place(B, At(AtMC, -0.5f, 0.09f, 0.55f, e, true))
                     .Place(P, On(PlanActors.AtBirdySocket))
                     .Key(LookChannels.LookBlend, 1f).Key(LookChannels.LinesProgress, 1f)
                     .Key(StateChannels.BirdyRotor, 1f).Key(StateChannels.BirdyRotorSpin, HoverSpin).Key(StateChannels.PropVisible, 0f)

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Pickleball.Cutscene.Cameras
@@ -56,6 +57,28 @@ namespace Pickleball.Cutscene.Cameras
         public static bool IsInvisibleCut(Vector3 delta, float metres = 0.01f, float degrees = 0.1f, float fov = 0.01f)
         {
             return delta.x <= metres && delta.y <= degrees && delta.z <= fov;
+        }
+
+        /// <summary>
+        /// How many steps of a camera's per-sample movement stutter: longer than
+        /// <paramref name="minStep"/> metres and <paramref name="ratio"/> times the median of the
+        /// steps within <paramref name="halfWindow"/> samples each side. A smooth move changes step
+        /// gradually and never trips this, however fast it goes.
+        /// </summary>
+        public static int CountStutters(IReadOnlyList<float> steps, float minStep, float ratio, int halfWindow)
+        {
+            int count = 0;
+            var window = new List<float>(halfWindow * 2 + 1);
+            for (int i = 0; i < steps.Count; i++)
+            {
+                if (steps[i] <= minStep) continue;
+                window.Clear();
+                int last = Mathf.Min(steps.Count - 1, i + halfWindow);
+                for (int k = Mathf.Max(0, i - halfWindow); k <= last; k++) window.Add(steps[k]);
+                window.Sort();
+                if (steps[i] > window[window.Count / 2] * ratio) count++;
+            }
+            return count;
         }
 
         /// <summary>
