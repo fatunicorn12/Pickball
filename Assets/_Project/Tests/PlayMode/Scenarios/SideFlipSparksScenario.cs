@@ -107,6 +107,60 @@ namespace Pickleball.Tests.PlayMode.Scenarios
                    $"{Vector3.Distance(Flat(spot), Flat(l > r ? leftAtOpen : rightAtOpen)):0.00} m from that foot");
         }
 
+        /// <summary>The promise the sparks make: while any are on screen, Jump gives a side flip.
+        /// Presses Jump at a spread of moments after reversing and notes what was on screen
+        /// against what came out.</summary>
+        [UnityTest, Timeout(900000)]
+        public IEnumerator SparksMeanSideFlip() => UniTask.ToCoroutine(RunPromise);
+
+        static async UniTask RunPromise()
+        {
+            using var s = await PlaytestSession.Begin("SideFlipSparksPromise", PlaytestScenes.TrainingStage);
+            var sparks = s.A.Player.GetComponentInChildren<SideFlipSparks>(true);
+            if (sparks == null) { s.CannotDrive("no SideFlipSparks on the player"); s.Complete(); return; }
+            var motor = s.A.Motor;
+            var system = sparks.GetComponent<ParticleSystem>();
+            var downRight = new Vector2(1f, -1f).normalized;
+            int broken = 0;
+
+            foreach (var (label, reverse) in new[] { ("down-right", downRight), ("straight back", Vector2.down) })
+            foreach (int press in new[] { 2, 6, 10, 13, 16, 20, 26, 34 })
+            {
+                var start = new Vector3(6f, 0.05f, -26f);
+                await s.Teleport(start, start + Vector3.forward * 10f);
+                s.In.SetLeftStick(Vector2.up);
+                s.In.Hold(Key.LeftShift);
+                await s.Seconds(2f);
+
+                s.In.SetLeftStick(reverse);
+                int visibleAtPress = 0;
+                MoveKind moveAtPress = MoveKind.Ground;
+                for (int frame = 0; frame <= press; frame++)
+                {
+                    await s.Frames(1);
+                    visibleAtPress = system.particleCount;
+                    moveAtPress = motor.Current;
+                }
+                s.In.Hold(Key.Space);
+                await s.Frames(3);
+                MoveKind after = motor.Current;
+                JumpKind kind = motor.CurrentJump;
+                s.In.Release(Key.Space);
+                s.In.SetLeftStick(Vector2.zero);
+                s.In.Release(Key.LeftShift);
+                await s.Seconds(2.2f);
+
+                bool flip = after == MoveKind.Jump && kind == JumpKind.SideFlip;
+                bool promiseBroken = visibleAtPress > 0 && !flip;
+                if (promiseBroken) broken++;
+                s.Note($"{label}, jump at frame {press}: {moveAtPress}, {visibleAtPress} sparks visible -> {after}/{kind}: " +
+                       (promiseBroken ? "BROKEN PROMISE" : "ok"));
+            }
+            s.Complete();
+            // A rule, not a matter of feel, so unlike the rest of the harness this one fails.
+            Assert.That(broken, Is.EqualTo(0), "sparks were on screen when Jump would not give a side flip");
+        }
+
         static Vector3 Flat(Vector3 v) => new(v.x, 0f, v.z);
     }
 }
