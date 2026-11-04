@@ -647,13 +647,15 @@ public static class HypatiaFightSetup
         Set(asymView, "outgoing", outgoing);
         Set(asymView, "path", path);
 
-        // Band fire: one overlay + flames slot per band.
+        // Band fire: per band, a floor overlay, flames, embers and pages.
         var fireGo = new GameObject("BandFire");
         fireGo.transform.SetParent(root, false);
         int bandCount = BandMath.Sanitise(config.BandOuterRadii, config.ArenaRadius).Length;
         var overlays = new MeshRenderer[bandCount];
         var flames = new ParticleSystem[bandCount];
-        var alpha = HypatiaFightArt.AlphaMat();
+        var embers = new ParticleSystem[bandCount];
+        var pages = new ParticleSystem[bandCount];
+        var bandFloor = HypatiaFightFireArt.FloorMat();
         for (int i = 0; i < bandCount; i++)
         {
             var slot = new GameObject($"Band{i}").transform;
@@ -662,15 +664,23 @@ public static class HypatiaFightSetup
             overlay.transform.SetParent(slot, false);
             overlay.AddComponent<MeshFilter>();
             overlays[i] = overlay.AddComponent<MeshRenderer>();
-            overlays[i].sharedMaterial = alpha;
+            overlays[i].sharedMaterial = bandFloor;
             overlays[i].enabled = false;
             NoShadows(overlay);
-            flames[i] = HypatiaFightArt.BandFlames(slot, "Flames");
+            flames[i] = HypatiaFightFireArt.Flames(slot);
+            embers[i] = HypatiaFightFireArt.Embers(slot);
+            pages[i] = HypatiaFightFireArt.Pages(slot);
         }
         var fireView = fireGo.AddComponent<BandFireView>();
         Set(fireView, "burn", burn);
         SetArray(fireView, "overlays", overlays);
         SetArray(fireView, "flames", flames);
+        SetArray(fireView, "embers", embers);
+        SetArray(fireView, "pages", pages);
+        Set(fireView, "fireLight", HypatiaFightFireArt.FireLight(fireGo.transform));
+        var fireCamera = Camera.main;
+        if (fireCamera != null && fireCamera.TryGetComponent(out SandboxOrbitCamera fireCameraRig))
+            Set(fireView, "cameraRig", fireCameraRig);
 
         // Needle.
         var needleGo = new GameObject("AstrolabeNeedle");
