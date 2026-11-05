@@ -483,4 +483,6 @@ def main():
             frame, angle, total, [round(v, 1) for v in hips.head]))
 
 
-main()
+# chibi_straight_jump.py imports this file for its rig code.
+if __name__ == "__main__":
+    main()

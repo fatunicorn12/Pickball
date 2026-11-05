@@ -343,7 +343,7 @@ Mixamo set in `Pickball-mixamo-inbox` is imported:
 | State | Clip |
 |---|---|
 | SkidTurn | placeholder: Run To Stop's braking plant, played at 2× |
-| JumpDouble | `Big Jump.fbx` frames 15–21, holding the last until the hand-off to Fall (about 0.68 s from sprint): a leap with the body pitched 25° to 62° forward, trailing legs and the cape streaming behind. It replaces Running Jump, which the first jump already plays at run speed, so the two read the same. Past frame 21 the take pitches into a roll. |
+| JumpDouble | `Straight Jump.fbx`, authored by `Tools/Blender/chibi_straight_jump.py`: a rise with the arms down and the legs straight and together, toes pointed, 0.70 s. It keeps moving slightly up to the hand-off to Fall, and its last frames open the arms and soften the knees toward Fall's pose. No clip in the project or the Mixamo inbox has this pose in the air; every arms-down, straight-legged frame in them is on the ground. |
 | TripleJump | placeholder: the trimmed front flip |
 | SideFlip | `Back Flip.fbx`, authored by `Tools/Blender/chibi_backflip.py`: arms drive up, a tight tuck, exactly 360° backward in the hips, then feet first for the floor. The left hand takes the shin; the right stays out to the side, because a blade held at the shin runs through the head and thigh. Frame 36 of 40 is touchdown at the shared `flipAirborneSeconds`, so a level landing is at about 90% and goes straight to Land, without the 0.12 s blend toward Fall that the 97% exit would start just before the floor. |
 | Rollout | placeholder: the trimmed front flip |
@@ -435,8 +435,8 @@ clip to it as `Back Flip.fbx` does.
 ## 5. Known limitations and open questions
 
 - **Placeholder animation.** The spin, the skid, the triple jump and the rollout are still stock
-  clips, tilted or spun in code. Of the 14 Mixamo clips downloaded, only Run To Dive and Big Jump
-  are imported, plus the authored Belly Slide Pose and Back Flip. The per-clip import and motion-matching recipes are in the
+  clips, tilted or spun in code. Of the 14 Mixamo clips downloaded, only Run To Dive is imported,
+  plus the authored Belly Slide Pose, Back Flip and Straight Jump. The per-clip import and motion-matching recipes are in the
   side-session notes. The remaining roles need per-role exceptions in `SetupClips`: Body
   orientation for the turning roles, and a per-role Y bake for grounded and prone roles.
 - **From the chase camera the dive and slide arms don't show.** The cape covers the shoulders
