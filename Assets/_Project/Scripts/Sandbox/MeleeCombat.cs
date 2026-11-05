@@ -71,6 +71,10 @@ namespace Pickleball.Sandbox
                  "ranged finishers test against.")]
         [SerializeField] private LockOnTargeting lockOn;
 
+        /// <summary>The layers the blade and bursts can hit. Lock-on measures its target
+        /// through the same mask, so the lock sits on what a swing can connect with.</summary>
+        public LayerMask HittableLayers => hittable;
+
         [Header("Feel")]
         [Tooltip("Seconds a press made while unable to swing (mid-dash, in " +
                  "hitstop after a swing ended) is remembered. Without it, pressing " +

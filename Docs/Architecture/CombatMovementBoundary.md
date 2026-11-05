@@ -52,15 +52,14 @@ Reading `MeleeCombat.IsAttacking` is the one remaining movement-side dependency 
 is meant to go once combat pushes its own facing request.
 
 **Lock-on feeds the combo resolver, not the swing code.** `MeleeCombat` passes `hasTarget` and
-the horizontal *edge* distance (`AimPoint − TargetRadius`) to `ComboResolver`. Abilities use those
+the horizontal *edge* distance (`AimPoint − TargetRadius`, the hittable region's) to `ComboResolver`. Abilities use those
 values in `ComboCondition` (`requireLockOn`, min/max distance), for example to pick a gap-closer
 or a finisher.
 
 **While locked, camera look turns into target flicks.** `SandboxOrbitCamera` ignores mouse and
 right-stick look, and `LockOnTargeting` reads them as left/right target hops. The lock's aim point
-is measured once, at lock time, so the camera doesn't "breathe". It does follow
-`Health.BodyOffset`, which is zero unless the target flies its body while its root stays planted
-(a juggled training dummy), so the lock stays on a launched body.
+is measured live from the colliders the sword can hit, not the renderers, so it stays on a launched
+dummy or a hovering Hypatia and doesn't "breathe". See [LockOn.md](../Systems/LockOn.md).
 
 **The input gate ends targeting (Breath of the Wild).** While any claimant on `PlayerInputGate`
 blocks `LockOn` (a conversation, an aim), `LockOnTargeting` drops the toggle and flicks, releases

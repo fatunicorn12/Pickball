@@ -87,6 +87,40 @@ namespace Pickleball.Sandbox
         [SerializeField, Range(0f, 1f)] private float lockPitchFollow = 0.5f;
         [Tooltip("Extra pull-back while locked, so player and target both fit.")]
         [SerializeField] private float lockDistanceBonus = 0.6f;
+        [Tooltip("Hard limit on how fast a lock can turn the camera, in degrees per second. " +
+                 "Lower is calmer when the player runs past a target; too low and a dashing " +
+                 "target leaves the frame before the camera catches up.")]
+        [SerializeField, Min(1f)] private float lockMaxYawRate = 240f;
+        [Tooltip("Metres over which the camera's current heading outweighs the target's bearing. " +
+                 "Inside it the camera mostly holds still, which is what stops it spinning when " +
+                 "the player passes under a target. Larger holds longer but follows a close " +
+                 "target more lazily; 0 aims straight at the target's bearing.")]
+        [SerializeField, Min(0f)] private float lockHoldRadius = 2.5f;
+        [Tooltip("Hard limit on how fast a lock can change the orbit pitch, in degrees per second.")]
+        [SerializeField, Min(1f)] private float lockMaxPitchRate = 120f;
+        [Tooltip("Lowest the orbit swings to look up at a high target, in degrees (negative is " +
+                 "below the player's head). Keeps the lens off the floor; the look tilt does " +
+                 "the rest of the looking up.")]
+        [SerializeField] private float lockMinPitch = -6f;
+        [Tooltip("Highest the aim point should sit on screen while locked, as a viewport height " +
+                 "(1 is the top). The view tilts up past the orbit to bring it below this.")]
+        [SerializeField, Range(0.55f, 1f)] private float lockFrameTop = 0.88f;
+        [Tooltip("Lowest the player's head may sit on screen while the view tilts up, as a " +
+                 "viewport height. Lower lets a higher target stay framed, with less of the " +
+                 "player showing. Past this limit the target leaves the frame instead.")]
+        [SerializeField, Range(0f, 0.45f)] private float lockPlayerFloor = 0.1f;
+        [Tooltip("Most the view may tilt up past the orbit, in degrees.")]
+        [SerializeField, Range(0f, 80f)] private float lockMaxTilt = 50f;
+        [Tooltip("How quickly the view tilt follows, in seconds. Larger is gentler.")]
+        [SerializeField, Min(0f)] private float lockTiltSmoothTime = 0.15f;
+        [Tooltip("Hard limit on how fast the view tilt changes, in degrees per second.")]
+        [SerializeField, Min(1f)] private float lockMaxTiltRate = 120f;
+        [Tooltip("Extra metres of pull-back for a high target, reached at lockPullbackFullRise. " +
+                 "Standing further off fits a high target and the player in one view.")]
+        [SerializeField, Min(0f)] private float lockRisePullback = 2.5f;
+        [Tooltip("Elevation of the target above the player, in degrees, at which all of " +
+                 "lockRisePullback applies.")]
+        [SerializeField, Range(1f, 90f)] private float lockPullbackFullRise = 60f;
         [Tooltip("Recentre behind the player (lock pressed with nothing to lock).")]
         [SerializeField] private float recenterSmoothTime = 0.12f;
 
@@ -138,6 +172,8 @@ namespace Pickleball.Sandbox
         float _shakeAmount, _shakeTime, _shakeDuration;
         int _relockFrame = -10;
         float _yawVelocity, _pitchVelocity, _lockBlend;
+        float _lockRise, _lookTilt, _tiltVelocity;
+        bool _lensClipped;
         float? _recenterYaw;
         float _aimBlend, _nextAimSearch;
         bool _aiming, _pitchRecovering, _ownsFov, _aimSourceWarned;
@@ -161,6 +197,13 @@ namespace Pickleball.Sandbox
         /// <summary>True while the camera owns the mouse. Lock-on only reads
         /// mouse flicks then, not while the cursor is free over the Editor.</summary>
         public bool CursorCaptured => _locked;
+
+        /// <summary>Where a line of sight to a target should start: the lens, unless occlusion
+        /// has run out of room (occlusionMinDistance) and left the lens in or behind a wall at
+        /// the player's back. Then it's the follow point, because that wall hides the player's
+        /// own back, not the fight in front of him, and must not drop the lock.</summary>
+        public Vector3 SightOrigin =>
+            _lensClipped && target != null ? target.position + targetOffset : transform.position;
 
         /// <summary>Swing round behind the player — what the lock-on button does
         /// when there is nothing to lock. Any mouse or stick look cancels it.</summary>
@@ -310,7 +353,7 @@ namespace Pickleball.Sandbox
         {
             _velocity = Vector3.zero;
             _occlusionClip = 0f;
-            _yawVelocity = _pitchVelocity = 0f;
+            _yawVelocity = _pitchVelocity = _tiltVelocity = 0f;
         }
 
         void Start()
@@ -345,14 +388,17 @@ namespace Pickleball.Sandbox
         /// Drives yaw and pitch while locked on, or while recentring.
         ///
         /// Yaw points along the line from the player to the target, so the target
-        /// sits straight ahead beyond him; pitch looks down past him so the
-        /// target clears his head. Both are smoothed rather than snapped, and
-        /// written back into the same _yaw/_pitch the mouse drives — so releasing
-        /// the lock hands control back from exactly where the camera is, with
-        /// no jump.
+        /// sits straight ahead beyond him, but holds still while he is close to or
+        /// under it, and never turns faster than lockMaxYawRate (see
+        /// <see cref="LockOnSteering"/>). Pitch looks down past him so the target
+        /// clears his head. Both are smoothed rather than snapped, and written back
+        /// into the same _yaw/_pitch the mouse drives, so releasing the lock hands
+        /// control back from exactly where the camera is, with no jump. At a dt of
+        /// zero (stopped time) nothing moves: SmoothDamp can divide by it.
         /// </summary>
         void UpdateLockOn(Vector3 focus, float dt)
         {
+            if (dt <= 0f) return;
             bool locked = LockSteering;
             _lockBlend = Mathf.MoveTowards(_lockBlend, locked ? 1f : 0f, dt * 3f);
 
@@ -360,17 +406,13 @@ namespace Pickleball.Sandbox
             {
                 _recenterYaw = null;
                 Vector3 to = lockOn.AimPoint - focus;
-                var flat = new Vector3(to.x, 0f, to.z);
-                // Standing on top of the target: hold the current yaw rather
-                // than spinning on a near-zero vector.
-                if (flat.sqrMagnitude < 0.25f) return;
+                float yawWanted = LockOnSteering.HoldYaw(_yaw, to, lockHoldRadius);
+                _lockRise = LockOnSteering.SoftRise(to, lockHoldRadius);
+                float pitchWanted = LockOnSteering.OrbitPitch(_lockRise, lockPitch, lockPitchFollow,
+                                                              Mathf.Max(minPitch, lockMinPitch), maxPitch);
 
-                float yawWanted = Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg;
-                float rise = Mathf.Atan2(to.y, flat.magnitude) * Mathf.Rad2Deg;
-                float pitchWanted = Mathf.Clamp(lockPitch - rise * lockPitchFollow, minPitch, maxPitch);
-
-                _yaw = Mathf.SmoothDampAngle(_yaw, yawWanted, ref _yawVelocity, lockTurnSmoothTime);
-                _pitch = Mathf.SmoothDampAngle(_pitch, pitchWanted, ref _pitchVelocity, lockTurnSmoothTime);
+                _yaw = LockOnSteering.Turn(_yaw, yawWanted, ref _yawVelocity, lockTurnSmoothTime, lockMaxYawRate, dt);
+                _pitch = LockOnSteering.Turn(_pitch, pitchWanted, ref _pitchVelocity, lockTurnSmoothTime, lockMaxPitchRate, dt);
                 return;
             }
 
@@ -380,6 +422,38 @@ namespace Pickleball.Sandbox
                 _pitch = Mathf.SmoothDampAngle(_pitch, lockPitch, ref _pitchVelocity, recenterSmoothTime);
                 if (Mathf.Abs(Mathf.DeltaAngle(_yaw, _recenterYaw.Value)) < 0.5f) _recenterYaw = null;
             }
+        }
+
+        /// <summary>
+        /// How far the view tilts up past the orbit this frame, for a target overhead: the orbit
+        /// alone would have to swing below the floor to frame it. Only the look turns, so the
+        /// follow, the occlusion sweep and the safe band all still work on the orbit's pose, and
+        /// mouse look and _pitch never see it. It scales with the same _lockBlend as the pull-back,
+        /// so a release fades it with no jump, and a hand-back that clears the blend
+        /// (OrbitCameraAccess.SnapView) lands on exactly the pose it asked for. A conversation
+        /// keeps the blend, so the pose the dialogue camera restores carries on from there.
+        /// </summary>
+        float UpdateLookTilt(Vector3 pos, Quaternion orbit, Vector3 focus, float dt)
+        {
+            if (_lockBlend <= 0f)
+            {
+                _lookTilt = _tiltVelocity = 0f;
+                return 0f;
+            }
+            if (_cam == null) _cam = GetComponent<Camera>();
+            if (_cam == null) return 0f;
+
+            if (LockSteering && dt > 0f)
+            {
+                Quaternion inv = Quaternion.Inverse(orbit);
+                float wanted = LockOnSteering.LookTilt(inv * (lockOn.AimPoint - pos), inv * (focus - pos),
+                                                       Mathf.Tan(_cam.fieldOfView * 0.5f * Mathf.Deg2Rad),
+                                                       lockFrameTop, lockPlayerFloor, lockMaxTilt);
+                _lookTilt = Mathf.SmoothDamp(_lookTilt, wanted, ref _tiltVelocity,
+                                             Mathf.Max(1e-4f, lockTiltSmoothTime), lockMaxTiltRate, dt);
+            }
+            float k = _lockBlend;
+            return _lookTilt * (k * k * (3f - 2f * k)) * (1f - _aimBlend);
         }
 
         /// <summary>
@@ -432,6 +506,7 @@ namespace Pickleball.Sandbox
         /// when a collider is in the way, smoothing the return.</summary>
         Vector3 ApplyOcclusion(Vector3 focus, Vector3 pos, float dt)
         {
+            _lensClipped = false;
             if (!occlusionEnabled) return pos;
             Vector3 arm = pos - focus;
             float length = arm.magnitude;
@@ -448,6 +523,7 @@ namespace Pickleball.Sandbox
                 if (hitDistance < 0f || hit.distance < hitDistance) hitDistance = hit.distance;
             }
 
+            _lensClipped = hitDistance >= 0f && hitDistance < Mathf.Min(occlusionMinDistance, length);
             float free = CameraOcclusion.FreeLength(length, hitDistance, occlusionMinDistance);
             _occlusionClip = CameraOcclusion.NextClip(_occlusionClip, length, free, occlusionReturnSpeed, dt);
             return focus + dir * Mathf.Max(0f, length - _occlusionClip);
@@ -521,7 +597,8 @@ namespace Pickleball.Sandbox
             UpdateLockOn(focus, Time.deltaTime);
 
             Quaternion rot = Quaternion.Euler(_pitch, _yaw, 0f);
-            float dist = Mathf.Lerp(distance + lockDistanceBonus * _lockBlend, aimDistance, _aimBlend);
+            float lockPull = lockDistanceBonus + LockOnSteering.RisePullback(_lockRise, lockRisePullback, lockPullbackFullRise);
+            float dist = Mathf.Lerp(distance + lockPull * _lockBlend, aimDistance, _aimBlend);
             Vector3 wanted = focus - rot * Vector3.forward * dist;
             // Over the shoulder: offset in camera space, after the rotation, so
             // "right" stays screen-right at any yaw and pitch.
@@ -538,7 +615,8 @@ namespace Pickleball.Sandbox
             if (!Mathf.Approximately(lagged, smoothed.y)) { smoothed.y = lagged; _velocity.y = 0f; }
             smoothed += SafeBandCorrection(smoothed, rot, target.position, focus) * (1f - _aimBlend);
             transform.position = smoothed;
-            transform.rotation = rot;
+            float tilt = UpdateLookTilt(smoothed, rot, focus, Time.deltaTime);
+            transform.rotation = tilt > 0f ? Quaternion.Euler(_pitch - tilt, _yaw, 0f) : rot;
 
             // Shake is applied after the follow so it never feeds back into the
             // smoothing and turn into a wobble that outlives the impact.

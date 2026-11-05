@@ -15,7 +15,7 @@ namespace Pickleball.Sandbox
     ///  - Flick the mouse (or right stick) sideways while locked to hop to the
     ///    next enemy on that side, Kingdom Hearts style.
     ///  - The lock drops by itself when the target dies, goes too far away, or
-    ///    stays out of sight for a moment. A target that dies hands the lock to
+    ///    stays out of view for a moment. A target that dies hands the lock to
     ///    the next enemy in view, if there is one.
     ///  - While the <see cref="PlayerInputGate"/> blocks <see cref="InputBlock.LockOn"/>
     ///    (any claimant: a conversation, an aim), the lock is released and no
@@ -26,6 +26,13 @@ namespace Pickleball.Sandbox
     /// decides WHAT is locked; <see cref="SandboxOrbitCamera"/> reads it to aim
     /// and <see cref="ChibiLocomotion"/> reads it to face the target.
     ///
+    /// One answer to "where is the enemy": <see cref="BodyOf"/>, measured live from
+    /// what the sword can hit (<see cref="LockOnAim"/>). Scoring, the hint, the sight
+    /// line, the reticle, the camera and swing homing all read it. One answer to "is
+    /// it in view": the aim point is inside the camera's viewport and the camera has a
+    /// clear line to it (<see cref="InView"/>). A press, the hint, a target switch and
+    /// a death hand-off share that check, and a held lock must keep passing it.
+    ///
     /// Movement stays free-running while locked (Kingdom Hearts): the stick is
     /// camera-relative and the camera faces the target, so forward closes in and
     /// sideways circles it. The character turns to face the target when he
@@ -34,21 +41,32 @@ namespace Pickleball.Sandbox
     /// </summary>
     public class LockOnTargeting : MonoBehaviour
     {
+        [Header("Aim")]
+        [Tooltip("Where on the hittable body the lock sits, as a fraction of the way from its " +
+                 "middle (0) to its top (1). Higher sits the ring and the camera's aim nearer the head.")]
+        [SerializeField, Range(0f, 0.9f)] private float aimChestBias = LockOnAim.DefaultChestBias;
+
         [Header("Acquire")]
-        [Tooltip("Furthest a target can be locked from.")]
+        [Tooltip("Furthest a target can be locked from, in metres.")]
         [SerializeField] private float acquireRange = 25f;
         [Tooltip("Widest angle off the camera's aim a target can be picked from. " +
                  "Roughly the visible screen — locking something behind you reads " +
                  "as the game choosing for you.")]
         [SerializeField] private float acquireConeDegrees = 55f;
+        [Tooltip("How far inside the screen's edges the aim point must be for a press to lock it, " +
+                 "as a fraction of the screen. Larger stops things at the very edge being picked; " +
+                 "a held lock is only judged against the edge itself.")]
+        [SerializeField, Range(0f, 0.2f)] private float viewportInset = 0.03f;
+        [Tooltip("Layers that block the camera's view of a target. Triggers, the player and " +
+                 "anything with a Health never block.")]
         [SerializeField] private LayerMask lineOfSightMask = ~0;
 
         [Header("Hold")]
         [Tooltip("The lock breaks beyond this distance. Larger than acquireRange " +
                  "so backing off a little does not drop it.")]
         [SerializeField] private float breakRange = 32f;
-        [Tooltip("Seconds the target may stay out of sight (behind a pillar, a " +
-                 "well, an apple) before the lock lets go.")]
+        [Tooltip("Seconds the target may stay out of view (off the screen, or behind a " +
+                 "pillar, a well, an apple) before the lock lets go.")]
         [SerializeField] private float lostSightGrace = 1.5f;
 
         [Header("Switch")]
@@ -70,8 +88,6 @@ namespace Pickleball.Sandbox
                  "target flicks are dropped, not saved for later, a held lock is released and " +
                  "no hint shows.")]
         [SerializeField] private PlayerInputGate inputGate;
-        [Tooltip("Chest height on the player, for line-of-sight checks.")]
-        [SerializeField] private float eyeHeight = 1.2f;
 
         [Header("Reticle")]
         [Tooltip("Material for the reticle lines. Built by Setup Lock-On; a plain " +
@@ -87,25 +103,33 @@ namespace Pickleball.Sandbox
         public Health Target { get; private set; }
         public bool IsLocked => Target != null;
 
-        /// <summary>Where the camera and the character aim: the target's chest,
-        /// not its feet.</summary>
-        public Vector3 AimPoint => Target != null
-            ? Target.transform.position + _aimOffset + Target.BodyOffset
-            : transform.position;
+        /// <summary>Where the camera, the reticle and the character aim: the chest of
+        /// the region the sword can hit, this frame. Stays on a body that flies or
+        /// hovers relative to its root.</summary>
+        public Vector3 AimPoint => Target != null ? BodyOf(Target).AimPoint : transform.position;
 
-        /// <summary>Approximate horizontal radius of the target, for framing.</summary>
-        public float TargetRadius { get; private set; }
+        /// <summary>Horizontal radius of the target's hittable region, m: how far short
+        /// of <see cref="AimPoint"/> a swing can stop and still connect.</summary>
+        public float TargetRadius => Target != null ? BodyOf(Target).Radius : 0f;
 
         InputAction _toggle;
         bool _togglePressed;
         Health _own;
-        Vector3 _aimOffset;
+        MeleeCombat _melee;
+        Health _frozenFor;
+        Vector3 _frozenOffset, _frozenSize;
+        List<Collider> _colliderScratch;
+        List<Renderer> _rendererScratch;
         float _lostSightFor;
         float _flickAccum, _flickAge, _switchReadyAt;
         bool _stickArmed = true;
         LockOnReticle _reticle;
         Camera _aimCamera;
         readonly List<Health> _candidates = new();
+
+        /// <summary>Raycast results for the sight line. Buffered so the per-frame hint doesn't
+        /// allocate; 32 is far more than a line through a boss arena crosses.</summary>
+        static readonly RaycastHit[] SightHits = new RaycastHit[32];
 
         void Awake()
         {
@@ -204,7 +228,9 @@ namespace Pickleball.Sandbox
             if (target == null) return false;
             Target = target;
             _lostSightFor = 0f;
-            MeasureTarget(target);
+            _frozenFor = null;
+            var body = BodyOf(target);
+            Reticle.SetSize(Mathf.Max(0.5f, Mathf.Min(body.Radius, body.HalfHeight) * 0.9f));
             Reticle.PlayLockIn();
             return true;
         }
@@ -212,62 +238,73 @@ namespace Pickleball.Sandbox
         public void Release()
         {
             Target = null;
+            _frozenFor = null;
             _flickAccum = 0f;
         }
 
-        /// <summary>
-        /// Aim point and size are measured once, at lock time, from the target's
-        /// renderers. Re-reading skinned bounds every frame makes the aim breathe
-        /// with the animation, which the camera then faithfully amplifies.
-        /// </summary>
-        void MeasureTarget(Health target)
+        /// <summary>The one answer to where a target is: see the class notes. Not cached, so
+        /// it tracks the target on the frame it moves. A target with no hittable collider
+        /// (its hurtbox is off) falls back to its renderers; those bounds breathe with the
+        /// animation, which the camera would amplify, so a held lock freezes them against the
+        /// root and <see cref="Health.BodyOffset"/> until a hittable collider comes back.</summary>
+        LockOnBody BodyOf(Health target)
         {
-            if (!MeasureAim(target, out _aimOffset, out float radius, out float halfHeight))
+            _colliderScratch ??= new List<Collider>();
+            if (LockOnAim.TryMeasureHittable(target, HittableMask, aimChestBias, _colliderScratch, out var body))
             {
-                TargetRadius = 0.6f;
-                Reticle.SetSize(0.6f);
-                return;
+                if (target == _frozenFor) _frozenFor = null;
+                return body;
             }
-            TargetRadius = radius;
-            Reticle.SetSize(Mathf.Max(0.5f, Mathf.Min(radius, halfHeight) * 0.9f));
+
+            Vector3 root = target.transform.position + target.BodyOffset;
+            if (target == _frozenFor)
+                return new LockOnBody(new Bounds(root + _frozenOffset, _frozenSize), aimChestBias, false);
+
+            _rendererScratch ??= new List<Renderer>();
+            body = LockOnAim.MeasureFallback(target, aimChestBias, _rendererScratch, out _);
+            if (target == Target)
+            {
+                _frozenFor = target;
+                _frozenOffset = body.Bounds.center - root;
+                _frozenSize = body.Bounds.size;
+            }
+            return body;
+        }
+
+        /// <summary>The blade's mask, so "hittable" can't drift from what a swing connects
+        /// with. Everything on a rig with no sword.</summary>
+        int HittableMask
+        {
+            get
+            {
+                if (_melee == null) _melee = GetComponent<MeleeCombat>();
+                return _melee != null ? _melee.HittableLayers.value : ~0;
+            }
         }
 
         /// <summary>
-        /// The aim point (as an offset from the target's root) and horizontal
-        /// radius, from the bounds of the target's visible body: every enabled
-        /// mesh renderer under its Health, except particles, lines, trails and
-        /// anything under a <see cref="LockOnIgnore"/>. False (and a default chest
-        /// offset of 1.2 m) when nothing is left to measure.
+        /// A target's aim point (as an offset from its root, without
+        /// <see cref="Health.BodyOffset"/>) and size, measured as <see cref="AimPoint"/> is, on
+        /// any layer. False (and a default chest offset of 1.2 m) when neither a hittable
+        /// collider nor a renderer is left to measure.
         /// </summary>
         public static bool MeasureAim(Health target, out Vector3 aimOffset, out float radius,
                                       out float halfHeight)
         {
-            Vector3 root = target.transform.position;
-            bool any = false;
-            var b = new Bounds(root, Vector3.zero);
-            foreach (var r in target.GetComponentsInChildren<Renderer>())
+            bool measured = LockOnAim.TryMeasureHittable(target, ~0, LockOnAim.DefaultChestBias,
+                                                         new List<Collider>(), out var body);
+            if (!measured)
+                body = LockOnAim.MeasureFallback(target, LockOnAim.DefaultChestBias, new List<Renderer>(), out measured);
+            if (!measured)
             {
-                if (r is ParticleSystemRenderer || r is LineRenderer || r is TrailRenderer) continue;
-                if (!r.enabled || !r.gameObject.activeInHierarchy) continue;
-                if (r.GetComponentInParent<LockOnIgnore>() != null) continue;
-                if (any) b.Encapsulate(r.bounds);
-                else { b = r.bounds; any = true; }
-            }
-            if (!any)
-            {
-                aimOffset = Vector3.up * 1.2f;
-                radius = 0.6f;
-                halfHeight = 0.6f;
+                aimOffset = Vector3.up * LockOnAim.DefaultChestHeight;
+                radius = LockOnAim.DefaultSize;
+                halfHeight = LockOnAim.DefaultSize;
                 return false;
             }
-
-            // Chest: a little above the middle of the body.
-            Vector3 aim = b.center + Vector3.up * (b.extents.y * 0.2f);
-            // Relative to the body's rest place: AimPoint adds its current offset
-            // back, so locking on mid-juggle must not count that height twice.
-            aimOffset = aim - root - target.BodyOffset;
-            radius = Mathf.Max(b.extents.x, b.extents.z);
-            halfHeight = b.extents.y;
+            aimOffset = body.AimPoint - target.transform.position - target.BodyOffset;
+            radius = body.Radius;
+            halfHeight = body.HalfHeight;
             return true;
         }
 
@@ -283,10 +320,13 @@ namespace Pickleball.Sandbox
                 return;
             }
 
-            float dist = Vector3.Distance(transform.position, AimPoint);
+            Vector3 aim = AimPoint;
+            float dist = Vector3.Distance(transform.position, aim);
             if (dist > breakRange) { Release(); return; }
 
-            _lostSightFor = HasLineOfSight(Target) ? 0f : _lostSightFor + Time.deltaTime;
+            // Judged against the screen's edge, not the press's inset: a target the
+            // camera is still framing shouldn't start the clock by nearing a margin.
+            _lostSightFor = InView(Target, aim, 0f) ? 0f : _lostSightFor + Time.deltaTime;
             if (_lostSightFor > lostSightGrace) Release();
         }
 
@@ -302,8 +342,8 @@ namespace Pickleball.Sandbox
         /// </summary>
         /// <param name="reach">How far away an unlocked target may be, m. A locked one is
         /// returned at any distance; the caller judges whether it can reach it.</param>
-        /// <param name="point">Chest of the target, world space.</param>
-        /// <param name="radius">Approximate horizontal radius of the target, m.</param>
+        /// <param name="point">Aim point of the target, world space.</param>
+        /// <param name="radius">Horizontal radius of its hittable region, m.</param>
         public bool TryGetAttackTarget(float reach, out Vector3 point, out float radius)
         {
             if (IsLocked)
@@ -319,9 +359,9 @@ namespace Pickleball.Sandbox
                 radius = 0f;
                 return false;
             }
-            point = CentreOf(best);
-            var col = best.GetComponentInChildren<Collider>();
-            radius = col != null ? Mathf.Max(col.bounds.extents.x, col.bounds.extents.z) : 0.6f;
+            var body = BodyOf(best);
+            point = body.AimPoint;
+            radius = body.Radius;
             return true;
         }
 
@@ -355,7 +395,7 @@ namespace Pickleball.Sandbox
             Vector3 eye = aimSource != null ? aimSource.position : transform.position;
             Vector3 aim = aimSource != null ? aimSource.forward : transform.forward;
             Vector3 right = aimSource != null ? aimSource.right : transform.right;
-            Vector3 fromPoint = from != null ? from.transform.position + _aimOffset : Vector3.zero;
+            Vector3 fromPoint = from != null ? BodyOf(from).AimPoint : Vector3.zero;
 
             Health best = null;
             float bestScore = float.MaxValue;
@@ -363,7 +403,7 @@ namespace Pickleball.Sandbox
             {
                 if (h == from) continue;
                 if (enemiesOnly && !h.GrantsXp) continue;
-                Vector3 p = CentreOf(h);
+                Vector3 p = BodyOf(h).AimPoint;
                 float dist = Vector3.Distance(transform.position, p);
                 if (dist > range) continue;
 
@@ -373,8 +413,7 @@ namespace Pickleball.Sandbox
                 // view is narrower than the cone, so an enemy just off the left
                 // edge could be locked. Picking something you cannot see reads
                 // as the game choosing for you.
-                if (!OnScreen(p)) continue;
-                if (!HasLineOfSight(h)) continue;
+                if (!InView(h, p, viewportInset)) continue;
 
                 float score;
                 if (side == 0)
@@ -393,35 +432,41 @@ namespace Pickleball.Sandbox
             return best;
         }
 
-        bool OnScreen(Vector3 point)
+        /// <summary>The one answer to "can the player see it": see the class notes.</summary>
+        /// <param name="aim">The target's aim point this frame.</param>
+        /// <param name="inset">Margin inside the screen's edges, as a fraction of the screen.</param>
+        bool InView(Health h, Vector3 aim, float inset) => OnScreen(aim, inset) && HasClearLine(h, aim);
+
+        bool OnScreen(Vector3 point, float inset)
         {
             if (aimSource == null) return true;
             if (_aimCamera == null) _aimCamera = aimSource.GetComponent<Camera>();
             if (_aimCamera == null) return true;
-            Vector3 vp = _aimCamera.WorldToViewportPoint(point);
-            return vp.z > 0f && vp.x > -0.02f && vp.x < 1.02f && vp.y > -0.02f && vp.y < 1.02f;
+            return LockOnView.InsideViewport(_aimCamera.WorldToViewportPoint(point), inset);
         }
 
-        /// <summary>Rough chest point for a candidate that is not locked yet.
-        /// The precise one is measured on lock.</summary>
-        static Vector3 CentreOf(Health h)
-        {
-            var c = h.GetComponentInChildren<Collider>();
-            return c != null ? c.bounds.center : h.transform.position + Vector3.up;
-        }
+        /// <summary>Where the line of sight starts: the lens, except when the camera rig says
+        /// the lens is shoved through a wall (see <see cref="SandboxOrbitCamera.SightOrigin"/>).
+        /// The player when there's no camera at all, on a bare test rig.</summary>
+        Vector3 SightOrigin => cameraRig != null ? cameraRig.SightOrigin
+                             : aimSource != null ? aimSource.position
+                             : transform.position;
 
-        bool HasLineOfSight(Health h)
+        bool HasClearLine(Health h, Vector3 to)
         {
-            Vector3 from = transform.position + Vector3.up * eyeHeight;
-            Vector3 to = h == Target ? AimPoint : CentreOf(h);
-            var hits = Physics.RaycastAll(from, to - from, Vector3.Distance(from, to),
-                                          lineOfSightMask, QueryTriggerInteraction.Ignore);
-            foreach (var hit in hits)
+            Vector3 from = SightOrigin;
+            Vector3 line = to - from;
+            float length = line.magnitude;
+            if (length < 1e-3f) return true;
+            int count = Physics.RaycastNonAlloc(from, line / length, SightHits, length,
+                                                lineOfSightMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
             {
-                if (hit.transform.IsChildOf(transform)) continue;
-                if (hit.transform.IsChildOf(h.transform)) continue;
+                var hit = SightHits[i].transform;
+                if (hit.IsChildOf(transform)) continue;
+                if (hit.IsChildOf(h.transform)) continue;
                 // Other enemies do not hide each other: a crowd stays lockable.
-                if (hit.transform.GetComponentInParent<Health>() != null) continue;
+                if (hit.GetComponentInParent<Health>() != null) continue;
                 return false;
             }
             return true;
@@ -469,6 +514,9 @@ namespace Pickleball.Sandbox
 
         // ------------------------------------------------------------- reticle
 
+        /// <summary>How far above the top of the body the hint floats, m.</summary>
+        const float HintClearance = 0.5f;
+
         void UpdateReticle(bool blocked)
         {
             // No hint while blocked: a press could not lock it.
@@ -486,10 +534,13 @@ namespace Pickleball.Sandbox
             Health hint = showHint ? FindBest(null, 0) : null;
             if (hint != null)
             {
-                var c = hint.GetComponentInChildren<Collider>();
-                float top = c != null ? c.bounds.max.y : hint.transform.position.y + 2f;
-                Vector3 p = CentreOf(hint);
-                Reticle.ShowHint(new Vector3(p.x, top + 0.5f, p.z), cam, hintColour);
+                var body = BodyOf(hint);
+                Vector3 centre = body.Bounds.center;
+                Vector3 p = new(centre.x, body.Bounds.max.y + HintClearance, centre.z);
+                // A hint means a press would lock, so it must be seen: on a tall target
+                // near the top of the screen, mark the aim point instead of the air above.
+                if (!OnScreen(p, 0f)) p = body.AimPoint;
+                Reticle.ShowHint(p, cam, hintColour);
             }
             else Reticle.Hide();
         }
