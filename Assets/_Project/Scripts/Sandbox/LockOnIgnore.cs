@@ -4,8 +4,9 @@ namespace Pickleball.Sandbox
 {
     /// <summary>
     /// Marks part of a lock-on target as scenery. <see cref="LockOnTargeting"/>
-    /// measures a target's aim point and size from the renderers under its
-    /// <see cref="Health"/>; renderers under this marker are left out.
+    /// measures a target's aim point and size from the colliders under its
+    /// <see cref="Health"/> that the sword can hit (see <see cref="LockOnAim"/>),
+    /// or failing those its renderers; anything under this marker is left out of both.
     ///
     /// Why it exists: Hypatia carries her giant astrolabe dial and a halo as
     /// children so they turn and hover with her. Measured with her, they put the

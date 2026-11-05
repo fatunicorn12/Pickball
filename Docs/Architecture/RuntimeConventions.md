@@ -73,6 +73,7 @@ one.
     `ForceFieldChannel`, `FixedDuration`
   - Combat: `ComboResolver`, `ComboProgress`, `SwingTimeline`, `AreaBurst`, `BladeSweep`,
     `GroundContact`, `ExperienceCurve`, `LevelUnlockRules`, `XpLedger`
+  - Lock-on: `LockOnSteering`, `LockOnView`, `LockOnAim`
   - `ClearanceSolver`, `WorldlineHistory`, `WorldlineMesh`, `InverseSquareVolley.DamageAt`,
     `NewtonBoss.RangeMultiplier`
 
@@ -98,8 +99,9 @@ The NonAlloc pattern with preallocated buffers is used in `MeleeCombat`, `ChibiF
 `MovementMotor` (ground check and stand-up test, since `f876b63`).
 
 Known per-frame allocations or scene searches:
-- **`LockOnTargeting`:** `FindObjectsByType<Health>` every frame while unlocked with the hint on,
-  and `Physics.RaycastAll` per candidate for line of sight.
+- **`LockOnTargeting`:** `FindObjectsByType<Health>` every frame while unlocked with the hint on.
+  Line of sight and the aim measure now use buffers and don't allocate, but measuring walks each
+  candidate's colliders every call.
 - **`DashEffects`:** a new GameObject, Mesh and Material per ghost, with no pool.
 
 ## Async

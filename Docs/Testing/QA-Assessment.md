@@ -106,7 +106,7 @@ IDs are referenced from the test plan below. Confidence: **H**igh, **M**edium, *
 | ST2 | **The tether's targeted highlight never shows:** `SetState` runs twice per frame on the best anchor, so the blend settles around 0.13, varying with frame rate. | `TetherSystem.Update`, `TetherAnchor.SetState` | ✔ |
 | ST3 | A reload in Play mode kills `SpringCloth` (goes rigid), the `TetherSystem` reticle and `DashEffects` ghosts. `SwingTwist` is fixed: it now rebuilds its lookup and bones in `OnEnable`. | Awake-only state | M–H |
 | ST4 | Disabling `LockOnTargeting` while locked leaves the reticle drawn at a stale point. | `LockOnTargeting.OnDisable` | M |
-| ST5 | Lock-on calls `FindObjectsByType<Health>` every frame and `RaycastAll` per candidate. | `LockOnTargeting` | H |
+| ST5 | Lock-on calls `FindObjectsByType<Health>` every frame. (The per-candidate `RaycastAll` is gone; see `Docs/Systems/LockOn.md`.) | `LockOnTargeting` | H |
 | ST7 | Ended worldlines go stale across off→on cycles and scene changes. The previous scene's ghosts can be drawn. Documented in `Spacetime.md`, not fixed. | `SpacetimeSettings.Ended`, `WorldlineRecorder` | L–M |
 | ST8 | Beams are on the Default layer, so in 4D they block lock-on line of sight and tether reach, and can trap Newton. Intangible beams cost a query each per frame and can truncate at 64 hits. Documented in `Spacetime.md`, not fixed. | `SpacetimeView` | M |
 | ST9 | Latent bugs: a camera authored with negative pitch snaps to 65° on first input, `FaceCamera` can lag a frame, and `ropeSegments = 1` writes NaN rope points. | `SandboxOrbitCamera`, `FaceCamera`, `TetherSystem` | M/L |
